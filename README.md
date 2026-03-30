@@ -19,13 +19,64 @@
 
 ## ✨ 项目介绍
 
+宇树 G1 人形机器人 **YOLO 目标识别与路径规划导航** 工作空间。基于 ROS2 Foxy + Python，实现实时目标检测、3D 空间定位与自主导航接近目标。
 
+**技术栈**：Ubuntu 20.04 · ROS2 Foxy · Python 3.8+ · YOLOv11 · Nav2 · colcon
+
+**核心能力**：
+- YOLO 实时目标检测（支持自定义训练模型）
+- 2D 检测结果到 3D 空间坐标投影
+- Nav2 路径规划与自主导航
+- 紧急停止与安全限速保护
 
 ### 📁 项目结构
-```
 
 ```
+g1act_ws/
+├── src/
+│   └── g1_yolo_nav_py/                  # YOLO 目标识别与导航功能包
+│       ├── g1_yolo_nav_py/
+│       │   ├── __init__.py
+│       │   ├── yolo_detector.py          # YOLO 检测节点
+│       │   ├── spatial_target.py         # 3D 空间投影节点
+│       │   └── nav_planner.py            # 导航规划节点
+│       ├── launch/
+│       │   └── yolo_nav.launch.py        # 统一启动文件
+│       ├── config/
+│       │   └── yolo_nav.yaml             # 参数配置
+│       ├── package.xml
+│       ├── setup.py
+│       ├── setup.cfg
+│       ├── resource/
+│       └── yolo_v11x_best.pt             # YOLOv11 自定义训练模型权重
+├── ros2doc_skill/                        # ROS2 开发规范技能包
+└── README.md
+```
 
+### 📦 模型说明
+
+| 文件 | 说明 |
+|------|------|
+| `yolo_v11x_best.pt` | YOLOv11x 自定义训练模型权重文件，用于目标检测推理 |
+
+> 该模型为已训练完成的 YOLOv11 权重文件，部署时放置于 `src/g1_yolo_nav_py/` 根目录下，通过 launch 参数 `model_path` 指定加载路径。
+
+### 🚀 快速开始
+
+```bash
+# 安装依赖
+pip3 install ultralytics
+
+# 编译
+colcon build --packages-select g1_yolo_nav_py
+. install/setup.bash
+
+# 运行（需先启动相机驱动和 TF 树）
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py
+
+# 启用 Nav2 导航 + 深度传感器
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
+```
 
 ---
 
