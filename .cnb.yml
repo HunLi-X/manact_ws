@@ -1,0 +1,9 @@
+# 触发器：推送到主分支
+main: #分支
+  push: #有提交时
+    - stages: #启动流水线
+        - name: build knowledge base #名字
+          image: cnbcool/knowledge-base #知识库插件
+          settings: #知识库设置
+            embedding_model: hunyuan #知识库使用的基础模型
+            include: "**/**.md" #知识库包含的文件类型
