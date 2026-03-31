@@ -27,7 +27,7 @@ class SpatialTargetNode(Node):
         self.declare_parameter("target_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("camera_frame", "robot1/D455_1_color_optical_frame")
-        self.declare_parameter("target_class_id", "56")  # COCO 56=chair
+        self.declare_parameter("target_class_id", "chair")  # 按类别名称过滤，与 yolo_detector 输出的 id 对应
         self.declare_parameter("default_depth", 2.0)  # 无深度传感器时的默认距离 (m)
         self.declare_parameter("use_depth_sensor", False)
         self.declare_parameter("nav_target_topic", "/g1/nav/target_pose")

@@ -10,7 +10,7 @@ g1_yolo_detector_node:
     nms_threshold: 0.45                       # NMS IoU 阈值
     input_image_topic: "/robot1/D455_1/color/image_raw"  # D455 彩色图像话题
     output_detection_topic: "/g1/vision/detections"  # 检测结果话题
-    target_classes: [56]                      # 目标类别 (COCO: 56=chair)
+    target_classes: ["chair"]                   # 目标类别名称（也支持数字 ID）
     max_image_size: 640                       # 推理图像尺寸
 
 # ---- 空间投影节点参数 ----
@@ -22,7 +22,7 @@ g1_spatial_target_node:
     target_frame: "odom"                      # 目标坐标系
     base_frame: "base_link"                   # 机器人基座坐标系
     camera_frame: "robot1/D455_1_color_optical_frame"  # D455 相机坐标系
-    target_class_id: "0"                      # 要追踪的目标类别 ID
+    target_class_id: "chair"                  # 要追踪的目标类别名称
     default_depth: 2.0                        # 默认目标距离 (m)
     use_depth_sensor: false                   # 是否使用深度传感器
     nav_target_topic: "/g1/nav/target_pose"   # 导航目标发布话题

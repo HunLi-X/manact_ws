@@ -30,7 +30,7 @@ class YoloDetectorNode(Node):
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
-        self.declare_parameter("target_classes", [56])  # COCO 56=chair
+        self.declare_parameter("target_classes", ["chair"])  # 按类别名称过滤
         self.declare_parameter("max_image_size", 640)
 
         model_path = self.get_parameter("model_path").value
@@ -40,13 +40,9 @@ class YoloDetectorNode(Node):
             model_path = os.path.join(pkg_share, "models", model_path)
         self._conf_thresh = float(self.get_parameter("confidence_threshold").value)
         self._nms_thresh = float(self.get_parameter("nms_threshold").value)
-        self._target_classes = list(self.get_parameter("target_classes").value)
         self._max_size = int(self.get_parameter("max_image_size").value)
 
-        self.get_logger().info(
-            f"模型路径: {model_path}, 置信度阈值: {self._conf_thresh}, "
-            f"目标类别: {self._target_classes}"
-        )
+        self.get_logger().info(f"模型路径: {model_path}, 置信度阈值: {self._conf_thresh}")
 
         # ---- 加载模型 ----
         if YOLO is None:
@@ -59,6 +55,20 @@ class YoloDetectorNode(Node):
         except Exception as e:
             self.get_logger().error(f"模型加载失败: {e}")
             raise
+
+        # ---- 解析目标类别：支持名称或数字 ID ----
+        # model.names: {0: "chair", 1: "table", ...}
+        self._name_to_id = {v: int(k) for k, v in self._model.names.items()}
+        self._target_class_ids: list[int] = []
+        raw_targets = list(self.get_parameter("target_classes").value)
+        for t in raw_targets:
+            if isinstance(t, (int, float)):
+                self._target_class_ids.append(int(t))
+            elif isinstance(t, str) and t in self._name_to_id:
+                self._target_class_ids.append(self._name_to_id[t])
+            else:
+                self.get_logger().warn(f"未知目标类别 '{t}'，可用类别: {list(self._name_to_id.keys())}")
+        self.get_logger().info(f"目标类别 ID: {self._target_class_ids} ({raw_targets})")
 
         # ---- CV Bridge ----
         self._bridge = CvBridge()
@@ -97,7 +107,7 @@ class YoloDetectorNode(Node):
             cv_image,
             conf=self._conf_thresh,
             iou=self._nms_thresh,
-            classes=self._target_classes if self._target_classes else None,
+            classes=self._target_class_ids if self._target_class_ids else None,
             verbose=False,
         )
 
@@ -110,7 +120,7 @@ class YoloDetectorNode(Node):
             for box in boxes:
                 det = Detection2D()
                 hyp = ObjectHypothesisWithPose()
-                hyp.id = str(int(box.cls[0]))
+                hyp.id = self._model.names[int(box.cls[0])]
                 hyp.score = float(box.conf[0])
 
                 # BoundingBox2D（归一化坐标）

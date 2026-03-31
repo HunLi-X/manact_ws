@@ -37,8 +37,8 @@ def generate_launch_description() -> LaunchDescription:
     )
     target_class = DeclareLaunchArgument(
         name="target_class",
-        default_value="62",
-        description="目标类别 ID（COCO: 56=chair, 0=person, ...）",
+        default_value="chair",
+        description="目标类别名称（如 chair, person，也支持数字 ID）",
     )
 
     # ---- 节点 ----
