@@ -71,11 +71,41 @@ pip3 install ultralytics
 colcon build --packages-select g1_yolo_nav_py
 . install/setup.bash
 
-# 运行（需先启动相机驱动和 TF 树）
+# 运行完整导航管线（需先启动相机驱动和 TF 树）
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py
 
 # 启用 Nav2 导航 + 深度传感器
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
+```
+
+### 🧪 仅测试 YOLO 目标检测
+
+如果只需验证 YOLO 检测功能，无需启动完整导航管线：
+
+```bash
+# 1. 启动 D455 相机（终端 1）
+ros2 launch realsense2_camera rs_launch.py camera_namespace:=robot1 camera_name:=D455_1
+
+# 2. 编译并启动 YOLO 检测节点（终端 2）
+colcon build --packages-select g1_yolo_nav_py
+. install/setup.bash
+ros2 run g1_yolo_nav_py yolo_detector
+
+# 3. 查看检测结果（终端 3）
+ros2 topic echo /g1/vision/detections
+```
+
+**自定义参数示例：**
+
+```bash
+# 指定检测目标为 person
+ros2 run g1_yolo_nav_py yolo_detector --ros-args -p target_classes:='["person"]'
+
+# 指定自定义模型路径
+ros2 run g1_yolo_nav_py yolo_detector --ros-args -p model_path:=/path/to/model.pt
+
+# 查看模型所有可用类别（在 Python 中执行）
+python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v11x_best.pt').names)"
 ```
 
 ---
