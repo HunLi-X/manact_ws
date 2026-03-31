@@ -30,7 +30,7 @@ class YoloDetectorNode(Node):
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
-        self.declare_parameter("target_classes", [62])  # COCO 62=chair
+        self.declare_parameter("target_classes", [56])  # COCO 56=chair
         self.declare_parameter("max_image_size", 640)
 
         model_path = self.get_parameter("model_path").value

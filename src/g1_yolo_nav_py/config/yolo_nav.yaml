@@ -10,7 +10,7 @@ g1_yolo_detector_node:
     nms_threshold: 0.45                       # NMS IoU 阈值
     input_image_topic: "/robot1/D455_1/color/image_raw"  # D455 彩色图像话题
     output_detection_topic: "/g1/vision/detections"  # 检测结果话题
-    target_classes: [62]                      # 目标类别 (COCO: 62=chair)
+    target_classes: [56]                      # 目标类别 (COCO: 56=chair)
     max_image_size: 640                       # 推理图像尺寸
 
 # ---- 空间投影节点参数 ----
