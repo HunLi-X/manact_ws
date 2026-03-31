@@ -114,4 +114,4 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 
 ---
 
-![Fork 历史趋势图。](https://commit.cool/forks/实际项目地址?interval=day)
+![Fork 历史趋势图。](https://commit.cool/forks/1255027942/cloud/manact_ws?interval=day)
