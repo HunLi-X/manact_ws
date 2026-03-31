@@ -71,14 +71,6 @@ ARM_JOINTS = [
     G1JointIndex.WaistPitch,
 ]
 
-# 关节名称（用于打印日志）
-JOINT_NAMES = [
-    "L_ShldPitch", "L_ShldRoll", "L_ShldYaw", "L_Elbow", "L_WristRoll",
-    "R_ShldPitch", "R_ShldRoll", "R_ShldYaw", "R_Elbow", "R_WristRoll",
-    "WaistYaw", "WaistRoll", "WaistPitch",
-]
-
-
 # ======================================================================
 # 预设姿态定义
 # ======================================================================
@@ -368,17 +360,15 @@ if __name__ == '__main__':
     ctrl.Init()
     ctrl.Start()
 
-    print("\n  控制已启动，等待完成...")
     start = time.time()
-
     while True:
-        time.sleep(0.5)
+        time.sleep(1)
         elapsed = time.time() - start
         progress = min(ctrl.time / ctrl.total_time * 100, 100) if ctrl.total_time > 0 else 0
-        print(f"\r  进度: {progress:5.1f}%  ({elapsed:.1f}s / {ctrl.total_time:.1f}s)", end="", flush=True)
+        print(f"\r  进度: {progress:5.1f}%  ({elapsed:.0f}s/{ctrl.total_time:.0f}s)", end="", flush=True)
 
         if ctrl.done:
             total = time.time() - start
-            print(f"\r  进度: 100.0%  ({total:.1f}s / {ctrl.total_time:.1f}s)")
-            print("\n  演示完成！所有姿态已执行完毕，arm_sdk 已释放。")
+            print(f"\r  进度: 100.0%  ({total:.0f}s/{ctrl.total_time:.0f}s)")
+            print("\n  Done!")
             sys.exit(0)
