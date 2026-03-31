@@ -1,5 +1,6 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
+import os
 import cv2
 import numpy as np
 import rclpy
@@ -9,6 +10,7 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D
 from std_msgs.msg import Header
 from cv_bridge import CvBridge
+from ament_index_python.packages import get_package_share_directory
 
 try:
     from ultralytics import YOLO
@@ -23,15 +25,19 @@ class YoloDetectorNode(Node):
         super().__init__("g1_yolo_detector_node")
 
         # ---- 参数 ----
-        self.declare_parameter("model_path", "yolov8n.pt")
+        self.declare_parameter("model_path", "yolo_v11x_best.pt")
         self.declare_parameter("confidence_threshold", 0.5)
         self.declare_parameter("nms_threshold", 0.45)
-        self.declare_parameter("input_image_topic", "/camera/color/image_raw")
+        self.declare_parameter("input_image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
-        self.declare_parameter("target_classes", [0])  # 默认检测 person (COCO id=0)
+        self.declare_parameter("target_classes", [62])  # COCO 62=chair
         self.declare_parameter("max_image_size", 640)
 
         model_path = self.get_parameter("model_path").value
+        # 若为相对路径，自动解析为 share 目录下的 models 子目录
+        if not os.path.isabs(model_path):
+            pkg_share = get_package_share_directory("g1_yolo_nav_py")
+            model_path = os.path.join(pkg_share, "models", model_path)
         self._conf_thresh = float(self.get_parameter("confidence_threshold").value)
         self._nms_thresh = float(self.get_parameter("nms_threshold").value)
         self._target_classes = list(self.get_parameter("target_classes").value)

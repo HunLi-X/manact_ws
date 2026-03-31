@@ -22,12 +22,12 @@ class SpatialTargetNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
-        self.declare_parameter("depth_topic", "/camera/depth/image_raw")
-        self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
+        self.declare_parameter("depth_topic", "/robot1/D455_1/depth/image_rect_raw")
+        self.declare_parameter("camera_info_topic", "/robot1/D455_1/color/camera_info")
         self.declare_parameter("target_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
-        self.declare_parameter("camera_frame", "camera_color_optical_frame")
-        self.declare_parameter("target_class_id", "0")  # person
+        self.declare_parameter("camera_frame", "robot1/D455_1_color_optical_frame")
+        self.declare_parameter("target_class_id", "62")  # COCO 62=chair
         self.declare_parameter("default_depth", 2.0)  # 无深度传感器时的默认距离 (m)
         self.declare_parameter("use_depth_sensor", False)
         self.declare_parameter("nav_target_topic", "/g1/nav/target_pose")

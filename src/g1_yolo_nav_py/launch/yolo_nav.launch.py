@@ -25,10 +25,10 @@ def generate_launch_description() -> LaunchDescription:
         default_value="false",
         description="是否使用 Nav2 导航（false 时使用简单趋近模式）",
     )
-    model_path = DeclareLaunchArgument(
+    model_path_arg = DeclareLaunchArgument(
         name="model_path",
         default_value="yolo_v11x_best.pt",
-        description="YOLO 模型文件路径",
+        description="YOLO 模型文件名（相对于 share/models/ 目录，或绝对路径）",
     )
     use_depth = DeclareLaunchArgument(
         name="use_depth_sensor",
@@ -37,8 +37,8 @@ def generate_launch_description() -> LaunchDescription:
     )
     target_class = DeclareLaunchArgument(
         name="target_class",
-        default_value="0",
-        description="目标类别 ID（COCO: 0=person, 1=bicycle, ...）",
+        default_value="62",
+        description="目标类别 ID（COCO: 62=chair, 0=person, ...）",
     )
 
     # ---- 节点 ----
@@ -89,7 +89,7 @@ def generate_launch_description() -> LaunchDescription:
         # 参数声明
         use_rviz,
         use_nav2,
-        model_path,
+        model_path_arg,
         use_depth,
         target_class,
         # 节点
