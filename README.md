@@ -91,7 +91,11 @@ colcon build --packages-select g1_yolo_nav_py
 . install/setup.bash
 ros2 run g1_yolo_nav_py yolo_detector
 
-# 3. 查看检测结果（终端 3）
+# 3. 启动可视化节点，查看带检测框的图像（终端 3）
+ros2 run g1_yolo_nav_py detection_visualizer
+# 按 q 键退出
+
+# 或查看原始检测结果文本
 ros2 topic echo /g1/vision/detections
 ```
 
