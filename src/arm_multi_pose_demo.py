@@ -329,7 +329,7 @@ class MultiPoseController:
                     target = [(1.0 - ratio) * c for c in current]
                     self._send_joint_cmd(target)
                     if abs(self.time - t_start) < self.control_dt * 1.5:
-                        print("\n  [最终归零]")
+                        print("\n  [归零]")
 
                 elif ptype == "release":
                     # 释放 arm_sdk 控制权
@@ -337,7 +337,7 @@ class MultiPoseController:
                     self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = enable
                     self._send_joint_cmd(current)
                     if abs(self.time - t_start) < self.control_dt * 1.5:
-                        print("  [释放 arm_sdk 控制权]")
+                        print("\n  [释放 arm_sdk]")
 
                 break
 
@@ -345,12 +345,9 @@ class MultiPoseController:
         self.low_cmd.crc = self.crc.Crc(self.low_cmd)
         self.pub.Write(self.low_cmd)
 
-    def _log_pose(self, name, angles):
-        """打印姿态信息。"""
-        print(f"\n  >>> 切换到姿态: {name}")
-        for jname, angle in zip(JOINT_NAMES, angles):
-            deg = angle * 180.0 / kPi
-            print(f"      {jname:15s}: {deg:+7.1f}°  ({angle:+.3f} rad)")
+    def _log_pose(self, name, _angles):
+        """打印姿态切换信息。"""
+        print(f"\n  >>> {name}")
 
 
 # ======================================================================
