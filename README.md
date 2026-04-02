@@ -3,7 +3,6 @@
 <div align="center">
 <h1>G1 YOLO Nav</h1>
 
-
 [![ROS2 Foxy](https://img.shields.io/badge/ROS2-Foxy-blue)](https://docs.ros.org/en/foxy/)
 [![YOLOv11](https://img.shields.io/badge/YOLOv11-目标检测-green)](https://docs.ultralytics.com/)
 [![Nav2](https://img.shields.io/badge/Nav2-路径规划-orange)](https://navigation.ros.org/)
@@ -17,6 +16,7 @@
 <img src="https://cnb.cool/66666/resource/-/git/raw/main/img/hengtiao.gif" width="100%" height="3">
 </div><br>
 
+
 ## ✨ 项目介绍
 
 宇树 G1 人形机器人 **YOLO 目标识别与路径规划导航** 工作空间。基于 ROS2 Foxy + Python，实现实时目标检测、3D 空间定位与自主导航接近目标。
@@ -24,6 +24,7 @@
 **技术栈**：Ubuntu 20.04 · ROS2 Foxy · Python 3.8+ · YOLOv11 · Nav2 · colcon
 
 **核心能力**：
+
 - YOLO 实时目标检测（支持自定义训练模型）
 - 2D 检测结果到 3D 空间坐标投影
 - Nav2 路径规划与自主导航
@@ -55,8 +56,8 @@ g1act_ws/
 
 ### 📦 模型说明
 
-| 文件 | 说明 |
-|------|------|
+| 文件                  | 说明                                              |
+| --------------------- | ------------------------------------------------- |
 | `yolo_v11x_best.pt` | YOLOv11x 自定义训练模型权重文件，用于目标检测推理 |
 
 > 该模型为已训练完成的 YOLOv11 权重文件，部署时放置于 `src/g1_yolo_nav_py/` 根目录下，通过 launch 参数 `model_path` 指定加载路径。
