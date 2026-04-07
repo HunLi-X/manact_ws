@@ -1,12 +1,12 @@
 """
-Launch 文件：启动 YOLO 目标识别 + 空间投影 + 导航规划 + 腰部追踪
+Launch 文件：启动 YOLO 目标识别 + 空间投影 + 导航规划 + 视觉伺服趋近
 
 启动节点：
-    1. g1_yolo_detector_node   - YOLO 目标检测
-    2. g1_spatial_target_node  - 2D→3D 空间投影
-    3. g1_nav_planner_node     - 路径规划与趋近控制
-    4. g1_waist_tracker_node   - 腰部视觉伺服追踪（可选）
-    5. d455_camera_tf_publisher - D455 相机静态 TF
+    1. g1_yolo_detector_node     - YOLO 目标检测
+    2. g1_spatial_target_node    - 2D→3D 空间投影
+    3. g1_nav_planner_node       - 路径规划与趋近控制
+    4. g1_visual_servo_node      - 视觉伺服：腰部对齐+Loco前进（可选）
+    5. d455_camera_tf_publisher   - D455 相机静态 TF
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
@@ -75,11 +75,11 @@ def generate_launch_description() -> LaunchDescription:
         description="目标类别名称（如 chair, person，也支持数字 ID）",
     )
 
-    # 是否启用腰部追踪
+    # 是否启用视觉伺服趋近（需要 unitree_sdk2py）
     enable_waist_tracking = DeclareLaunchArgument(
         name="enable_waist_tracking",
         default_value="false",
-        description="是否启用腰部视觉伺服追踪（需要 unitree_sdk2py）",
+        description="是否启用视觉伺服（腰部对齐+LocoClient前进）",
     )
 
     # ==================================================================
@@ -184,14 +184,22 @@ def generate_launch_description() -> LaunchDescription:
         else [],
     )
 
-    # 腰部追踪节点（视觉伺服，需要 unitree_sdk2py）
-    # 通过旋转腰部让目标保持在画面中心
-    # 输入: /g1/vision/detections (检测结果)
-    # 输出: DDS LowCmd (腰部关节控制)
-    waist_tracker_node = Node(
+    # 腰部对齐节点（需要 unitree_sdk2py）
+    # 功能: 旋转腰部让目标保持在画面中心 (Arm SDK DDS)
+    waist_align_node = Node(
         package="g1_yolo_nav_py",
-        executable="waist_tracker",
-        name="g1_waist_tracker_node",
+        executable="waist_align",
+        name="g1_waist_align_node",
+        condition=IfCondition(LaunchConfiguration("enable_waist_tracking")),
+        parameters=[config_file],
+    )
+
+    # Loco 前进节点（需要 unitree_sdk2py）
+    # 功能: 目标对齐后，通过 LocoClient 控制机器人前进到目标位置
+    loco_forward_node = Node(
+        package="g1_yolo_nav_py",
+        executable="loco_forward",
+        name="g1_loco_forward_node",
         condition=IfCondition(LaunchConfiguration("enable_waist_tracking")),
         parameters=[config_file],
     )
@@ -213,6 +221,7 @@ def generate_launch_description() -> LaunchDescription:
         yolo_detector_node,
         spatial_target_node,
         nav_planner_node,
-        waist_tracker_node,
+        waist_align_node,
+        loco_forward_node,
         rviz_node,
     ])

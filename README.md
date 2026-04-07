@@ -113,64 +113,142 @@ ros2 run g1_yolo_nav_py yolo_detector --ros-args -p model_path:=/path/to/model.p
 python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v11x_best.pt').names)"
 ```
 
-### 🎯 腰部目标追踪测试
+### 🎯 视觉伺服追踪与趋近
 
-通过视觉伺服控制腰部旋转，让目标保持在画面中心。
+两个独立程序，可单独调试：
+
+| 程序 | 功能 | 控制方式 | 入口命令 |
+|------|------|---------|---------|
+| `waist_align` | 腰部旋转让目标居中 | Arm SDK DDS | `ros2 run g1_yolo_nav_py waist_align` |
+| `loco_forward` | 对齐后前进到目标 | LocoClient RPC | `ros2 run g1_yolo_nav_py loco_forward` |
+
+**工作流程（两个节点协作）：**
+```
+  YOLO检测 ──→ waist_align(腰部对齐) ──→ loco_forward(Loco前进)
+                目标居中后才允许前进         居中+稳定 → Move(vx)
+```
 
 **前置条件：**
 - G1 机器人已连接并处于站立状态
 - 已安装 `unitree_sdk2py`：`pip install unitree_sdk2py`
 - 相机已启动并发布图像
 
-**测试步骤：**
+---
+
+#### 📌 步骤一：调试腰部对齐 (`waist_align`)
+
+**目的**：确认腰部能正确追踪目标，让目标保持在画面中心。
 
 ```bash
-# 1. 启动 D455 相机（终端 1）
-ros2 launch realsense2_camera rs_launch.py camera_namespace:=robot1 camera_name:=D455_1
+# 终端 1：启动相机
+ros2 launch realsense2_camera rs_launch.py \
+    camera_namespace:=robot1 camera_name:=D455_1
 
-# 2. 编译（终端 2）
-colcon build --packages-select g1_yolo_nav_py
-. install/setup.bash
-
-# 3. 启动 YOLO 检测 + 腰部追踪（终端 2）
-ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
-
-# 或分别启动（更灵活）
-# 终端 2：启动检测节点
+# 终端 2：编译 + 启动检测
+colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
 ros2 run g1_yolo_nav_py yolo_detector
 
-# 终端 3：启动腰部追踪
-ros2 run g1_yolo_nav_py waist_tracker
+# 终端 3：启动腰部对齐（先只跑这个！）
+ros2 run g1_yolo_nav_py waist_align
+
+# 或一键启动（仅腰部对齐，不含前进）
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ```
+
+**观察要点：**
+- 日志应显示 "腰部对齐控制启动"
+- 把椅子放在机器人前方偏左/偏右 → 腰部应该自动转向
+- 目标在画面正中央时腰部停止转动
+
+**腰部对齐参数：**
+
+| 参数 | 默认值 | 调试建议 |
+|------|--------|---------|
+| `waist_kp` | 1.5 | 太慢→增大(如2.0)，抖动→减小(如0.8) |
+| `center_tolerance` | 0.08 | 容差范围，太小会不停微调 |
+| `max_waist_speed` | 0.5 rad/s | 追踪最大转速 |
+| `max_waist_angle` | 0.8 rad (~45°) | 最大转角限制 |
 
 **参数调优：**
-
 ```bash
-# 调整追踪灵敏度（kp 越大追踪越快，但可能抖动）
-ros2 run g1_yolo_nav_py waist_tracker --ros-args \
-  -p kp:=2.0 \
-  -p max_waist_angle:=1.0 \
-  -p center_tolerance:=0.03
+# 追踪太慢 — 增大 kp
+ros2 run g1_yolo_nav_py waist_align --ros-args -p waist_kp:=2.5
 
-# 指定网络接口（多网卡时需要）
-ros2 run g1_yolo_nav_py waist_tracker --ros-args -p network_interface:=eth0
+# 抖动太厉害 — 减小 kp + 放宽容差
+ros2 run g1_yolo_nav_py waist_align --ros-args \
+  -p waist_kp:=0.8 -p center_tolerance:=0.12
+
+# 多网卡指定接口
+ros2 run g1_yolo_nav_py waist_align --ros-args -p network_interface:=eth0
 ```
 
-**参数说明：**
+**调试通过标志**：目标移动时腰部能平滑跟踪，目标停在画面中央时腰部稳定不抖。✅
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `kp` | 1.5 | P 控制增益，值越大追踪越快 |
-| `max_waist_speed` | 0.5 rad/s | 最大旋转速度限制 |
-| `max_waist_angle` | 0.8 rad (~45°) | 最大旋转角度限制 |
-| `center_tolerance` | 0.05 | 中心容差，目标在此范围内不调整 |
-| `camera_fov_deg` | 87.0 | 相机水平视场角 |
-| `network_interface` | "" | DDS 网络接口，空则自动检测 |
+---
 
-**预期效果：**
-- 当检测到目标（如椅子）时，机器人会自动旋转腰部让目标保持在画面中心
-- 目标偏离中心时平滑追踪，不会剧烈抖动
-- 最大旋转角度限制在 ±45° 左右，确保安全
+#### 📌 步骤二：调试 Loco 前进 (`loco_forward`)
+
+**前提**：步骤一的腰部对齐已经正常工作。
+
+**目的**：确认目标居中后机器人能正确前进并自动停止。
+
+```bash
+# 在步骤一的基础上，额外开一个终端：
+# 终端 4：启动 Loco 前进
+ros2 run g1_yolo_nav_py loco_forward
+```
+
+**观察要点：**
+- 当目标在画面中心且持续 >0.8s 后，日志显示 "开始前进"
+- 机器人以设定的速度向前走
+- 检测框变大到占画面 45% 以上时，日志显示 "到达目标!" 并停止
+- 目标丢失或偏离中心时自动停止前进
+
+**Loco 前进参数：**
+
+| 参数 | 默认值 | 调试建议 |
+|------|--------|---------|
+| `forward_speed` | 0.3 m/s | 首次调试建议用 0.1~0.2 |
+| `align_stable_time` | 0.8 s | 居中多久才开始前进 |
+| `arrive_bbox_ratio` | 0.45 | 检测框占比，越大=停得越远 |
+| `center_tolerance` | 0.08 | 与 waist_align 保持一致 |
+| `check_rate` | 10 Hz | 判断频率 |
+
+**参数调优：**
+```bash
+# 首次调试用低速度确保安全
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
+
+# 想让机器人离目标更近才停下（提高阈值）
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p arrive_bbox_ratio:=0.6
+
+# 加速判断（减少延迟）
+ros2 run g1_yolo_nav_py loco_forward --ros-args \
+  -p align_stable_time:=0.3 -p check_rate:=20.0
+```
+
+**调试通过标志**：机器人能正确前进、到达目标附近停止、目标丢失时立即停止。✅
+
+---
+
+#### 📌 步骤三：联合运行
+
+两个程序都调通后，可以一起使用：
+
+```bash
+# 方式 A：launch 一键启动（推荐正式使用）
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
+
+# 方式 B：手动分别启动（方便看各自日志）
+# 终端 2: ros2 run g1_yolo_nav_py yolo_detector
+# 终端 3: ros2 run g1_yolo_nav_py waist_align
+# 终端 4: ros2 run g1_yolo_nav_py loco_forward
+```
+
+**安全提示：**
+- 首次联调时 `forward_speed` 建议 ≤ 0.2 m/s
+- 随时准备按遥控器急停
+- 确保前方无障碍物
 
 ---
 

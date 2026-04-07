@@ -40,15 +40,27 @@ g1_nav_planner_node:
     navigation_server: "navigate_to_pose"     # Nav2 action 名称
     use_nav2: true                            # 是否使用 Nav2 导航
 
-# ---- 腰部追踪节点参数 ----
+# ---- 视觉伺服追踪节点参数（腰部对齐 + Loco前进）----
 g1_waist_tracker_node:
   ros__parameters:
-    detection_topic: "/g1/vision/detections"  # 检测结果输入话题
-    target_class_id: "chair"                  # 追踪目标类别
-    camera_fov_deg: 87.0                      # D455 水平视场角 (度)
-    kp: 1.5                                   # P 控制增益
-    max_waist_speed: 0.5                      # 最大旋转速度 (rad/s)
-    max_waist_angle: 0.8                      # 最大旋转角度 (rad, ~45°)
-    center_tolerance: 0.05                    # 中心容差（归一化坐标）
-    control_rate: 50.0                        # DDS 控制频率 (Hz)
-    network_interface: ""                     # 网络接口（空则自动检测）
+    detection_topic: "/g1/vision/detections"  # 检测结果输入
+    target_class_id: "chair"                  # 目标类别
+
+    # 相机参数
+    camera_fov_deg: 87.0                      # D455 水平视场角
+    center_tolerance: 0.08                    # 居中容差（归一化，越小越严格）
+
+    # 腰部 Arm SDK 控制
+    waist_kp: 1.5                             # 腰部 P 增益（视觉伺服）
+    max_waist_speed: 0.5                      # 最大腰部旋转速度 rad/s
+    max_waist_angle: 0.8                      # 最大腰部角度 rad (~45°)
+    control_rate: 50.0                        # DDS 频率 Hz
+
+    # LocoClient 前进控制
+    forward_speed: 0.3                        # 前进速度 m/s
+    align_stable_time: 0.8                    # 对齐稳定时间 s（持续居中多久才允许前进）
+    approach_bbox_ratio: 0.45                 # 到达条件：检测框占画面比例
+
+    # 安全
+    lost_timeout: 1.0                         # 目标丢失超时 s
+    network_interface: ""                     # 网络接口
