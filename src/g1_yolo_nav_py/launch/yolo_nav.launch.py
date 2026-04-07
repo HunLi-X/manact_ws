@@ -1,16 +1,18 @@
 """
-Launch 文件：启动 YOLO 目标识别 + 空间投影 + 导航规划
+Launch 文件：启动 YOLO 目标识别 + 空间投影 + 导航规划 + 腰部追踪
 
 启动节点：
     1. g1_yolo_detector_node   - YOLO 目标检测
     2. g1_spatial_target_node  - 2D→3D 空间投影
     3. g1_nav_planner_node     - 路径规划与趋近控制
-    4. d455_camera_tf_publisher - D455 相机静态 TF
+    4. g1_waist_tracker_node   - 腰部视觉伺服追踪（可选）
+    5. d455_camera_tf_publisher - D455 相机静态 TF
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py target_class:=person model_path:=yolov8n.pt
+    ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 
 TF 树结构：
     odom → base_link → pelvis → torso_link → robot1/D455_1_link → camera_optical_frame
@@ -71,6 +73,13 @@ def generate_launch_description() -> LaunchDescription:
         name="target_class",
         default_value="chair",
         description="目标类别名称（如 chair, person，也支持数字 ID）",
+    )
+
+    # 是否启用腰部追踪
+    enable_waist_tracking = DeclareLaunchArgument(
+        name="enable_waist_tracking",
+        default_value="false",
+        description="是否启用腰部视觉伺服追踪（需要 unitree_sdk2py）",
     )
 
     # ==================================================================
@@ -175,6 +184,18 @@ def generate_launch_description() -> LaunchDescription:
         else [],
     )
 
+    # 腰部追踪节点（视觉伺服，需要 unitree_sdk2py）
+    # 通过旋转腰部让目标保持在画面中心
+    # 输入: /g1/vision/detections (检测结果)
+    # 输出: DDS LowCmd (腰部关节控制)
+    waist_tracker_node = Node(
+        package="g1_yolo_nav_py",
+        executable="waist_tracker",
+        name="g1_waist_tracker_node",
+        condition=IfCondition(LaunchConfiguration("enable_waist_tracking")),
+        parameters=[config_file],
+    )
+
     # ==================================================================
     # Launch 描述
     # ==================================================================
@@ -185,11 +206,13 @@ def generate_launch_description() -> LaunchDescription:
         model_path_arg,
         use_depth,
         target_class,
+        enable_waist_tracking,
         # 静态 TF
         camera_static_tf,
         # 功能节点
         yolo_detector_node,
         spatial_target_node,
         nav_planner_node,
+        waist_tracker_node,
         rviz_node,
     ])

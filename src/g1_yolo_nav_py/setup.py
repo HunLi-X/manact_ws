@@ -26,6 +26,7 @@ setup(
             "detection_visualizer = g1_yolo_nav_py.detection_visualizer:main",
             "spatial_target = g1_yolo_nav_py.spatial_target:main",
             "nav_planner = g1_yolo_nav_py.nav_planner:main",
+            "waist_tracker = g1_yolo_nav_py.waist_tracker:main",
         ],
     },
 )

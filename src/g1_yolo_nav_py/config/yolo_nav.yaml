@@ -39,3 +39,16 @@ g1_nav_planner_node:
     goal_tolerance: 0.3                       # 到达容差 (m)
     navigation_server: "navigate_to_pose"     # Nav2 action 名称
     use_nav2: true                            # 是否使用 Nav2 导航
+
+# ---- 腰部追踪节点参数 ----
+g1_waist_tracker_node:
+  ros__parameters:
+    detection_topic: "/g1/vision/detections"  # 检测结果输入话题
+    target_class_id: "chair"                  # 追踪目标类别
+    camera_fov_deg: 87.0                      # D455 水平视场角 (度)
+    kp: 1.5                                   # P 控制增益
+    max_waist_speed: 0.5                      # 最大旋转速度 (rad/s)
+    max_waist_angle: 0.8                      # 最大旋转角度 (rad, ~45°)
+    center_tolerance: 0.05                    # 中心容差（归一化坐标）
+    control_rate: 50.0                        # DDS 控制频率 (Hz)
+    network_interface: ""                     # 网络接口（空则自动检测）

@@ -113,6 +113,65 @@ ros2 run g1_yolo_nav_py yolo_detector --ros-args -p model_path:=/path/to/model.p
 python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v11x_best.pt').names)"
 ```
 
+### 🎯 腰部目标追踪测试
+
+通过视觉伺服控制腰部旋转，让目标保持在画面中心。
+
+**前置条件：**
+- G1 机器人已连接并处于站立状态
+- 已安装 `unitree_sdk2py`：`pip install unitree_sdk2py`
+- 相机已启动并发布图像
+
+**测试步骤：**
+
+```bash
+# 1. 启动 D455 相机（终端 1）
+ros2 launch realsense2_camera rs_launch.py camera_namespace:=robot1 camera_name:=D455_1
+
+# 2. 编译（终端 2）
+colcon build --packages-select g1_yolo_nav_py
+. install/setup.bash
+
+# 3. 启动 YOLO 检测 + 腰部追踪（终端 2）
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
+
+# 或分别启动（更灵活）
+# 终端 2：启动检测节点
+ros2 run g1_yolo_nav_py yolo_detector
+
+# 终端 3：启动腰部追踪
+ros2 run g1_yolo_nav_py waist_tracker
+```
+
+**参数调优：**
+
+```bash
+# 调整追踪灵敏度（kp 越大追踪越快，但可能抖动）
+ros2 run g1_yolo_nav_py waist_tracker --ros-args \
+  -p kp:=2.0 \
+  -p max_waist_angle:=1.0 \
+  -p center_tolerance:=0.03
+
+# 指定网络接口（多网卡时需要）
+ros2 run g1_yolo_nav_py waist_tracker --ros-args -p network_interface:=eth0
+```
+
+**参数说明：**
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `kp` | 1.5 | P 控制增益，值越大追踪越快 |
+| `max_waist_speed` | 0.5 rad/s | 最大旋转速度限制 |
+| `max_waist_angle` | 0.8 rad (~45°) | 最大旋转角度限制 |
+| `center_tolerance` | 0.05 | 中心容差，目标在此范围内不调整 |
+| `camera_fov_deg` | 87.0 | 相机水平视场角 |
+| `network_interface` | "" | DDS 网络接口，空则自动检测 |
+
+**预期效果：**
+- 当检测到目标（如椅子）时，机器人会自动旋转腰部让目标保持在画面中心
+- 目标偏离中心时平滑追踪，不会剧烈抖动
+- 最大旋转角度限制在 ±45° 左右，确保安全
+
 ---
 
 ![Fork 历史趋势图。](https://commit.cool/forks/1255027942/cloud/manact_ws?interval=day)
