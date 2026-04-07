@@ -1,6 +1,6 @@
 import glob
 from setuptools import find_packages, setup
-#
+
 package_name = "g1_yolo_nav_py"
 
 setup(
