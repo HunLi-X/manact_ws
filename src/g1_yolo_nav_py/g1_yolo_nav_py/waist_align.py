@@ -1,25 +1,14 @@
 """
 腰部对齐节点 — 纯视觉伺服，通过旋转腰部让目标保持在画面中心
-
-功能：
-    - 订阅 YOLO 检测结果
-    - 计算目标相对于画面中心的偏移
-    - 通过 Arm SDK (rt/arm_sdk) DDS 控制 WaistYaw 关节旋转
-
-控制原理：
-    ┌──────────────┐     ┌────────────────┐     ┌───────────────┐
-    │ YOLO 检测框  │ ──→ │ 偏移 → 角度误差  │ ──→ │ WaistYaw P控制 │
-    │ (u 归一化坐标)│     │ error × FOV      │     │ (Arm SDK DDS) │
-    └──────────────┘     └────────────────┘     └───────────────┘
-
-运行方式：
-    ros2 run g1_yolo_nav_py waist_align
-
-调试建议：
-    - 先单独调试此节点，确认腰部能正确追踪目标居中
-    - 观察日志中的 u 坐标和腰部角度变化
-    - 调整 waist_kp 和 center_tolerance 直到追踪平滑
+...
 """
+
+# aarch64 + PyTorch: 必须在所有 import 之前预加载 libgomp
+import ctypes
+try:
+    ctypes.CDLL("/usr/lib/aarch64-linux-gnu/libgomp.so.1", mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    pass
 
 import math
 import os
