@@ -1,21 +1,8 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
-# aarch64 + PyTorch TLS 修复：
-# PyTorch 自带的 libgomp 需要在进程启动前预加载，否则 TLS 分配失败
-# 通过 os.execvpe 重启自身来注入 LD_PRELOAD（ros2 run 会清除 LD_PRELOAD）
+# ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 import os
 import sys
-_GOMP_PATHS = [
-    '/usr/lib/aarch64-linux-gnu/libgomp.so.1',
-    os.path.expanduser('~/.local/lib/python3.8/site-packages/torch.libs/libgomp-804f19d4.so.1.0.0'),
-    '/usr/local/lib/python3.8/dist-packages/torch.libs/libgomp-804f19d4.so.1.0.0',
-]
-_LIBGOMP = next((p for p in _GOMP_PATHS if os.path.isfile(p)), None)
-if _LIBGOMP and _LIBGOMP not in os.environ.get('LD_PRELOAD', ''):
-    os.environ['LD_PRELOAD'] = _LIBGOMP
-    os.execvpe(sys.executable, [sys.executable] + sys.argv, os.environ)
-
-# ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
     "/usr/lib/python3/dist-packages",
     os.path.expanduser("~/.local/lib/python3.8/site-packages"),
