@@ -112,8 +112,12 @@ ros2 run g1_yolo_nav_py loco_forward
 cd $(dirname $0)
 . install/setup.bash
 export LD_PRELOAD=~/.local/lib/python3.8/site-packages/torch.libs/libgomp-804f19d4.so.1.0.0
+export DISPLAY=:0              # SSH 远程时显示窗口到机器人桌面
 python3 -m g1_yolo_nav_py.yolo_detector
 ```
+
+> **远程查看可视化窗口**：机器人有桌面环境时，SSH 登录后设置 `export DISPLAY=:0`，
+> 即可将 `cv2.imshow` 窗口显示在机器人本机屏幕上。也可通过 VNC/RDP 远程桌面查看。
 
 ### 🧪 仅测试 YOLO 目标检测
 
@@ -130,15 +134,14 @@ ros2 run g1_yolo_nav_py yolo_detector          # x86
 # 或 ./run_yolo.sh                               # aarch64 机器人
 
 # 3. 启动可视化节点（终端 3）
-ros2 run g1_yolo_nav_py detection_visualizer
-# 标注图像发布到 /g1/vision/annotated_image 话题
-
-# 4. 查看标注图像（终端 4，远程 SSH 也可用）
-rqt_image_view  # 选择 /g1/vision/annotated_image
-
-# 本地有显示器时可开启窗口显示
+# SSH 远程时设置 DISPLAY 让窗口显示在机器人桌面
+export DISPLAY=:0
 ros2 run g1_yolo_nav_py detection_visualizer --ros-args -p display:=true
 # 按 q 键退出
+
+# 不需要窗口时，标注图像发布到话题，用 rqt_image_view 查看
+ros2 run g1_yolo_nav_py detection_visualizer
+rqt_image_view  # 选择 /g1/vision/annotated_image
 
 # 或查看原始检测结果文本
 ros2 topic echo /g1/vision/detections
