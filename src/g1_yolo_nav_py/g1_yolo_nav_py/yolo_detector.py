@@ -1,5 +1,12 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
+# aarch64 + PyTorch: 必须在所有 import 之前预加载 libgomp，否则 TLS 分配失败
+import ctypes
+try:
+    ctypes.CDLL("/usr/lib/aarch64-linux-gnu/libgomp.so.1", mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    pass
+
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 import os
 import sys
