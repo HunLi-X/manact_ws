@@ -1,8 +1,7 @@
 """检测框可视化节点 — 订阅相机图像 + 检测结果，绘制检测框并发布为 ROS 图像话题。
 
-支持两种查看方式：
-  1. 发布到话题，远程用 rqt_image_view 查看（默认，无需显示器）
-  2. 本地 cv2 窗口显示（需设置 display:=true 且有 X11 环境）
+同时尝试弹出 cv2 窗口（SSH 远程需 export DISPLAY=:0），
+如无显示环境则自动降级为纯话题发布模式。
 """
 
 import os
@@ -40,8 +39,22 @@ def _get_color(class_id: str) -> tuple:
     return _COLORS[idx]
 
 
+def _try_enable_display() -> bool:
+    """尝试启用 GUI 显示，返回是否成功。"""
+    # SSH 远程时自动补上 DISPLAY=:0（机器人桌面）
+    if not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+    try:
+        # 尝试用 GTK 后端创建窗口，失败则降级
+        cv2.namedWindow("_display_test", cv2.WINDOW_NORMAL)
+        cv2.destroyWindow("_display_test")
+        return True
+    except cv2.error:
+        return False
+
+
 class DetectionVisualizerNode(Node):
-    """订阅图像和检测结果，叠加检测框后发布为 ROS 图像话题。"""
+    """订阅图像和检测结果，叠加检测框后发布话题 + 可选窗口显示。"""
 
     def __init__(self) -> None:
         super().__init__("g1_detection_visualizer_node")
@@ -50,10 +63,23 @@ class DetectionVisualizerNode(Node):
         self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("annotated_topic", "/g1/vision/annotated_image")
-        self.declare_parameter("display", False)
+        self.declare_parameter("display", True)
 
         # ---- CV Bridge ----
         self._bridge = CvBridge()
+
+        # ---- 显示环境检测 ----
+        want_display = self.get_parameter("display").value
+        if want_display:
+            self._display = _try_enable_display()
+            if not self._display:
+                self.get_logger().warn(
+                    "无法打开显示（DISPLAY=%s），降级为纯话题发布。"
+                    "SSH 远程请执行: export DISPLAY=:0"
+                    % os.environ.get("DISPLAY", "")
+                )
+        else:
+            self._display = False
 
         # ---- QoS（与相机发布端一致） ----
         sensor_qos = QoSProfile(
@@ -65,7 +91,6 @@ class DetectionVisualizerNode(Node):
         image_topic = self.get_parameter("image_topic").value
         det_topic = self.get_parameter("detection_topic").value
         annotated_topic = self.get_parameter("annotated_topic").value
-        self._display = self.get_parameter("display").value
 
         self._image_sub = self.create_subscription(
             Image, image_topic, self._image_callback, sensor_qos
@@ -80,12 +105,12 @@ class DetectionVisualizerNode(Node):
         self._detections = None
 
         view_hint = (
-            "本地窗口" if self._display
+            "窗口 + 话题" if self._display
             else f"话题 {annotated_topic} (rqt_image_view 查看)"
         )
         self.get_logger().info(
             f"可视化节点启动: 图像={image_topic}, 检测={det_topic}, "
-            f"输出={view_hint}"
+            f"输出={view_hint}, DISPLAY={os.environ.get('DISPLAY', '')}"
         )
 
     def _image_callback(self, msg: Image) -> None:
