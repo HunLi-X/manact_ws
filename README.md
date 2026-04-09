@@ -64,6 +64,8 @@ g1act_ws/
 
 ### 🚀 快速开始
 
+#### x86 开发机
+
 ```bash
 # 安装依赖
 pip3 install ultralytics
@@ -79,6 +81,40 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
 ```
 
+#### aarch64 机器人端（G1 实机）
+
+> PyTorch 的 `libgomp` 在 aarch64 上需要 `LD_PRELOAD`，而 `ros2 run` 会清除该环境变量，
+> 因此需使用 wrapper 脚本启动。
+
+```bash
+# 安装依赖
+pip3 install ultralytics
+
+# 编译
+colcon build --packages-select g1_yolo_nav_py
+
+# 使用 wrapper 脚本启动 YOLO 检测（自动注入 LD_PRELOAD）
+./run_yolo.sh
+
+# 手动设置 LD_PRELOAD 后直接运行
+. install/setup.bash
+export LD_PRELOAD=~/.local/lib/python3.8/site-packages/torch.libs/libgomp-804f19d4.so.1.0.0
+python3 -m g1_yolo_nav_py.yolo_detector
+
+# 其他节点（不依赖 PyTorch）可直接 ros2 run
+ros2 run g1_yolo_nav_py waist_align
+ros2 run g1_yolo_nav_py loco_forward
+```
+
+**`run_yolo.sh` 内容参考：**
+```bash
+#!/bin/bash
+cd $(dirname $0)
+. install/setup.bash
+export LD_PRELOAD=~/.local/lib/python3.8/site-packages/torch.libs/libgomp-804f19d4.so.1.0.0
+python3 -m g1_yolo_nav_py.yolo_detector
+```
+
 ### 🧪 仅测试 YOLO 目标检测
 
 如果只需验证 YOLO 检测功能，无需启动完整导航管线：
@@ -90,10 +126,18 @@ ros2 launch realsense2_camera rs_launch.py camera_namespace:=robot1 camera_name:
 # 2. 编译并启动 YOLO 检测节点（终端 2）
 colcon build --packages-select g1_yolo_nav_py
 . install/setup.bash
-ros2 run g1_yolo_nav_py yolo_detector
+ros2 run g1_yolo_nav_py yolo_detector          # x86
+# 或 ./run_yolo.sh                               # aarch64 机器人
 
-# 3. 启动可视化节点，查看带检测框的图像（终端 3）
+# 3. 启动可视化节点（终端 3）
 ros2 run g1_yolo_nav_py detection_visualizer
+# 标注图像发布到 /g1/vision/annotated_image 话题
+
+# 4. 查看标注图像（终端 4，远程 SSH 也可用）
+rqt_image_view  # 选择 /g1/vision/annotated_image
+
+# 本地有显示器时可开启窗口显示
+ros2 run g1_yolo_nav_py detection_visualizer --ros-args -p display:=true
 # 按 q 键退出
 
 # 或查看原始检测结果文本

@@ -1,4 +1,9 @@
-"""检测框可视化节点 — 订阅相机图像 + 检测结果，实时绘制检测框并显示。"""
+"""检测框可视化节点 — 订阅相机图像 + 检测结果，绘制检测框并发布为 ROS 图像话题。
+
+支持两种查看方式：
+  1. 发布到话题，远程用 rqt_image_view 查看（默认，无需显示器）
+  2. 本地 cv2 窗口显示（需设置 display:=true 且有 X11 环境）
+"""
 
 import os
 import sys
@@ -7,6 +12,7 @@ import sys
 for _p in [
     "/usr/lib/python3/dist-packages",
     os.path.expanduser("~/.local/lib/python3.8/site-packages"),
+    "/usr/local/lib/python3.8/dist-packages",
 ]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
@@ -35,7 +41,7 @@ def _get_color(class_id: str) -> tuple:
 
 
 class DetectionVisualizerNode(Node):
-    """订阅图像和检测结果，叠加检测框后通过 cv2 显示。"""
+    """订阅图像和检测结果，叠加检测框后发布为 ROS 图像话题。"""
 
     def __init__(self) -> None:
         super().__init__("g1_detection_visualizer_node")
@@ -43,6 +49,8 @@ class DetectionVisualizerNode(Node):
         # ---- 参数 ----
         self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
+        self.declare_parameter("annotated_topic", "/g1/vision/annotated_image")
+        self.declare_parameter("display", False)
 
         # ---- CV Bridge ----
         self._bridge = CvBridge()
@@ -56,6 +64,8 @@ class DetectionVisualizerNode(Node):
 
         image_topic = self.get_parameter("image_topic").value
         det_topic = self.get_parameter("detection_topic").value
+        annotated_topic = self.get_parameter("annotated_topic").value
+        self._display = self.get_parameter("display").value
 
         self._image_sub = self.create_subscription(
             Image, image_topic, self._image_callback, sensor_qos
@@ -63,13 +73,19 @@ class DetectionVisualizerNode(Node):
         self._det_sub = self.create_subscription(
             Detection2DArray, det_topic, self._detection_callback, 10
         )
+        self._pub = self.create_publisher(Image, annotated_topic, sensor_qos)
 
         # ---- 缓存 ----
         self._cv_image = None
-        self._detections: Detection2DArray | None = None
+        self._detections = None
 
+        view_hint = (
+            "本地窗口" if self._display
+            else f"话题 {annotated_topic} (rqt_image_view 查看)"
+        )
         self.get_logger().info(
-            f"可视化节点启动: 图像={image_topic}, 检测={det_topic}, 按 q 退出"
+            f"可视化节点启动: 图像={image_topic}, 检测={det_topic}, "
+            f"输出={view_hint}"
         )
 
     def _image_callback(self, msg: Image) -> None:
@@ -78,14 +94,14 @@ class DetectionVisualizerNode(Node):
             self._cv_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception:
             return
-        self._draw()
+        self._draw(msg.header)
 
     def _detection_callback(self, msg: Detection2DArray) -> None:
         """缓存最新检测结果。"""
         self._detections = msg
 
-    def _draw(self) -> None:
-        """在图像上绘制检测框并显示。"""
+    def _draw(self, header=None) -> None:
+        """在图像上绘制检测框，发布到话题（可选本地窗口显示）。"""
         if self._cv_image is None:
             return
 
@@ -130,10 +146,23 @@ class DetectionVisualizerNode(Node):
                     font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA
                 )
 
-        cv2.imshow("G1 YOLO Detection", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            self.get_logger().info("用户退出可视化")
-            rclpy.shutdown()
+        # 发布标注后的图像到话题
+        if header is not None:
+            annotated_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            annotated_msg.header = header
+            self._pub.publish(annotated_msg)
+
+        # 本地窗口显示（仅 display:=true 时）
+        if self._display:
+            cv2.imshow("G1 YOLO Detection", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                self.get_logger().info("用户退出可视化")
+                rclpy.shutdown()
+
+    def destroy_node(self) -> None:
+        if self._display:
+            cv2.destroyAllWindows()
+        super().destroy_node()
 
 
 def main(args=None) -> None:
