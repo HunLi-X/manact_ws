@@ -1,5 +1,16 @@
 """检测框可视化节点 — 订阅相机图像 + 检测结果，实时绘制检测框并显示。"""
 
+import os
+import sys
+
+# ROS2 colcon 隔离 PYTHONPATH，追加系统和用户包路径
+for _p in [
+    "/usr/lib/python3/dist-packages",
+    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
+]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import cv2
 import rclpy
 from rclpy.node import Node

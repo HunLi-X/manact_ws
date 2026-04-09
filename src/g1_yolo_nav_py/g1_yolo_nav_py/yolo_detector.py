@@ -12,9 +12,18 @@ from std_msgs.msg import Header
 from cv_bridge import CvBridge
 from ament_index_python.packages import get_package_share_directory
 
+# ROS2 colcon 会隔离 PYTHONPATH，需要追加系统和用户包路径
+import sys
+for _p in [
+    "/usr/lib/python3/dist-packages",
+    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
+]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 try:
     from ultralytics import YOLO
-except ImportError:
+except Exception:
     YOLO = None
 
 
