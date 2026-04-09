@@ -1,6 +1,15 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
+# ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 import os
+import sys
+for _p in [
+    "/usr/lib/python3/dist-packages",
+    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
+]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import cv2
 import numpy as np
 import rclpy
@@ -11,15 +20,6 @@ from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithP
 from std_msgs.msg import Header
 from cv_bridge import CvBridge
 from ament_index_python.packages import get_package_share_directory
-
-# ROS2 colcon 会隔离 PYTHONPATH，需要追加系统和用户包路径
-import sys
-for _p in [
-    "/usr/lib/python3/dist-packages",
-    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 try:
     from ultralytics import YOLO
