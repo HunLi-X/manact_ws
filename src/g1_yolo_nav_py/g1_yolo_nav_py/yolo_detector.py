@@ -1,15 +1,16 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
-# aarch64 + PyTorch: 必须在所有 import 之前预加载 libgomp，否则 TLS 分配失败
-import ctypes
-try:
-    ctypes.CDLL("/usr/lib/aarch64-linux-gnu/libgomp.so.1", mode=ctypes.RTLD_GLOBAL)
-except OSError:
-    pass
-
-# ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
+# aarch64 + PyTorch TLS 修复：必须用 LD_PRELOAD 在进程启动前加载 libgomp
+# 代码内 ctypes.CDLL 无效，必须在进程级别预加载
+# 这里通过 os.execv 重启自身来注入 LD_PRELOAD
 import os
 import sys
+_LIBGOMP = '/usr/lib/aarch64-linux-gnu/libgomp.so.1'
+if os.path.isfile(_LIBGOMP) and _LIBGOMP not in os.environ.get('LD_PRELOAD', ''):
+    os.environ['LD_PRELOAD'] = _LIBGOMP
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+# ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
     "/usr/lib/python3/dist-packages",
     os.path.expanduser("~/.local/lib/python3.8/site-packages"),

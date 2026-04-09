@@ -3,12 +3,13 @@
 ...
 """
 
-# aarch64 + PyTorch: 必须在所有 import 之前预加载 libgomp
-import ctypes
-try:
-    ctypes.CDLL("/usr/lib/aarch64-linux-gnu/libgomp.so.1", mode=ctypes.RTLD_GLOBAL)
-except OSError:
-    pass
+# aarch64 + PyTorch TLS 修复：通过 os.execv 重启自身注入 LD_PRELOAD
+import os
+import sys
+_LIBGOMP = '/usr/lib/aarch64-linux-gnu/libgomp.so.1'
+if os.path.isfile(_LIBGOMP) and _LIBGOMP not in os.environ.get('LD_PRELOAD', ''):
+    os.environ['LD_PRELOAD'] = _LIBGOMP
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 import math
 import os
