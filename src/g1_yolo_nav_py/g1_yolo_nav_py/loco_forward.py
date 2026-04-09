@@ -1,23 +1,14 @@
 """
 Loco 前进控制节点 — 检测到目标对齐后，通过 LocoClient 控制机器人前进
-
-功能：
-    - 订阅 YOLO 检测结果
-    - 当目标居中且稳定时，调用 LocoClient.Move() 前进
-    - 目标足够近或丢失时，自动停止
-
-与 waist_align.py 配合使用：
-    1. waist_align.py — 腰部旋转让目标居中（独立调试）
-    2. loco_forward.py — 目标居中后前进到目标位置（独立调试）
-
-运行方式：
-    ros2 run g1_yolo_nav_py loco_forward
-
-调试建议：
-    - 先确保 waist_align 能正确对齐目标
-    - 单独测试此节点时，手动把机器人正对目标再启动
-    - 调整 forward_speed 和 arrive_bbox_ratio 控制前进行为
+...
 """
+
+# aarch64 + PyTorch: 必须在所有 import 之前预加载 libgomp
+import ctypes
+try:
+    ctypes.CDLL("/usr/lib/aarch64-linux-gnu/libgomp.so.1", mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    pass
 
 import os
 import sys
