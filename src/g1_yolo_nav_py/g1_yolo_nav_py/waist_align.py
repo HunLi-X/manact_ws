@@ -19,14 +19,6 @@ import threading
 import time
 from typing import Optional
 
-# ROS2 colcon 隔离 PYTHONPATH，追加系统和用户包路径
-for _p in [
-    "/usr/lib/python3/dist-packages",
-    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 import numpy as np
 import rclpy
 from rclpy.node import Node
