@@ -23,7 +23,8 @@ from ament_index_python.packages import get_package_share_directory
 
 try:
     from ultralytics import YOLO
-except Exception:
+except Exception as _e:
+    print(f"[DEBUG] ultralytics import failed: {type(_e).__name__}: {_e}")
     YOLO = None
 
 
