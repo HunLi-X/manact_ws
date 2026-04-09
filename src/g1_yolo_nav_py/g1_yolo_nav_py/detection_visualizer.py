@@ -16,6 +16,27 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+# ---- 检测 X11 显示环境（必须在 import cv2 之前） ----
+def _check_x11() -> bool:
+    """检查 X11 是否可用，不可用时自动补 DISPLAY 并验证。"""
+    if not os.environ.get("DISPLAY"):
+        os.environ["DISPLAY"] = ":0"
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["xdpyinfo"], capture_output=True, timeout=3,
+            env={**os.environ, "DISPLAY": os.environ["DISPLAY"]},
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+_DISPLAY_AVAILABLE = _check_x11()
+if not _DISPLAY_AVAILABLE:
+    # 强制 cv2 使用 headless 后端，避免 Qt/XCB 崩溃
+    os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+
 import cv2
 import rclpy
 from rclpy.node import Node
@@ -39,20 +60,6 @@ def _get_color(class_id: str) -> tuple:
     return _COLORS[idx]
 
 
-def _try_enable_display() -> bool:
-    """尝试启用 GUI 显示，返回是否成功。"""
-    # SSH 远程时自动补上 DISPLAY=:0（机器人桌面）
-    if not os.environ.get("DISPLAY"):
-        os.environ["DISPLAY"] = ":0"
-    try:
-        # 尝试用 GTK 后端创建窗口，失败则降级
-        cv2.namedWindow("_display_test", cv2.WINDOW_NORMAL)
-        cv2.destroyWindow("_display_test")
-        return True
-    except cv2.error:
-        return False
-
-
 class DetectionVisualizerNode(Node):
     """订阅图像和检测结果，叠加检测框后发布话题 + 可选窗口显示。"""
 
@@ -70,14 +77,15 @@ class DetectionVisualizerNode(Node):
 
         # ---- 显示环境检测 ----
         want_display = self.get_parameter("display").value
-        if want_display:
-            self._display = _try_enable_display()
-            if not self._display:
-                self.get_logger().warn(
-                    "无法打开显示（DISPLAY=%s），降级为纯话题发布。"
-                    "SSH 远程请执行: export DISPLAY=:0"
-                    % os.environ.get("DISPLAY", "")
-                )
+        if want_display and _DISPLAY_AVAILABLE:
+            self._display = True
+        elif want_display and not _DISPLAY_AVAILABLE:
+            self._display = False
+            self.get_logger().warn(
+                "X11 不可用（DISPLAY=%s），降级为纯话题发布。"
+                "修复方法: sudo xhost +local:"
+                % os.environ.get("DISPLAY", "")
+            )
         else:
             self._display = False
 
