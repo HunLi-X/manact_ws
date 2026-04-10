@@ -139,18 +139,22 @@ ros2 run g1_yolo_nav_py detection_visualizer
 # 如 X11 可用，同时弹出窗口显示
 
 # 4. 查看标注图像（终端 4）
-# 方式 A：rqt_image_view（推荐，SSH 远程也可用）
+# 方式 A：rviz2（推荐，ROS2 自带）
 sudo xhost +local:                              # 首次需授权 X11
+DISPLAY=:0 rviz2
+# 在 rviz2 中：Add → By topic → /g1/vision/annotated_image → Image
+
+# 方式 B：rqt_image_view（轻量）
 DISPLAY=:0 rqt_image_view                       # 下拉选择 /g1/vision/annotated_image
 
-# 方式 B：确认数据是否在发布
+# 方式 C：确认数据是否在发布
 ros2 topic hz /g1/vision/annotated_image
 
 # 或查看原始检测结果文本
 ros2 topic echo /g1/vision/detections
 ```
 
-> **SSH 远程窗口提示**：如需在机器人桌面弹出 cv2 窗口，先执行 `sudo xhost +local:` 解除 X11 认证限制，
+> **SSH 远程窗口提示**：如需在机器人桌面弹出 cv2/rviz2 窗口，先执行 `sudo xhost +local:` 解除 X11 认证限制，
 > 可视化节点会自动检测 X11 并尝试弹窗，失败时自动降级为纯话题发布模式。
 
 **自定义参数示例：**
