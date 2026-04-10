@@ -134,18 +134,24 @@ ros2 run g1_yolo_nav_py yolo_detector          # x86
 # 或 ./run_yolo.sh                               # aarch64 机器人
 
 # 3. 启动可视化节点（终端 3）
-# SSH 远程时设置 DISPLAY 让窗口显示在机器人桌面
-export DISPLAY=:0
-ros2 run g1_yolo_nav_py detection_visualizer --ros-args -p display:=true
-# 按 q 键退出
-
-# 不需要窗口时，标注图像发布到话题，用 rqt_image_view 查看
 ros2 run g1_yolo_nav_py detection_visualizer
-rqt_image_view  # 选择 /g1/vision/annotated_image
+# 自动将标注图像发布到 /g1/vision/annotated_image 话题
+# 如 X11 可用，同时弹出窗口显示
+
+# 4. 查看标注图像（终端 4）
+# 方式 A：rqt_image_view（推荐，SSH 远程也可用）
+sudo xhost +local:                              # 首次需授权 X11
+DISPLAY=:0 rqt_image_view                       # 下拉选择 /g1/vision/annotated_image
+
+# 方式 B：确认数据是否在发布
+ros2 topic hz /g1/vision/annotated_image
 
 # 或查看原始检测结果文本
 ros2 topic echo /g1/vision/detections
 ```
+
+> **SSH 远程窗口提示**：如需在机器人桌面弹出 cv2 窗口，先执行 `sudo xhost +local:` 解除 X11 认证限制，
+> 可视化节点会自动检测 X11 并尝试弹窗，失败时自动降级为纯话题发布模式。
 
 **自定义参数示例：**
 
