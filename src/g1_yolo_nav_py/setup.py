@@ -28,6 +28,7 @@ setup(
             "nav_planner = g1_yolo_nav_py.nav_planner:main",
             "waist_align = g1_yolo_nav_py.waist_align:main",
             "loco_forward = g1_yolo_nav_py.loco_forward:main",
+            "yaw_align = g1_yolo_nav_py.yaw_align:main",
         ],
     },
 )
