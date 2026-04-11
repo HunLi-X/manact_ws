@@ -205,16 +205,32 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 
 **方案 A：偏航对齐 (`yaw_align`)**
 ```
+终端 1: ros2 launch realsense2_camera rs_launch.py \     # 相机
+            camera_namespace:=robot1 camera_name:=D455_1
 终端 2: ./run_yolo.sh                                   # YOLO 检测
 终端 3: ros2 run g1_yolo_nav_py yaw_align               # 整机旋转对齐
 终端 4: ros2 run g1_twist_bridge_py twist_bridge         # cmd_vel → Sport API
+终端 5: ros2 run g1_yolo_nav_py detection_visualizer    # 可视化（可选）
 ```
 
 **方案 B：腰部对齐 (`waist_align`)**
 ```
+终端 1: ros2 launch realsense2_camera rs_launch.py \     # 相机
+            camera_namespace:=robot1 camera_name:=D455_1
 终端 2: ./run_yolo.sh                                   # YOLO 检测
 终端 3: ros2 run g1_yolo_nav_py waist_align              # 腰部旋转对齐
+终端 4: ros2 run g1_yolo_nav_py detection_visualizer    # 可视化（可选）
 # 不需要 twist_bridge，直接 DDS 控制腰部关节
+```
+
+**查看可视化画面：**
+```bash
+# 方式 1：rviz2（推荐）
+sudo xhost +local: && DISPLAY=:0 rviz2
+# Add → By topic → /g1/vision/annotated_image → Image
+
+# 方式 2：rqt_image_view
+DISPLAY=:0 rqt_image_view  # 下拉选择 /g1/vision/annotated_image
 ```
 
 **切换方式：**
