@@ -120,7 +120,61 @@ python3 -m g1_yolo_nav_py.yolo_detector
 > **远程查看可视化窗口**：机器人有桌面环境时，SSH 登录后设置 `export DISPLAY=:0`，
 > 即可将 `cv2.imshow` 窗口显示在机器人本机屏幕上。也可通过 VNC/RDP 远程桌面查看。
 
-### 🧪 仅测试 YOLO 目标检测
+### 📷 RGBD 数据采集
+
+一行命令采集带检测框的彩色图像 + 深度图，默认每 5s 采集一帧，持续 60s（共 12 帧）。
+
+```bash
+# 前提：相机 + YOLO 检测已启动（见上方「仅测试 YOLO 目标检测」）
+# 相机启动时需开启深度对齐：
+ros2 launch realsense2_camera rs_launch.py \
+    camera_namespace:=robot1 camera_name:=D455_1 \
+    align_depth.enable:=true
+
+# 编译 + 运行采集
+colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
+ros2 run g1_yolo_nav_py rgbd_capture
+```
+
+**输出目录结构**（默认保存在 `src/g1_yolo_nav_py/rgbd_data/`）：
+```
+rgbd_data/
+├── img/            # 彩色图像（带检测框标注），.jpg
+│   ├── 0000.jpg
+│   ├── 0005.jpg
+│   └── ...
+└── d/              # 深度图（16位 PNG，单位 mm）
+    ├── 0000.png
+    ├── 0005.png
+    └── ...
+文件名一一对应：0000.jpg ↔ 0000.png
+```
+
+**自定义参数：**
+```bash
+# 每 2s 采集一次，持续 30s
+ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
+  -p interval_sec:=2.0 -p duration_sec:=30.0
+
+# 指定输出目录
+ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
+  -p output_dir:=/tmp/my_capture
+
+# 指定深度话题（默认对齐到彩色的深度图）
+ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
+  -p depth_topic:=/robot1/D455_1/depth/image_rect_raw
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `interval_sec` | 5.0 | 采集间隔（秒） |
+| `duration_sec` | 60.0 | 总采集时长（秒） |
+| `output_dir` | `src/g1_yolo_nav_py/rgbd_data/` | 输出目录 |
+| `color_topic` | `/robot1/D455_1/color/image_raw` | 彩色图像话题 |
+| `depth_topic` | `/robot1/D455_1/aligned_depth_to_color/image_raw` | 深度图话题 |
+
+> **注意**：深度图需要相机启动时加 `align_depth.enable:=true` 参数，否则深度话题无数据。
+> 如无深度相机，节点仍会保存彩色图像，日志提示"无深度"。
 
 如果只需验证 YOLO 检测功能，无需启动完整导航管线：
 
