@@ -5,7 +5,7 @@
 
 [![ROS2 Foxy](https://img.shields.io/badge/ROS2-Foxy-blue)](https://docs.ros.org/en/foxy/)
 [![YOLOv11](https://img.shields.io/badge/YOLOv11-目标检测-green)](https://docs.ultralytics.com/)
-[![Nav2](https://img.shields.io/badge/Nav2-路径规划-orange)](https://navigation.ros.org/)
+[![纯视觉](https://img.shields.io/badge/纯视觉-路径规划-orange)](https://navigation.ros.org/)
 [![Python 3.8](https://img.shields.io/badge/Python-3.8+-yellow)](https://www.python.org/)
 
 [![Auth](https://img.shields.io/badge/Auther--HunLi-ff69b4.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADZElEQVR4nO2ZX2iPURjHP/7/aZN/E21DaZvtwoVYyQUuGXLB/LtkLRcUhSJMSVwg3KCUJPJvLmRZtMQFLvwZhUJk/saGLWaYV6eet06n9/3tfd+9531/sW89td9z3vOc8z3nPOc8zzPoQQ+yAnlAA/AbcCzKR2ClTSL7LRNwNPkB5Noi0pggEQeYbovIh4SJLLBBojfwK2EiVTaIjEyYhANsskGkNAUi+2wQmZECkRM2iCxMgUi9DSKrxPhS7GOZjHXPhvGtYlwdMduYKWO9tmH8oBgvxj6KZawOoFfcxk+L8RzsI0fzkyFhO28EvqXg0FHlK1DtReRzFkzOCSmfvIhczIKJOSHlmheRgcAK4E4WTNDpQp4Ba4P4zxRgO3ArgSQqqDQDx4AKCWBDYwSwRDP4JWECG4CpQB9iwCTNsBsJl8srvxk4CtQBN4Enkre0GKQ7RaekCXgAXAcuAHuB1bLaZcAgrd+2uK78ai0PsfLSBshG70u9IDJmyUq2AYvlbD5N4Dg9l/EnArdFV9sdIlfEiLrNzFAlqPwE2kP2OaKNlyfH8Q9QFJVIixgepukqIuTdRRI3Be1TaczjnOgXRSXyTgwUarrBIVb4htbvcMA+nR7+UCdtc6MSOS8G9hj6+gjlnHEBd+WuMVaZ9FMyJiqRydrgB4B80VcFmFBtxALfFm3nlwPv48rfK7WoWDkc8jgpYq0eE/kOnAGG+4RBh3z6qTGOyzfIJeG2nQL6EQMmaEaTgtNdv+jKcFJwbI33XxEpAM76+IArrXIbFqVFpE0MuzeXF4nmEI9ecwZbhVo6GzsaxLhnniw74YQUVdDwwjppv2yzaPbIJ7HJdJz8RIX5JgYAL6V9vg0ifYEXMsAaj3Z3cpfkmPmhQAs5vHxgh+gbbdS0XMyTQdrkbdHhTiwTCdMHTCLl8hCqeGsalnFSO2JDNb3XxOZINqhkttFmfq8W4I1PbGcFuVr21qCloe7EarRvmzT9K01fYxAZJVmgA1yNKxwh4NF4q0Wr+UZs5JIxndskoVLoEskI1e/HRu6TCEpklR1ZebPcqk/YT9cu1UL190NgNCmhQGpfTjelLo2dMNEf2BkylXVF7eL6qAU3WyiVvCHIv7A7pBY2nizGWGC3FOr0XeoQZ96VIcbqAf8K/gLNGaTJ3vwbFgAAAABJRU5ErkJggg==)](https://github.com/HunLi-X)
@@ -102,6 +102,7 @@ export LD_PRELOAD=~/.local/lib/python3.8/site-packages/torch.libs/libgomp-804f19
 python3 -m g1_yolo_nav_py.yolo_detector
 
 # 其他节点（不依赖 PyTorch）可直接 ros2 run
+ros2 run g1_yolo_nav_py yaw_align
 ros2 run g1_yolo_nav_py waist_align
 ros2 run g1_yolo_nav_py loco_forward
 ```
@@ -176,29 +177,72 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 
 | 程序 | 功能 | 控制方式 | 入口命令 |
 |------|------|---------|---------|
-| ``yaw_align`` | 整机旋转让目标居中 | cmd_vel → Sport API | ``ros2 run g1_yolo_nav_py yaw_align`` |
-| ``waist_align`` | 腰部旋转让目标居中 | Arm SDK DDS | ``ros2 run g1_yolo_nav_py waist_align`` |
-| ``loco_forward`` | 对齐后前进到目标 | LocoClient RPC | ``ros2 run g1_yolo_nav_py loco_forward`` |，可单独调试：
-
-| 程序 | 功能 | 控制方式 | 入口命令 |
-|------|------|---------|---------|
+| `yaw_align` | 整机旋转让目标居中 | cmd_vel → Sport API | `ros2 run g1_yolo_nav_py yaw_align` |
 | `waist_align` | 腰部旋转让目标居中 | Arm SDK DDS | `ros2 run g1_yolo_nav_py waist_align` |
 | `loco_forward` | 对齐后前进到目标 | LocoClient RPC | `ros2 run g1_yolo_nav_py loco_forward` |
 
+> **`yaw_align` vs `waist_align`**：
+> - `yaw_align` 使用高层 `/cmd_vel` 控制整机旋转（angular.z），无需 DDS 依赖，更简单安全
+> - `waist_align` 使用低层 DDS 直接控制腰部关节，精度更高但需要 `unitree_sdk2py`
+> - **两者不能同时运行**，选择一种即可
+
 **工作流程（两个节点协作）：**
 ```
-  YOLO检测 ──→ waist_align(腰部对齐) ──→ loco_forward(Loco前进)
-                目标居中后才允许前进         居中+稳定 → Move(vx)
+  YOLO检测 ──→ yaw_align 或 waist_align ──→ loco_forward(Loco前进)
+                目标居中后才允许前进             居中+稳定 → Move(vx)
 ```
 
 **前置条件：**
 - G1 机器人已连接并处于站立状态
-- 已安装 `unitree_sdk2py`：`pip install unitree_sdk2py`
 - 相机已启动并发布图像
+- `yaw_align` 无额外依赖；`waist_align` / `loco_forward` 需 `pip install unitree_sdk2py`
 
 ---
 
-#### 📌 步骤一：调试腰部对齐 (`waist_align`)
+#### 📌 两种对齐方案对比调试
+
+> 两种方案**互斥**，同一时间只能运行一种。建议先分别调试，再选定最优方案。
+
+**方案 A：偏航对齐 (`yaw_align`)**
+```
+终端 2: ./run_yolo.sh                                   # YOLO 检测
+终端 3: ros2 run g1_yolo_nav_py yaw_align               # 整机旋转对齐
+终端 4: ros2 run g1_twist_bridge_py twist_bridge         # cmd_vel → Sport API
+```
+
+**方案 B：腰部对齐 (`waist_align`)**
+```
+终端 2: ./run_yolo.sh                                   # YOLO 检测
+终端 3: ros2 run g1_yolo_nav_py waist_align              # 腰部旋转对齐
+# 不需要 twist_bridge，直接 DDS 控制腰部关节
+```
+
+**切换方式：**
+```bash
+# 方案 A → 方案 B：在终端 3 按 Ctrl+C 停止 yaw_align，然后启动 waist_align
+ros2 run g1_yolo_nav_py waist_align
+
+# 方案 B → 方案 A：在终端 3 按 Ctrl+C 停止 waist_align，然后启动 yaw_align
+ros2 run g1_yolo_nav_py yaw_align
+# 注意：yaw_align 需要额外运行 twist_bridge（终端 4）
+```
+
+**对比评估要点：**
+
+| 评估项 | yaw_align (整机旋转) | waist_align (腰部旋转) |
+|--------|---------------------|----------------------|
+| 响应速度 | □ 快 / □ 慢 | □ 快 / □ 慢 |
+| 稳定性（静止时不抖） | □ 稳定 / □ 抖动 | □ 稳定 / □ 抖动 |
+| 追踪精度 | □ 精准 / □ 偏移 | □ 精准 / □ 偏移 |
+| 脚部稳定性 | □ 站稳 / □ 晃动 | □ 站稳 / □ 晃动 |
+| 依赖复杂度 | 低（仅需 twist_bridge） | 高（需 unitree_sdk2py + DDS） |
+| 最终选择 | □ | □ |
+
+> **调试技巧**：同一位姿下，先跑方案 A 记录表现，`Ctrl+C` 切换到方案 B 再记录，直接对比最直观。
+
+---
+
+#### 📌 步骤一（备选）：调试腰部对齐 (`waist_align`)
 
 **目的**：确认腰部能正确追踪目标，让目标保持在画面中心。
 
@@ -251,7 +295,7 @@ ros2 run g1_yolo_nav_py waist_align --ros-args -p network_interface:=eth0
 
 #### 📌 步骤二：调试 Loco 前进 (`loco_forward`)
 
-**前提**：步骤一的腰部对齐已经正常工作。
+**前提**：步骤一的对齐已经正常工作。
 
 **目的**：确认目标居中后机器人能正确前进并自动停止。
 
@@ -274,7 +318,7 @@ ros2 run g1_yolo_nav_py loco_forward
 | `forward_speed` | 0.3 m/s | 首次调试建议用 0.1~0.2 |
 | `align_stable_time` | 0.8 s | 居中多久才开始前进 |
 | `arrive_bbox_ratio` | 0.45 | 检测框占比，越大=停得越远 |
-| `center_tolerance` | 0.08 | 与 waist_align 保持一致 |
+| `center_tolerance` | 0.08 | 与对齐节点保持一致 |
 | `check_rate` | 10 Hz | 判断频率 |
 
 **参数调优：**
@@ -296,16 +340,17 @@ ros2 run g1_yolo_nav_py loco_forward --ros-args \
 
 #### 📌 步骤三：联合运行
 
-两个程序都调通后，可以一起使用：
+对齐和前进都调通后，可以一起使用：
 
 ```bash
-# 方式 A：launch 一键启动（推荐正式使用）
-ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
-
-# 方式 B：手动分别启动（方便看各自日志）
+# 方式 A：手动分别启动（推荐调试，方便看各自日志）
 # 终端 2: ros2 run g1_yolo_nav_py yolo_detector
-# 终端 3: ros2 run g1_yolo_nav_py waist_align
-# 终端 4: ros2 run g1_yolo_nav_py loco_forward
+# 终端 3: ros2 run g1_yolo_nav_py yaw_align
+# 终端 4: ros2 run g1_twist_bridge_py twist_bridge
+# 终端 5: ros2 run g1_yolo_nav_py loco_forward
+
+# 方式 B：launch 一键启动
+ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ```
 
 **安全提示：**
@@ -316,4 +361,3 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ---
 
 ![Fork 历史趋势图。](https://commit.cool/forks/1255027942/cloud/manact_ws?interval=day)
-
