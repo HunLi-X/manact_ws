@@ -106,7 +106,7 @@ class DetectionVisualizerNode(Node):
         self._det_sub = self.create_subscription(
             Detection2DArray, det_topic, self._detection_callback, 10
         )
-        self._pub = self.create_publisher(Image, annotated_topic, sensor_qos)
+        self._pub = self.create_publisher(Image, annotated_topic, 10)
 
         # ---- 缓存 ----
         self._cv_image = None
