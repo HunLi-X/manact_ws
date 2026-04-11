@@ -111,6 +111,7 @@ class DetectionVisualizerNode(Node):
         # ---- 缓存 ----
         self._cv_image = None
         self._detections = None
+        self._pub_count = 0
 
         view_hint = (
             "窗口 + 话题" if self._display
@@ -125,7 +126,8 @@ class DetectionVisualizerNode(Node):
         """缓存最新图像并触发绘制。"""
         try:
             self._cv_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        except Exception:
+        except Exception as e:
+            self.get_logger().warn(f"图像转换失败: {e}")
             return
         self._draw(msg.header)
 
@@ -184,6 +186,13 @@ class DetectionVisualizerNode(Node):
             annotated_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
             annotated_msg.header = header
             self._pub.publish(annotated_msg)
+            self._pub_count += 1
+            if self._pub_count <= 3:
+                self.get_logger().info(
+                    f"发布标注图像 #{self._pub_count}: "
+                    f"size={frame.shape[1]}x{frame.shape[0]}, "
+                    f"订阅者={self._pub.get_subscription_count()}"
+                )
 
         # 本地窗口显示（仅 display:=true 时）
         if self._display:
