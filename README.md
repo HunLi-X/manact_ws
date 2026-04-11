@@ -172,7 +172,13 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 
 ### 🎯 视觉伺服追踪与趋近
 
-两个独立程序，可单独调试：
+三个独立程序，可单独调试：
+
+| 程序 | 功能 | 控制方式 | 入口命令 |
+|------|------|---------|---------|
+| ``yaw_align`` | 整机旋转让目标居中 | cmd_vel → Sport API | ``ros2 run g1_yolo_nav_py yaw_align`` |
+| ``waist_align`` | 腰部旋转让目标居中 | Arm SDK DDS | ``ros2 run g1_yolo_nav_py waist_align`` |
+| ``loco_forward`` | 对齐后前进到目标 | LocoClient RPC | ``ros2 run g1_yolo_nav_py loco_forward`` |，可单独调试：
 
 | 程序 | 功能 | 控制方式 | 入口命令 |
 |------|------|---------|---------|
@@ -310,3 +316,4 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ---
 
 ![Fork 历史趋势图。](https://commit.cool/forks/1255027942/cloud/manact_ws?interval=day)
+
