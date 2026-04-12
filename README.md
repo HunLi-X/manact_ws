@@ -433,42 +433,48 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 自动执行：目标检测 → 偏航对齐 → 前进接近 → 抓取 → 交互菜单。
 
 **前置条件：**
-- 相机 + YOLO 检测已启动
-- `unitree_sdk2py` 已安装（LocoClient 前进控制）
-- `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下）
+- G1 机器人已连接并站立
+- `unitree_sdk2py` 已安装：`pip install unitree_sdk2py`
+- `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，由同事维护）
 
-**运行：**
+**实机运行（4 个终端）：**
 ```bash
-# 终端 1：相机
+# 终端 1：启动相机
 ros2 launch realsense2_camera rs_launch.py \
     camera_namespace:=robot1 camera_name:=D455_1
 
-# 终端 2：YOLO 检测
-./run_yolo.sh
+# 终端 2：启动 YOLO 检测
+cd ~/g1act_ws/manact_ws && ./run_yolo.sh
 
-# 终端 3：twist_bridge（偏航对齐需要）
+# 终端 3：启动 twist_bridge（偏航对齐需要）
+. ~/g1act_ws/manact_ws/install/setup.bash
 ros2 run g1_twist_bridge_py twist_bridge
 
-# 终端 4：一键抓取任务
+# 终端 4：启动抓取任务
+cd ~/g1act_ws/manact_ws
 colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
 ros2 run g1_yolo_nav_py grasp_task
 ```
 
-**执行流程与日志：**
+**执行流程与关键日志：**
 ```
+==================================================
+G1 抓取任务启动
+目标类别: chair
+armup: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armup.py
+armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
+==================================================
+[LocoClient] 初始化成功
 [SEARCHING]  旋转搜索目标...
 [检测] 识别到目标: chair, 置信度=95%, u=0.32
 [状态] SEARCHING → ALIGNING: 目标已找到
-[ALIGNING]   偏航对齐让目标居中...
 [状态] ALIGNING → APPROACHING: 目标已居中
-[APPROACHING] 前进到目标附近...
 [状态] APPROACHING → GRABBING: 到达目标! bbox=0.46 >= 0.45
-[GRABBING]   执行 armup.py ...
+[抓取] 执行 armup.py ...
 [抓取] armup.py 执行完成
-[MENU]       显示交互菜单
 ```
 
-**交互菜单：**
+**抓取完成后自动弹出交互菜单：**
 ```
 ========================================
   G1 抓取任务 — 操作菜单
@@ -481,26 +487,37 @@ ros2 run g1_yolo_nav_py grasp_task
 请选择 [1-4]:
 ```
 
-- **选项 1**：执行 `armdown.py` 放下目标物
-- **选项 2**：右转 90° 后执行 `armdown.py`
-- **选项 3**：输入 `x y z`（m/s, m/s, rad/s）直接控制机器人移动，输入 `q` 停止返回菜单
-- **选项 4**：安全停止并退出
+| 选项 | 动作 | 说明 |
+|------|------|------|
+| 1 | 执行 `armdown.py` | 原地放下目标物 |
+| 2 | 右转 90° + `armdown.py` | 转身后放下 |
+| 3 | 输入 `x y z` 控制移动 | 如 `0.2 0.0 0.3`，输入 `q` 停止返回 |
+| 4 | 安全退出 | 停止运动并退出程序 |
 
 **参数调优：**
 ```bash
+# 检测瓶子、降低速度
 ros2 run g1_yolo_nav_py grasp_task --ros-args \
   -p target_class_id:=bottle \
   -p forward_speed:=0.15 \
   -p arrive_bbox_ratio:=0.5
+
+# 自定义 arm 脚本目录
+ros2 run g1_yolo_nav_py grasp_task --ros-args \
+  -p arm_script_dir:=/home/unitree/my_arm_scripts
 ```
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `target_class_id` | chair | 目标类别 |
-| `forward_speed` | 0.2 m/s | 前进速度 |
-| `arrive_bbox_ratio` | 0.45 | 到达判定阈值 |
+| `target_class_id` | chair | YOLO 检测目标类别 |
+| `forward_speed` | 0.2 m/s | 接近速度（首次建议 0.15） |
+| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值 |
 | `search_yaw_speed` | 0.3 rad/s | 搜索旋转速度 |
-| `yaw_kp` | 2.0 | 偏航对齐增益 |
+| `yaw_kp` | 2.0 | 偏航对齐 P 增益 |
+| `lost_timeout` | 2.0 s | 目标丢失超时 |
+| `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录 |
+
+> **安全提示**：首次运行建议 `forward_speed:=0.15`，随时准备急停。
 
 ---
 

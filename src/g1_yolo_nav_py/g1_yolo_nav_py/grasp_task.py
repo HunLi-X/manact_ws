@@ -58,8 +58,8 @@ class State(Enum):
     DONE = auto()
 
 
-# arm 脚本目录（src/g1_yolo_nav_py/arm/）
-_ARM_DIR = Path(__file__).resolve().parent.parent / "arm"
+# arm 脚本默认目录（ros2 run 时需要通过参数指定，因为 __file__ 指向 install 目录）
+_DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm")
 
 
 class GraspTaskNode(Node):
@@ -82,6 +82,7 @@ class GraspTaskNode(Node):
         self.declare_parameter("lost_timeout", 2.0)
         self.declare_parameter("search_yaw_speed", 0.3)
         self.declare_parameter("network_interface", "")
+        self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -98,9 +99,10 @@ class GraspTaskNode(Node):
         self._search_speed = float(p("search_yaw_speed"))
         self._net_iface = p("network_interface")
 
-        # arm 脚本路径
-        self._armup_script = _ARM_DIR / "armup.py"
-        self._armdown_script = _ARM_DIR / "armdown.py"
+        # arm 脚本路径（通过参数指定，默认 ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/）
+        arm_dir = p("arm_script_dir")
+        self._armup_script = Path(arm_dir) / "armup.py"
+        self._armdown_script = Path(arm_dir) / "armdown.py"
 
         # ---- ROS2 订阅 ----
         det_qos = QoSProfile(
