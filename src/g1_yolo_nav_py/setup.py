@@ -30,6 +30,7 @@ setup(
             "loco_forward = g1_yolo_nav_py.loco_forward:main",
             "yaw_align = g1_yolo_nav_py.yaw_align:main",
             "rgbd_capture = g1_yolo_nav_py.rgbd_capture:main",
+            "grasp_task = g1_yolo_nav_py.grasp_task:main",
         ],
     },
 )
