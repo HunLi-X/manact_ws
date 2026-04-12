@@ -437,22 +437,37 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 - `unitree_sdk2py` 已安装：`pip install unitree_sdk2py`
 - `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，由同事维护）
 
-**实机运行（4 个终端）：**
+**实机运行（一键启动）：**
 ```bash
-# 终端 1：启动相机
-ros2 launch realsense2_camera rs_launch.py \
-    camera_namespace:=robot1 camera_name:=D455_1
-
-# 终端 2：启动 YOLO 检测
-cd ~/g1act_ws/manact_ws && ./run_yolo.sh
-
-# 终端 3：启动 twist_bridge（偏航对齐需要）
-. ~/g1act_ws/manact_ws/install/setup.bash
-ros2 run g1_twist_bridge_py twist_bridge
-
-# 终端 4：启动抓取任务
 cd ~/g1act_ws/manact_ws
 colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
+
+# 一键启动全流程（相机 + 检测 + 桥接 + 抓取任务）
+ros2 launch g1_yolo_nav_py grasp_task.launch.py
+
+# 检测瓶子、降低速度
+ros2 launch g1_yolo_nav_py grasp_task.launch.py \
+    target_class:=bottle forward_speed:=0.15
+
+# 相机已在其他地方启动时
+ros2 launch g1_yolo_nav_py grasp_task.launch.py start_camera:=false
+```
+
+> **aarch64 自动处理**：launch 文件在 ARM 平台自动注入 `LD_PRELOAD`（解决 libgomp TLS 问题），x86 上则正常启动。
+
+**手动分步启动（调试用）：**
+```bash
+# 终端 1：相机
+ros2 launch realsense2_camera rs_launch.py \
+    camera_namespace:=robot1 camera_name:=D455_1 align_depth.enable:=true
+
+# 终端 2：YOLO 检测
+./run_yolo.sh
+
+# 终端 3：twist_bridge
+ros2 run g1_twist_bridge_py twist_bridge
+
+# 终端 4：抓取任务
 ros2 run g1_yolo_nav_py grasp_task
 ```
 
