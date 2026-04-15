@@ -64,11 +64,52 @@ g1act_ws/
 
 ### 🚀 快速开始
 
-#### x86 开发机
+#### 1. 环境搭建（首次必做）
+
+> **实验室要求**：每个实验者必须使用独立的 Python 虚拟环境，禁止在主系统 Python 中安装包。
+> 禁止混用 ROS1 与 ROS2，禁止修改 `~/.bashrc` 中的 ROS 配置。
 
 ```bash
-# 安装依赖
-pip3 install ultralytics
+# --- 首次搭建 ---
+
+# 1) 创建虚拟环境（允许访问系统已安装的 ROS2 / unitree_sdk2py）
+python3 -m venv ~/g1act_venv --system-site-packages
+
+# 2) 激活虚拟环境
+source ~/g1act_venv/bin/activate
+
+# 3) 安装项目依赖
+cd ~/g1act_ws
+pip install -r requirements.txt
+
+# 4) 编译 ROS2 工作空间
+colcon build
+```
+
+```bash
+# --- 每次启动项目 ---
+
+# 激活虚拟环境（每次开新终端都需要执行）
+source ~/g1act_venv/bin/activate
+
+# 加载 ROS2 工作空间
+cd ~/g1act_ws
+. install/setup.bash
+
+# 之后即可运行项目（见下方各功能说明）
+```
+
+> **说明**：
+> - `--system-site-packages` 让虚拟环境可以访问系统级已安装的 `rclpy`、`unitree_sdk2py` 等，
+>   避免在虚拟环境中重复安装 ROS2 等大型依赖。
+> - `ultralytics`、`opencv-python`、`numpy` 等项目依赖安装在虚拟环境中，与系统环境隔离。
+> - 如需确认是否在虚拟环境中：`which python3` 应输出 `~/g1act_venv/bin/python3`。
+> - 退出虚拟环境：`deactivate`
+
+#### 2. x86 开发机
+
+```bash
+source ~/g1act_venv/bin/activate   # 激活虚拟环境
 
 # 编译
 colcon build --packages-select g1_yolo_nav_py
