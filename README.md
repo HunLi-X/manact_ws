@@ -122,14 +122,13 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
 ```
 
-#### aarch64 机器人端（G1 实机）
+#### 3. aarch64 机器人端（G1 实机）
 
 > PyTorch 的 `libgomp` 在 aarch64 上需要 `LD_PRELOAD`，而 `ros2 run` 会清除该环境变量，
 > 因此需使用 wrapper 脚本启动。
 
 ```bash
-# 安装依赖
-pip3 install ultralytics
+source ~/g1act_venv/bin/activate   # 激活虚拟环境
 
 # 编译
 colcon build --packages-select g1_yolo_nav_py
