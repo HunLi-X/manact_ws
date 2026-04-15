@@ -1,8 +1,12 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import os  # 路径判断与 sys.path 修改
+import sys  # sys.path 修改
+
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
-import os
-import sys
 for _p in [
     "/usr/lib/python3/dist-packages",
     os.path.expanduser("~/.local/lib/python3.8/site-packages"),
@@ -11,19 +15,23 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import cv2
-import numpy as np
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import Image
-from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D
-from std_msgs.msg import Header
-from cv_bridge import CvBridge
-from ament_index_python.packages import get_package_share_directory
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import cv2  # OpenCV 图像格式处理
+import numpy as np  # 数值计算
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from sensor_msgs.msg import Image  # ROS2 图像消息
+from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D  # 检测结果消息
+from std_msgs.msg import Header  # ROS2 消息头
+from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
+from ament_index_python.packages import get_package_share_directory  # 获取 ROS2 包共享目录
 
+# ultralytics: YOLO 目标检测模型库（可选依赖）
 try:
-    from ultralytics import YOLO
+    from ultralytics import YOLO  # YOLO 推理模型
 except Exception as _e:
     print(f"[DEBUG] ultralytics import failed: {type(_e).__name__}: {_e}")
     YOLO = None
