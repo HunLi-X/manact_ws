@@ -135,8 +135,8 @@ def generate_launch_description() -> LaunchDescription:
                 "python3", "-m", "g1_yolo_nav_py.yolo_detector",
                 "--ros-args",
                 "--params-file", config_file,
-                "-p", "model_path:=" + LaunchConfiguration("model_path"),
-                "-p", "target_classes:=[" + LaunchConfiguration("target_class") + "]",
+                "-p", ["model_path:=", LaunchConfiguration("model_path")],
+                "-p", ["target_classes:=[", LaunchConfiguration("target_class"), "]"],
             ],
             additional_env={
                 "LD_PRELOAD": os.path.expanduser(
