@@ -318,7 +318,14 @@ class GraspTaskNode(Node):
                 args = [sys.executable, script]
                 if self._net_iface:
                     args.append(self._net_iface)
-                subprocess.run(args, check=True)
+                # 通过 stdin 管道自动确认 armup.py 的 input() 提示
+                proc = subprocess.run(
+                    args, check=True, input=b"\n",
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                )
+                if proc.stdout:
+                    for line in proc.stdout.decode(errors="replace").splitlines():
+                        self.get_logger().info(f"[armup] {line}")
                 self.get_logger().info("[抓取] armup.py 执行完成")
             except subprocess.CalledProcessError as e:
                 self.get_logger().error(f"[抓取] armup.py 执行失败: 返回码={e.returncode}")
@@ -380,7 +387,11 @@ class GraspTaskNode(Node):
             args = [sys.executable, script]
             if self._net_iface:
                 args.append(self._net_iface)
-            subprocess.run(args, check=True)
+            # 通过 stdin 管道自动确认 armdown.py 的 input() 提示
+            subprocess.run(
+                args, check=True, input=b"\n",
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            )
             self.get_logger().info("[放下] armdown.py 执行完成")
         except Exception as e:
             self.get_logger().error(f"[放下] armdown.py 失败: {e}")
@@ -401,6 +412,8 @@ class GraspTaskNode(Node):
             time.sleep(2.6)  # ≈ 90° at 0.6 rad/s
             self._publish_stop()
             self.get_logger().info("[右转] 右转完成（cmd_vel）")
+            # 确保 LocoClient 也停止
+            self._loco_stop()
 
         self._do_put_down()
 

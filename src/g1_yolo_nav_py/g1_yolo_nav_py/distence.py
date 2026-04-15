@@ -4,6 +4,7 @@
 # ==================================================================
 # 1. 标准库导入
 # ==================================================================
+import os  # 环境变量读取（DISPLAY）
 
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
@@ -26,10 +27,23 @@ class DistanceToG1(Node):
     def __init__(self):
         super().__init__('distance_to_g1')
 
+        # ---------- 参数 ----------
+        self.declare_parameter("model_path", "yolo_v11x_best.pt")
+        self.declare_parameter("target_class", "chair")
+        self.declare_parameter("confidence", 0.5)
+
+        model_path = self.get_parameter("model_path").value
+        self._target_class = self.get_parameter("target_class").value
+        self._conf = float(self.get_parameter("confidence").value)
+
         # ---------- 1. 初始化ROS组件 ----------
         self.bridge = CvBridge()
-        self.model = YOLO('/path/to/your_custom_model.pt')  # 替换为你的模型路径
-        self.get_logger().info('YOLO model loaded.')
+        try:
+            self.model = YOLO(model_path)
+            self.get_logger().info(f'YOLO 模型加载成功: {model_path}')
+        except Exception as e:
+            self.get_logger().error(f'YOLO 模型加载失败: {e}')
+            raise
 
         # ---------- 2. 初始化TF2 ----------
         self.tf_buffer = tf2_ros.Buffer()
@@ -49,6 +63,7 @@ class DistanceToG1(Node):
         # ---------- 5. 内部变量 ----------
         self.latest_depth = None      # 存储最新的深度图
         self.camera_info = None       # 存储相机内参
+        self._display = os.environ.get("DISPLAY") is not None  # X11 检测
         self.get_logger().info('Node started. Waiting for data...')
 
     # ---------- 回调函数 ----------
@@ -100,7 +115,7 @@ class DistanceToG1(Node):
             return
 
         # 目标检测
-        results = self.model(color_image)
+        results = self.model(color_image, conf=self._conf, verbose=False)
         for result in results:
             boxes = result.boxes
             if boxes is None:
@@ -110,6 +125,10 @@ class DistanceToG1(Node):
                 cls_id = int(box.cls[0])
                 cls_name = self.model.names[cls_id]
                 confidence = float(box.conf[0])
+
+                # 过滤目标类别
+                if cls_name != self._target_class:
+                    continue
 
                 # 获取中心点深度
                 depth_z = self.get_depth_at_center(x1, y1, x2, y2)
@@ -165,7 +184,8 @@ class DistanceToG1(Node):
                 cv2.putText(color_image, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
 
         cv2.imshow('Distance to G1 (TF2)', color_image)
-        cv2.waitKey(1)
+        if self._display:
+            cv2.waitKey(1)
 
 def main(args=None):
     rclpy.init(args=args)

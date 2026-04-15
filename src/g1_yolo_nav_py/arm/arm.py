@@ -304,4 +304,4 @@ if __name__ == '__main__':
         time.sleep(1)
         if custom.done: 
            print("Done!")
-           sys.exit(-1)     
+           sys.exit(0)

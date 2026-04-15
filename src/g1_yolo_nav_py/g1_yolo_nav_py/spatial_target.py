@@ -231,6 +231,7 @@ class SpatialTargetNode(Node):
         ])
 
         # 获取机器人当前朝向
+        base_tf = None
         try:
             base_tf = self._tf_buffer.lookup_transform(
                 self._target_frame,
@@ -246,6 +247,9 @@ class SpatialTargetNode(Node):
             )
         except Exception:
             yaw = 0.0
+
+        if base_tf is None:
+            return
 
         # 目标点 = 检测到的 3D 位置 - approach_distance * 朝向方向
         target_x = odom_point[0] - self._approach_dist * math.cos(yaw)

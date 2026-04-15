@@ -231,7 +231,9 @@ class ReleaseController:
 
 if __name__ == '__main__':
     print("WARNING: 确保机器人周围无障碍物!")
-    input("按 Enter 开始放下...")
+    # 作为子进程调用时通过 stdin 管道自动确认
+    if sys.stdin.isatty():
+        input("按 Enter 开始放下...")
 
     if len(sys.argv) > 1:
         ChannelFactoryInitialize(0, sys.argv[1])
