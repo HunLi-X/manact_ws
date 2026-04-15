@@ -183,8 +183,8 @@ class DistanceToG1(Node):
                 cv2.rectangle(color_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(color_image, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
 
-        cv2.imshow('Distance to G1 (TF2)', color_image)
         if self._display:
+            cv2.imshow('Distance to G1 (TF2)', color_image)
             cv2.waitKey(1)
 
 def main(args=None):

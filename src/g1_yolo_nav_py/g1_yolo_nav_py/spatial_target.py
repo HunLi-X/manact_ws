@@ -245,10 +245,12 @@ class SpatialTargetNode(Node):
                 base_tf.transform.rotation.z,
                 base_tf.transform.rotation.w,
             )
-        except Exception:
+        except Exception as e:
+            self.get_logger().debug(f"base TF 查询失败: {e}")
             yaw = 0.0
 
         if base_tf is None:
+            self.get_logger().warn("base TF 不可用，跳过目标发布")
             return
 
         # 目标点 = 检测到的 3D 位置 - approach_distance * 朝向方向
