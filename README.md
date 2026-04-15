@@ -172,6 +172,7 @@ ros2 launch realsense2_camera rs_launch.py \
     align_depth.enable:=true
 
 # 编译 + 运行采集
+source ~/g1act_venv/bin/activate
 colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
 ros2 run g1_yolo_nav_py rgbd_capture
 ```
@@ -223,6 +224,7 @@ ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
 ros2 launch realsense2_camera rs_launch.py camera_namespace:=robot1 camera_name:=D455_1
 
 # 2. 编译并启动 YOLO 检测节点（终端 2）
+source ~/g1act_venv/bin/activate
 colcon build --packages-select g1_yolo_nav_py
 . install/setup.bash
 ros2 run g1_yolo_nav_py yolo_detector          # x86
@@ -289,7 +291,7 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 **前置条件：**
 - G1 机器人已连接并处于站立状态
 - 相机已启动并发布图像
-- `yaw_align` 无额外依赖；`waist_align` / `loco_forward` 需 `pip install unitree_sdk2py`
+- `yaw_align` 无额外依赖；`waist_align` / `loco_forward` 需 `unitree_sdk2py`（已安装）
 
 ---
 
@@ -362,6 +364,7 @@ ros2 launch realsense2_camera rs_launch.py \
     camera_namespace:=robot1 camera_name:=D455_1
 
 # 终端 2：编译 + 启动检测
+source ~/g1act_venv/bin/activate
 colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
 ros2 run g1_yolo_nav_py yolo_detector
 
@@ -474,11 +477,12 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 
 **前置条件：**
 - G1 机器人已连接并站立
-- `unitree_sdk2py` 已安装：`pip install unitree_sdk2py`
+- `unitree_sdk2py` 已安装在系统环境中
 - `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，由同事维护）
 
 **实机运行（一键启动）：**
 ```bash
+source ~/g1act_venv/bin/activate   # 激活虚拟环境
 cd ~/g1act_ws/manact_ws
 colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
 
