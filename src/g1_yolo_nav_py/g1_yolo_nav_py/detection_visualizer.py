@@ -4,8 +4,11 @@
 如无显示环境则自动降级为纯话题发布模式。
 """
 
-import os
-import sys
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import os  # 环境变量读取（DISPLAY）
+import sys  # sys.path 修改
 
 # ROS2 colcon 隔离 PYTHONPATH，追加系统和用户包路径
 for _p in [
@@ -16,13 +19,16 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import cv2
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import Image
-from vision_msgs.msg import Detection2DArray
-from cv_bridge import CvBridge
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import cv2  # OpenCV 图像处理与窗口显示
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from sensor_msgs.msg import Image  # ROS2 图像消息
+from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
+from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
 
 
 # 预定义颜色表（BGR）

@@ -18,17 +18,23 @@ G1 手臂放下控制 (armdown)
     pip install unitree_sdk2py numpy
 """
 
-import time
-import sys
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import time  # 控制循环计时与等待
+import sys   # 命令行参数读取（网络接口名）
 
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
-from unitree_sdk2py.core.channel import ChannelSubscriber
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
-from unitree_sdk2py.utils.crc import CRC
-from unitree_sdk2py.utils.thread import RecurrentThread
-
-import numpy as np
+# ==================================================================
+# 2. 第三方库导入
+# ==================================================================
+import numpy as np  # 数值计算，用于关节角度线性插值
+# unitree_sdk2py: 宇树机器人 DDS 通信底层 SDK
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize  # DDS 发布者与工厂初始化
+from unitree_sdk2py.core.channel import ChannelSubscriber  # DDS 订阅者，接收关节状态
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_  # 低层指令消息默认构造
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_  # 低层指令/状态 IDL 消息类型
+from unitree_sdk2py.utils.crc import CRC  # CRC 校验，G1 固件要求每帧指令附带
+from unitree_sdk2py.utils.thread import RecurrentThread  # 定时回调线程，用于 50Hz 控制循环
 
 kPi = 3.141592654
 kPi_2 = 1.57079632

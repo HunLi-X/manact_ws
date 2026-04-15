@@ -17,33 +17,31 @@ G1 抓取任务主控程序
     python3 -m g1_yolo_nav_py.grasp_task
 """
 
-import os
-import sys
-import time
-import subprocess
-import math
-import threading
-from pathlib import Path
-from enum import Enum, auto
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import os          # 环境变量与路径操作
+import sys         # 命令行参数与 sys.executable
+import time        # 计时与延时
+import subprocess  # 子进程执行 armup.py / armdown.py
+import math        # 角度弧度转换
+import threading   # 后台线程运行菜单与抓取
+from pathlib import Path  # arm 脚本路径构造
+from enum import Enum, auto  # 状态机枚举定义
 
-# ROS2 colcon 隔离 PYTHONPATH
-for _p in [
-    "/usr/lib/python3/dist-packages",
-    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
-    "/usr/local/lib/python3.8/dist-packages",
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from geometry_msgs.msg import Twist  # 速度指令消息
+from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import Twist
-from vision_msgs.msg import Detection2DArray
-
+# unitree_sdk2py: 宇树机器人底层 SDK（可选依赖）
 try:
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-    from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize  # DDS 通信工厂初始化
+    from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient  # G1 运动控制客户端
     LOCO_AVAILABLE = True
 except ImportError:
     LOCO_AVAILABLE = False
