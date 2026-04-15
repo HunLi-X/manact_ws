@@ -39,14 +39,21 @@
     2:跳舞2。
 """
 
-import rclpy
-from rclpy.node import Node
-import termios
-import sys
-import tty
-import threading
-from unitree_api.msg import Request
-import json
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import termios  # 终端属性控制，用于键盘原始模式
+import sys      # 标准输入读取
+import tty      # 终端模式设置
+import threading  # ROS2 spin 后台线程
+import json     # JSON 序列化，构造 Request 参数
+
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from unitree_api.msg import Request  # 宇树 API 请求消息
 
 msg = """
 G1 Teleop Keyboard Controller

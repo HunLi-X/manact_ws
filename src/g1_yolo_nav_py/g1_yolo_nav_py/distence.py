@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PointStamped
-from std_msgs.msg import Float32
-from cv_bridge import CvBridge
-import cv2
-import numpy as np
-from ultralytics import YOLO
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
 
-# 导入 TF2 相关库
-import tf2_ros
-from tf2_geometry_msgs import do_transform_point
-from geometry_msgs.msg import Point, TransformStamped
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from sensor_msgs.msg import Image, CameraInfo  # 图像与相机内参消息
+from geometry_msgs.msg import PointStamped, Point  # 3D 点消息
+from std_msgs.msg import Float32  # 浮点数消息（距离值）
+from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
+import cv2  # OpenCV 图像处理与可视化
+import numpy as np  # 数值计算
+from ultralytics import YOLO  # YOLO 目标检测模型
+
+# TF2 坐标变换库
+import tf2_ros  # TF2 缓冲区与监听器
+from tf2_geometry_msgs import do_transform_point  # 点坐标变换函数
 
 class DistanceToG1(Node):
     def __init__(self):

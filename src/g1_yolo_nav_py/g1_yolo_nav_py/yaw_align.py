@@ -11,9 +11,16 @@
     4. 限速后发布到 /cmd_vel
 """
 
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import os   # sys.path 修改
+import sys  # sys.path 修改
+import math  # 角度弧度转换
+import time  # 计时
+from typing import Optional  # 类型注解
+
 # ROS2 colcon 隔离 PYTHONPATH，必须在所有 import 之前追加路径
-import os
-import sys
 for _p in [
     "/usr/lib/python3/dist-packages",
     os.path.expanduser("~/.local/lib/python3.8/site-packages"),
@@ -22,15 +29,14 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import math
-import time
-from typing import Optional
-
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import Twist
-from vision_msgs.msg import Detection2DArray
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from geometry_msgs.msg import Twist  # 速度指令消息
+from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
 
 class YawAlignNode(Node):

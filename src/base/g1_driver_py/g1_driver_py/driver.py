@@ -1,13 +1,20 @@
 """G1 驱动节点 — 订阅机器人状态，发布里程计、TF 变换和关节状态。"""
 
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import JointState
-from unitree_go.msg import LowState, SportModeState
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import TransformStamped
-from tf2_ros import TransformBroadcaster
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from sensor_msgs.msg import JointState  # 关节状态消息
+from unitree_go.msg import LowState, SportModeState  # 宇树自定义消息类型
+from nav_msgs.msg import Odometry  # 里程计消息
+from geometry_msgs.msg import TransformStamped  # TF 变换消息
+from tf2_ros import TransformBroadcaster  # TF 广播器
 
 
 class Driver(Node):

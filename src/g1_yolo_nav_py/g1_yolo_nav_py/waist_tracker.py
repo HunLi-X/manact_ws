@@ -20,17 +20,23 @@
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 """
 
-import math
-import threading
-import time
-from typing import Optional
-from enum import Enum, auto
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import math  # 角度弧度转换
+import threading  # DDS 控制线程
+import time  # 计时与延时
+from typing import Optional  # 类型注解
+from enum import Enum, auto  # 状态机枚举定义
 
-import numpy as np
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-from vision_msgs.msg import Detection2DArray
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import numpy as np  # 数值计算，用于 np.clip 限幅
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
 
 # ======================================================================
@@ -38,19 +44,20 @@ from vision_msgs.msg import Detection2DArray
 # ======================================================================
 try:
     from unitree_sdk2py.core.channel import (
-        ChannelFactoryInitialize,
-        ChannelPublisher,
-        ChannelSubscriber,
+        ChannelFactoryInitialize,  # DDS 通信工厂初始化
+        ChannelPublisher,  # DDS 发布者，发送 Arm SDK 指令
+        ChannelSubscriber,  # DDS 订阅者，接收关节状态
     )
-    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
-    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
-    from unitree_sdk2py.utils.crc import CRC
+    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_  # 低层指令消息默认构造
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_  # 低层指令/状态 IDL 消息类型
+    from unitree_sdk2py.utils.crc import CRC  # CRC 校验，G1 固件要求每帧指令附带
     UNITREE_SDK_AVAILABLE = True
 except ImportError:
     UNITREE_SDK_AVAILABLE = False
 
+# LocoClient: G1 运动控制客户端（可选依赖）
 try:
-    from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+    from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient  # G1 运动控制客户端
     LOCO_AVAILABLE = True
 except ImportError:
     LOCO_AVAILABLE = False

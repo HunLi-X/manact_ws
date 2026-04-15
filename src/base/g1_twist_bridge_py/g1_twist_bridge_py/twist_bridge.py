@@ -1,11 +1,22 @@
 """G1 Twist Bridge — 将 geometry_msgs/Twist 转换为 unitree_api/Request。"""
 
-import rclpy
-from rclpy.node import Node
-from unitree_api.msg import Request
-from geometry_msgs.msg import Twist
-from .sport_model import ROBOT_SPORT_API_IDS
-import json
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import json  # JSON 序列化，构造 Request 参数
+
+# ==================================================================
+# 2. 第三方库与 ROS2 导入
+# ==================================================================
+import rclpy  # ROS2 Python 客户端库
+from rclpy.node import Node  # ROS2 节点基类
+from unitree_api.msg import Request  # 宇树 API 请求消息
+from geometry_msgs.msg import Twist  # 速度指令消息
+
+# ==================================================================
+# 3. 本项目内部导入
+# ==================================================================
+from .sport_model import ROBOT_SPORT_API_IDS  # Sport API ID 常量映射
 
 
 class TwistBridge(Node):

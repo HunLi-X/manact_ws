@@ -16,24 +16,26 @@ G1 人形机器人手臂控制脚本
     pip install unitree_sdk2py numpy
 """
 
-import time
-import sys
+# ==================================================================
+# 1. 标准库导入
+# ==================================================================
+import time  # 控制循环计时与等待
+import sys   # 命令行参数读取（网络接口名）
 
-# ---- unitree_sdk2py DDS 通信相关 ----
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
-from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
-# 低层指令/状态消息的默认 IDL 定义（旧版兼容）
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
-# 低层指令/状态消息的实际 IDL 类型（新版）
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-from unitree_sdk2py.utils.crc import CRC          # CRC 校验，每帧指令必须附带
-from unitree_sdk2py.utils.thread import RecurrentThread  # 定时回调线程
-# 运动模式切换客户端（用于切换机器人的运动模式）
-from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
-
-import numpy as np
+# ==================================================================
+# 2. 第三方库导入
+# ==================================================================
+import numpy as np  # 数值计算，用于关节角度线性插值
+# unitree_sdk2py: 宇树机器人 DDS 通信底层 SDK
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize  # DDS 发布者与工厂初始化
+from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize  # DDS 订阅者与工厂初始化
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_  # 低层指令消息默认构造（旧版兼容）
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_  # 低层状态消息默认构造（旧版兼容）
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_  # 低层指令 IDL 消息类型
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_  # 低层状态 IDL 消息类型
+from unitree_sdk2py.utils.crc import CRC  # CRC 校验，G1 固件要求每帧指令附带
+from unitree_sdk2py.utils.thread import RecurrentThread  # 定时回调线程，用于 50Hz 控制循环
+from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient  # 运动模式切换客户端
 
 # ---- 常量 ----
 kPi = 3.141592654       # 圆周率
