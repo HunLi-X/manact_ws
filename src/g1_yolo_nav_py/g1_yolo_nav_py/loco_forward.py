@@ -103,6 +103,8 @@ class LocoForwardNode(Node):
 
     def _init_loco(self) -> None:
         try:
+            # 隔离 unitree SDK 的 DDS domain，避免与 ROS2 的 CycloneDDS 冲突
+            os.environ.setdefault("CYCLONEDDS_URI", "<CycloneDDS><Domain><Id>1</Id></Domain></CycloneDDS>")
             ChannelFactoryInitialize(0, self._net_iface or "")
             self._loco = LocoClient()
             self._loco.SetTimeout(5.0)

@@ -24,6 +24,7 @@
 # 1. 标准库导入
 # ==================================================================
 import math  # 角度弧度转换
+import os   # 环境变量设置（DDS domain 隔离）
 import threading  # DDS 控制线程
 import time  # 计时与延时
 from typing import Optional  # 类型注解
@@ -206,6 +207,8 @@ class VisualServoNode(Node):
     def _init_dds(self) -> None:
         """初始化 Arm SDK DDS 通信（用于腰部旋转）。"""
         try:
+            # 隔离 unitree SDK 的 DDS domain，避免与 ROS2 的 CycloneDDS 冲突
+            os.environ.setdefault("CYCLONEDDS_URI", "<CycloneDDS><Domain><Id>1</Id></Domain></CycloneDDS>")
             ChannelFactoryInitialize(0, self._net_iface or "")
 
             pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
