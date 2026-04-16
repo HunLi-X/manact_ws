@@ -122,9 +122,8 @@ class WaistAlignNode(Node):
 
     def _init_dds(self) -> None:
         try:
-            # 隔离 unitree SDK 的 DDS domain，避免与 ROS2 的 CycloneDDS 冲突
-            os.environ.setdefault("CYCLONEDDS_URI", "<CycloneDDS><Domain><Id>1</Id></Domain></CycloneDDS>")
-            ChannelFactoryInitialize(0, self._net_iface or "")
+            # ChannelFactoryInitialize 已在 main() 中提前调用（先于 rclpy.init），
+            # 此处只需创建 Publisher / Subscriber
             pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
             pub.Init()
             sub = ChannelSubscriber("rt/lowstate", LowState_)
@@ -227,6 +226,17 @@ class WaistAlignNode(Node):
 
 
 def main(args=None):
+    # 在 rclpy.init() 之前初始化 DDS，让 unitree SDK 先创建 CycloneDDS domain
+    # 避免 ROS2 初始化后再创建导致的 domain 冲突
+    # 从命令行参数提取网卡名（在 --ros-args 之前的第一个非选项参数）
+    _iface = ""
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        _iface = sys.argv[1]
+    if SDK_AVAILABLE:
+        try:
+            ChannelFactoryInitialize(0, _iface)
+        except Exception:
+            pass
     rclpy.init(args=args)
     node = WaistAlignNode()
     try:

@@ -97,9 +97,9 @@ def _pose_reach_forward():
 
 # 抓取序列：伸出 → 抬起 → 夹紧保持
 POSE_SEQUENCE = [
-    ("reach_forward",  _pose_reach_forward(),  3.0),
-    ("arms_up",        _pose_arms_up(),        3.0),
-    ("pray",           _pose_pray(),           3.0),
+    ("1","reach_forward",  _pose_reach_forward(),  3.0),
+    ("2","arms_up",        _pose_arms_up(),        3.0),
+    ("3","pray",           _pose_pray(),           3.0),
 ]
 
 

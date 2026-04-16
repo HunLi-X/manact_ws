@@ -24,7 +24,8 @@
 # 1. 标准库导入
 # ==================================================================
 import math  # 角度弧度转换
-import os   # 环境变量设置（DDS domain 隔离）
+import os   # 环境变量设置
+import sys  # 命令行参数读取
 import threading  # DDS 控制线程
 import time  # 计时与延时
 from typing import Optional  # 类型注解
@@ -207,10 +208,8 @@ class VisualServoNode(Node):
     def _init_dds(self) -> None:
         """初始化 Arm SDK DDS 通信（用于腰部旋转）。"""
         try:
-            # 隔离 unitree SDK 的 DDS domain，避免与 ROS2 的 CycloneDDS 冲突
-            os.environ.setdefault("CYCLONEDDS_URI", "<CycloneDDS><Domain><Id>1</Id></Domain></CycloneDDS>")
-            ChannelFactoryInitialize(0, self._net_iface or "")
-
+            # ChannelFactoryInitialize 已在 main() 中提前调用（先于 rclpy.init），
+            # 此处只需创建 Publisher / Subscriber
             pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
             pub.Init()
 
@@ -483,6 +482,15 @@ class VisualServoNode(Node):
 
 # ======================================================================
 def main(args=None):
+    # 在 rclpy.init() 之前初始化 DDS，让 unitree SDK 先创建 CycloneDDS domain
+    _iface = ""
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        _iface = sys.argv[1]
+    if UNITREE_SDK_AVAILABLE:
+        try:
+            ChannelFactoryInitialize(0, _iface)
+        except Exception:
+            pass
     rclpy.init(args=args)
     node = VisualServoNode()
     try:
