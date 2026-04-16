@@ -122,10 +122,8 @@ class ReleaseController:
         self.timeline = []
         t = 0.0
 
-        # 初始归零（从当前夹紧位置平滑过渡到零位）
-        t_end = t + self.transition_time
-        self.timeline.append((t, t_end, "init_zero", None))
-        t = t_end
+        # 不归零：从 armup 保持的当前姿态直接开始放下
+        # （armup 完成后 arm_sdk 仍启用，关节处于夹紧位置）
 
         # 逐个姿态：过渡 + 保持
         for name, angles, hold_time in self.poses:
@@ -194,11 +192,7 @@ class ReleaseController:
                 ratio = np.clip((self.time - t_start) / (t_end - t_start), 0.0, 1.0)
                 current = self._get_current_joint_angles()
 
-                if ptype == "init_zero":
-                    target = [(1.0 - ratio) * c for c in current]
-                    self._send_joint_cmd(target)
-
-                elif ptype == "transition":
+                if ptype == "transition":
                     name, target_angles = pdata
                     target = [ratio * t + (1.0 - ratio) * c
                               for t, c in zip(target_angles, current)]
