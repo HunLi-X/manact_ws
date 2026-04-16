@@ -35,22 +35,41 @@
 ```
 g1act_ws/
 ├── src/
-│   └── g1_yolo_nav_py/                  # YOLO 目标识别与导航功能包
-│       ├── g1_yolo_nav_py/
-│       │   ├── __init__.py
-│       │   ├── yolo_detector.py          # YOLO 检测节点
-│       │   ├── spatial_target.py         # 3D 空间投影节点
-│       │   └── nav_planner.py            # 导航规划节点
-│       ├── launch/
-│       │   └── yolo_nav.launch.py        # 统一启动文件
-│       ├── config/
-│       │   └── yolo_nav.yaml             # 参数配置
-│       ├── package.xml
-│       ├── setup.py
-│       ├── setup.cfg
-│       ├── resource/
-│       └── yolo_v11x_best.pt             # YOLOv11 自定义训练模型权重
-├── ros2doc_skill/                        # ROS2 开发规范技能包
+│   ├── g1_yolo_nav_py/                      # YOLO 目标识别与导航功能包
+│   │   ├── g1_yolo_nav_py/
+│   │   │   ├── __init__.py
+│   │   │   ├── yolo_detector.py              # YOLO 检测节点
+│   │   │   ├── spatial_target.py             # 3D 空间投影节点
+│   │   │   ├── detection_visualizer.py       # 检测可视化节点
+│   │   │   ├── grasp_task.py                 # 抓取任务主控节点
+│   │   │   ├── yaw_align.py                  # 偏航对齐节点（整机旋转）
+│   │   │   ├── waist_align.py                # 腰部对齐节点
+│   │   │   ├── waist_tracker.py              # 腰部追踪控制器
+│   │   │   ├── loco_forward.py               # Loco 前进节点
+│   │   │   ├── rgbd_capture.py               # RGBD 数据采集节点
+│   │   │   └── distence.py                   # 距离估算工具
+│   │   ├── arm/                              # 手臂控制脚本（unitree_sdk2py，非 ROS2 节点）
+│   │   │   ├── armup.py                      # 手臂抓取（伸出→抬起→夹紧保持）
+│   │   │   ├── armdown.py                    # 手臂放下（夹紧→下放→归零释放）
+│   │   │   ├── arm.py                        # 手臂 SDK 基础控制
+│   │   │   └── arm_multi_pose_demo.py        # 多姿态演示
+│   │   ├── launch/
+│   │   │   ├── yolo_nav.launch.py            # 导航管线启动文件
+│   │   │   └── grasp_task.launch.py          # 抓取任务启动文件
+│   │   ├── config/
+│   │   │   └── yolo_nav.yaml                 # 参数配置
+│   │   ├── package.xml
+│   │   ├── setup.py
+│   │   ├── setup.cfg
+│   │   ├── resource/
+│   │   └── yolo_v11x_best.pt                 # YOLOv11 自定义训练模型权重
+│   └── base/                                 # G1 机器人基础包
+│       ├── g1_description/                   # URDF/MJCF 模型（12/23/29dof 变体）
+│       ├── g1_driver_py/                     # ROS2 驱动：odom, TF, joint_states
+│       ├── g1_teleop_ctrl_keyboard/          # 键盘遥控（Sport API）
+│       ├── g1_twist_bridge_py/               # Twist → Sport API 桥接
+│       └── h1_description/                   # H1 机器人描述
+├── requirements.txt
 └── README.md
 ```
 
