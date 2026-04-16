@@ -71,7 +71,7 @@ ARM_JOINTS = [
 # 抓取姿态定义
 # ======================================================================
 def _pose_arms_up():
-    """抬起姿态。"""
+    """抬起姿态"""
     return [
         -1.0,   0.7,  0.0,  0.6, -0.8,
         -1.0,  -0.7,  0.0,  0.6,  0.8,
@@ -99,7 +99,7 @@ def _pose_reach_forward():
 POSE_SEQUENCE = [
     ("reach_forward",  _pose_reach_forward(),  3.0),
     ("arms_up",        _pose_arms_up(),        3.0),
-    ("pray",           _pose_pray(),           5.0),
+    ("pray",           _pose_pray(),           3.0),
 ]
 
 

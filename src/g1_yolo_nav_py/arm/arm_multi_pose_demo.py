@@ -19,28 +19,22 @@ G1 人形机器人手臂多姿态演示
     pip install unitree_sdk2py numpy
 """
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
-import time  # 控制循环计时与等待
-import sys   # 命令行参数读取（网络接口名）
+import time
+import sys
 
-# ==================================================================
-# 2. 第三方库导入
-# ==================================================================
-import numpy as np  # 数值计算，用于关节角度线性插值
-# unitree_sdk2py: 宇树机器人 DDS 通信底层 SDK
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize  # DDS 发布者与工厂初始化
-from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize  # DDS 订阅者与工厂初始化
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_  # 低层指令消息默认构造
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_  # 低层指令 IDL 消息类型
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_  # 低层状态 IDL 消息类型
-from unitree_sdk2py.utils.crc import CRC  # CRC 校验，G1 固件要求每帧指令附带
-from unitree_sdk2py.utils.thread import RecurrentThread  # 定时回调线程，用于 50Hz 控制循环
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
+from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+from unitree_sdk2py.utils.crc import CRC
+from unitree_sdk2py.utils.thread import RecurrentThread
+
+import numpy as np
 
 kPi = 3.141592654
 kPi_2 = 1.57079632
-
+k3_4_pi = kPi * 0.75
 
 class G1JointIndex:
     """G1 机器人关节索引常量（0-29）。"""
@@ -89,80 +83,61 @@ def _pose_zeros():
 
 
 def _pose_arms_up():
-    """姿态 1：双臂水平抬起（T-pose 变体）。
-
-    左臂：肩俯仰=0°, 肩横滚=90°(外展), 肩偏航=0°, 肘=90°, 腕=0°
-    右臂：肩俯仰=0°, 肩横滚=-90°(外展), 肩偏航=0°, 肘=90°, 腕=0°
+    """姿态 1：预备姿势"1"
     """
     return [
-        0.0,   kPi_2,  0.0,   kPi_2,  0.0,    # 左臂
-        0.0,  -kPi_2,  0.0,   kPi_2,  0.0,    # 右臂
-        0.0,   0.0,    0.0,                      # 腰部
+            -1.0,      0.7,  0.0,    0.6,  -0.8,
+            -1.0,     -0.7,  0.0,    0.6,  0.8,
+            0.0,      0.0,    0.0
     ]
 
 
 def _pose_pray():
-    """姿态 2：双手合十（祈祷姿势）。
-
-    双臂内收，肘部弯曲使双手在胸前合拢。
-    左臂：肩俯仰=0°, 肩横滚=45°(半收), 肩偏航=0°, 肘=135°, 腕=0°
-    右臂：肩俯仰=0°, 肩横滚=-45°(半收), 肩偏航=0°, 肘=135°, 腕=0°
+    """姿态 2：抓取"2"
     """
-    k3_4_pi = kPi * 0.75
+    
     return [
-        0.0,   kPi_2 * 0.5,  0.0,   k3_4_pi,  0.0,   # 左臂
-        0.0,  -kPi_2 * 0.5,  0.0,   k3_4_pi,  0.0,   # 右臂
-        0.0,   0.0,          0.0,                        # 腰部
+           -1.15,      0.5,  -0.3,   0.3,  -1.8,
+           -1.15,     -0.5,   0.3,   0.3,   1.8,
+            0.0,      0.0,    0.0
     ]
 
 
 def _pose_wave():
-    """姿态 3：右手举起挥手。
-
-    右臂高举，左臂自然下垂。
-    左臂：全部归零（自然下垂）
-    右臂：肩俯仰=90°(前举), 肩横滚=-30°(微收), 肩偏航=0°, 肘=60°, 腕=0°
+    """姿态 3:保持"3"
     """
     return [
-        0.0,   0.0,   0.0,   0.0,  0.0,              # 左臂（下垂）
-        kPi_2, -kPi_2 * 0.2,  0.0,   kPi / 3.0,  0.0, # 右臂（举起）
-        0.0,   0.0,   0.0,                              # 腰部
+        -1.1,   0.55,   -0.45,    0.2,  -1.8,
+        -1.1,   -0.55,   0.45,    0.2,   1.8, 
+         0.0,   0.0,     0.0,
     ]
 
 
 def _pose_reach_forward():
-    """姿态 4：双臂前伸。
-
-    双臂向前水平伸出。
-    左臂：肩俯仰=90°(前举), 肩横滚=0°, 肩偏航=0°, 肘=0°, 腕=0°
-    右臂：同左臂镜像
+    """姿态 4：放下"4"
     """
     return [
-        kPi_2,  0.0,   0.0,   0.0,  0.0,    # 左臂（前伸）
-        kPi_2,  0.0,   0.0,   0.0,  0.0,    # 右臂（前伸）
-        0.0,    0.0,   0.0,                        # 腰部
-    ]
-
-
-def _pose_wave_body():
-    """姿态 5：挥手带腰部转动。
-
-    右臂高举，腰部配合左右转动。
+           -0.8,      0.5,   -0.4,   0.15,  -1.8,
+           -0.8,     -0.5,    0.4,   0.15,   1.8,
+            0.0,      0.0,    0.0
+            ]
+def _pose_wave_body():            
+    """姿态 5 :松手"5"
     """
     return [
-        0.0,    0.0,   0.0,   0.0,   0.0,              # 左臂（下垂）
-        kPi_2, -kPi_2 * 0.2,  0.0,   kPi / 3.0,  0.0,  # 右臂（举起）
-        0.3,    0.0,   0.0,                            # 腰部偏航 17°
+            -0.7,      0.7,    0.0,    0.6,  -0.8,
+            -0.7,     -0.7,    0.0,    0.6,  0.8,
+             0.0,      0.0,    0.0
     ]
 
 
 # 姿态列表：名称 + 角度数组 + 保持时间(秒)
 POSE_SEQUENCE = [
-    ("双臂抬起 (T-pose)",    _pose_arms_up(),        2.0),
-    ("双手合十 (祈祷)",      _pose_pray(),           2.0),
-    ("双臂前伸",             _pose_reach_forward(),   2.0),
-    ("右手挥手",             _pose_wave(),            3.0),
-    ("挥手+腰部转动",        _pose_wave_body(),       3.0),
+    ("1",      _pose_arms_up(),         2.0),
+    ("2",      _pose_pray(),            2.0),
+    ("3",      _pose_reach_forward(),   3.0),
+    ("4",      _pose_wave(),            3.0),
+    ("5",      _pose_wave_body(),       3.0),
 ]
 
 
