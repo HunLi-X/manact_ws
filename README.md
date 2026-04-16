@@ -54,6 +54,13 @@ g1act_ws/
 └── README.md
 ```
 
+```更新代码命令
+cd ~/g1act_ws/manact_ws
+
+git pull
+
+colcon build
+```
 ### 📦 模型说明
 
 | 文件                  | 说明                                              |
