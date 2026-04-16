@@ -17,6 +17,7 @@
 </div><br>
 
 
+
 ## ✨ 项目介绍
 
 宇树 G1 人形机器人 **YOLO 目标识别与路径规划导航** 工作空间。基于 ROS2 Foxy + Python，实现实时目标检测、3D 空间定位与自主导航接近目标。
@@ -80,6 +81,7 @@ git pull
 
 colcon build
 ```
+
 ### 📦 模型说明
 
 | 文件                  | 说明                                              |
@@ -105,7 +107,7 @@ python3 -m venv ~/g1act_venv --system-site-packages
 source ~/g1act_venv/bin/activate
 
 # 3) 安装项目依赖
-cd ~/g1act_ws
+cd ~/g1act_ws/manact_ws
 pip install -r requirements.txt
 
 # 4) 编译 ROS2 工作空间
@@ -126,6 +128,7 @@ cd ~/g1act_ws
 ```
 
 > **说明**：
+>
 > - `--system-site-packages` 让虚拟环境可以访问系统级已安装的 `rclpy`、`unitree_sdk2py` 等，
 >   避免在虚拟环境中重复安装 ROS2 等大型依赖。
 > - `ultralytics`、`opencv-python`、`numpy` 等项目依赖安装在虚拟环境中，与系统环境隔离。
@@ -174,6 +177,7 @@ ros2 run g1_yolo_nav_py loco_forward
 ```
 
 **`run_yolo.sh` 内容参考：**
+
 ```bash
 #!/bin/bash
 cd $(dirname $0)
@@ -204,6 +208,7 @@ ros2 run g1_yolo_nav_py rgbd_capture
 ```
 
 **输出目录结构**（默认保存在 `src/g1_yolo_nav_py/rgbd_data/`）：
+
 ```
 rgbd_data/
 ├── img/            # 彩色图像（带检测框标注），.jpg
@@ -218,6 +223,7 @@ rgbd_data/
 ```
 
 **自定义参数：**
+
 ```bash
 # 每 2s 采集一次，持续 30s
 ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
@@ -232,13 +238,13 @@ ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
   -p depth_topic:=/robot1/D455_1/depth/image_rect_raw
 ```
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `interval_sec` | 5.0 | 采集间隔（秒） |
-| `duration_sec` | 60.0 | 总采集时长（秒） |
-| `output_dir` | `src/g1_yolo_nav_py/rgbd_data/` | 输出目录 |
-| `color_topic` | `/robot1/D455_1/color/image_raw` | 彩色图像话题 |
-| `depth_topic` | `/robot1/D455_1/aligned_depth_to_color/image_raw` | 深度图话题 |
+| 参数             | 默认值                                              | 说明             |
+| ---------------- | --------------------------------------------------- | ---------------- |
+| `interval_sec` | 5.0                                                 | 采集间隔（秒）   |
+| `duration_sec` | 60.0                                                | 总采集时长（秒） |
+| `output_dir`   | `src/g1_yolo_nav_py/rgbd_data/`                   | 输出目录         |
+| `color_topic`  | `/robot1/D455_1/color/image_raw`                  | 彩色图像话题     |
+| `depth_topic`  | `/robot1/D455_1/aligned_depth_to_color/image_raw` | 深度图话题       |
 
 > **注意**：深度图需要相机启动时加 `align_depth.enable:=true` 参数，否则深度话题无数据。
 > 如无深度相机，节点仍会保存彩色图像，日志提示"无深度"。
@@ -297,24 +303,27 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 
 三个独立程序，可单独调试：
 
-| 程序 | 功能 | 控制方式 | 入口命令 |
-|------|------|---------|---------|
-| `yaw_align` | 整机旋转让目标居中 | cmd_vel → Sport API | `ros2 run g1_yolo_nav_py yaw_align` |
-| `waist_align` | 腰部旋转让目标居中 | Arm SDK DDS | `ros2 run g1_yolo_nav_py waist_align` |
-| `loco_forward` | 对齐后前进到目标 | LocoClient RPC | `ros2 run g1_yolo_nav_py loco_forward` |
+| 程序             | 功能               | 控制方式             | 入口命令                                 |
+| ---------------- | ------------------ | -------------------- | ---------------------------------------- |
+| `yaw_align`    | 整机旋转让目标居中 | cmd_vel → Sport API | `ros2 run g1_yolo_nav_py yaw_align`    |
+| `waist_align`  | 腰部旋转让目标居中 | Arm SDK DDS          | `ros2 run g1_yolo_nav_py waist_align`  |
+| `loco_forward` | 对齐后前进到目标   | LocoClient RPC       | `ros2 run g1_yolo_nav_py loco_forward` |
 
 > **`yaw_align` vs `waist_align`**：
+>
 > - `yaw_align` 使用高层 `/cmd_vel` 控制整机旋转（angular.z），无需 DDS 依赖，更简单安全
 > - `waist_align` 使用低层 DDS 直接控制腰部关节，精度更高但需要 `unitree_sdk2py`
 > - **两者不能同时运行**，选择一种即可
 
 **工作流程（两个节点协作）：**
+
 ```
   YOLO检测 ──→ yaw_align 或 waist_align ──→ loco_forward(Loco前进)
                 目标居中后才允许前进             居中+稳定 → Move(vx)
 ```
 
 **前置条件：**
+
 - G1 机器人已连接并处于站立状态
 - 相机已启动并发布图像
 - `yaw_align` 无额外依赖；`waist_align` / `loco_forward` 需 `unitree_sdk2py`（已安装）
@@ -326,6 +335,7 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 > 两种方案**互斥**，同一时间只能运行一种。建议先分别调试，再选定最优方案。
 
 **方案 A：偏航对齐 (`yaw_align`)**
+
 ```
 终端 1: ros2 launch realsense2_camera rs_launch.py \     # 相机
             camera_namespace:=robot1 camera_name:=D455_1
@@ -336,6 +346,7 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 ```
 
 **方案 B：腰部对齐 (`waist_align`)**
+
 ```
 终端 1: ros2 launch realsense2_camera rs_launch.py \     # 相机
             camera_namespace:=robot1 camera_name:=D455_1
@@ -346,6 +357,7 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 ```
 
 **查看可视化画面：**
+
 ```bash
 # 方式 1：rviz2（推荐）
 sudo xhost +local: && DISPLAY=:0 rviz2
@@ -356,6 +368,7 @@ DISPLAY=:0 rqt_image_view  # 下拉选择 /g1/vision/annotated_image
 ```
 
 **切换方式：**
+
 ```bash
 # 方案 A → 方案 B：在终端 3 按 Ctrl+C 停止 yaw_align，然后启动 waist_align
 ros2 run g1_yolo_nav_py waist_align
@@ -367,14 +380,14 @@ ros2 run g1_yolo_nav_py yaw_align
 
 **对比评估要点：**
 
-| 评估项 | yaw_align (整机旋转) | waist_align (腰部旋转) |
-|--------|---------------------|----------------------|
-| 响应速度 | □ 快 / □ 慢 | □ 快 / □ 慢 |
-| 稳定性（静止时不抖） | □ 稳定 / □ 抖动 | □ 稳定 / □ 抖动 |
-| 追踪精度 | □ 精准 / □ 偏移 | □ 精准 / □ 偏移 |
-| 脚部稳定性 | □ 站稳 / □ 晃动 | □ 站稳 / □ 晃动 |
-| 依赖复杂度 | 低（仅需 twist_bridge） | 高（需 unitree_sdk2py + DDS） |
-| 最终选择 | □ | □ |
+| 评估项               | yaw_align (整机旋转)    | waist_align (腰部旋转)        |
+| -------------------- | ----------------------- | ----------------------------- |
+| 响应速度             | □ 快 / □ 慢           | □ 快 / □ 慢                 |
+| 稳定性（静止时不抖） | □ 稳定 / □ 抖动       | □ 稳定 / □ 抖动             |
+| 追踪精度             | □ 精准 / □ 偏移       | □ 精准 / □ 偏移             |
+| 脚部稳定性           | □ 站稳 / □ 晃动       | □ 站稳 / □ 晃动             |
+| 依赖复杂度           | 低（仅需 twist_bridge） | 高（需 unitree_sdk2py + DDS） |
+| 最终选择             | □                      | □                            |
 
 > **调试技巧**：同一位姿下，先跑方案 A 记录表现，`Ctrl+C` 切换到方案 B 再记录，直接对比最直观。
 
@@ -402,20 +415,22 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ```
 
 **观察要点：**
+
 - 日志应显示 "腰部对齐控制启动"
 - 把椅子放在机器人前方偏左/偏右 → 腰部应该自动转向
 - 目标在画面正中央时腰部停止转动
 
 **腰部对齐参数：**
 
-| 参数 | 默认值 | 调试建议 |
-|------|--------|---------|
-| `waist_kp` | 1.5 | 太慢→增大(如2.0)，抖动→减小(如0.8) |
-| `center_tolerance` | 0.08 | 容差范围，太小会不停微调 |
-| `max_waist_speed` | 0.5 rad/s | 追踪最大转速 |
-| `max_waist_angle` | 0.8 rad (~45°) | 最大转角限制 |
+| 参数                 | 默认值          | 调试建议                             |
+| -------------------- | --------------- | ------------------------------------ |
+| `waist_kp`         | 1.5             | 太慢→增大(如2.0)，抖动→减小(如0.8) |
+| `center_tolerance` | 0.08            | 容差范围，太小会不停微调             |
+| `max_waist_speed`  | 0.5 rad/s       | 追踪最大转速                         |
+| `max_waist_angle`  | 0.8 rad (~45°) | 最大转角限制                         |
 
 **参数调优：**
+
 ```bash
 # 追踪太慢 — 增大 kp
 ros2 run g1_yolo_nav_py waist_align --ros-args -p waist_kp:=2.5
@@ -445,6 +460,7 @@ ros2 run g1_yolo_nav_py loco_forward
 ```
 
 **观察要点：**
+
 - 当目标在画面中心且持续 >0.8s 后，日志显示 "开始前进"
 - 机器人以设定的速度向前走
 - 检测框变大到占画面 45% 以上时，日志显示 "到达目标!" 并停止
@@ -452,15 +468,16 @@ ros2 run g1_yolo_nav_py loco_forward
 
 **Loco 前进参数：**
 
-| 参数 | 默认值 | 调试建议 |
-|------|--------|---------|
-| `forward_speed` | 0.3 m/s | 首次调试建议用 0.1~0.2 |
-| `align_stable_time` | 0.8 s | 居中多久才开始前进 |
-| `arrive_bbox_ratio` | 0.45 | 检测框占比，越大=停得越远 |
-| `center_tolerance` | 0.08 | 与对齐节点保持一致 |
-| `check_rate` | 10 Hz | 判断频率 |
+| 参数                  | 默认值  | 调试建议                  |
+| --------------------- | ------- | ------------------------- |
+| `forward_speed`     | 0.3 m/s | 首次调试建议用 0.1~0.2    |
+| `align_stable_time` | 0.8 s   | 居中多久才开始前进        |
+| `arrive_bbox_ratio` | 0.45    | 检测框占比，越大=停得越远 |
+| `center_tolerance`  | 0.08    | 与对齐节点保持一致        |
+| `check_rate`        | 10 Hz   | 判断频率                  |
 
 **参数调优：**
+
 ```bash
 # 首次调试用低速度确保安全
 ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
@@ -493,6 +510,7 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 ```
 
 **安全提示：**
+
 - 首次联调时 `forward_speed` 建议 ≤ 0.2 m/s
 - 随时准备按遥控器急停
 - 确保前方无障碍物
@@ -502,11 +520,13 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 自动执行：目标检测 → 偏航对齐 → 前进接近 → 抓取 → 交互菜单。
 
 **前置条件：**
+
 - G1 机器人已连接并站立
 - `unitree_sdk2py` 已安装在系统环境中
 - `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，由同事维护）
 
 **实机运行（一键启动）：**
+
 ```bash
 source ~/g1act_venv/bin/activate   # 激活虚拟环境
 cd ~/g1act_ws/manact_ws
@@ -526,6 +546,7 @@ ros2 launch g1_yolo_nav_py grasp_task.launch.py start_camera:=false
 > **aarch64 自动处理**：launch 文件在 ARM 平台自动注入 `LD_PRELOAD`（解决 libgomp TLS 问题），x86 上则正常启动。
 
 **手动分步启动（调试用）：**
+
 ```bash
 # 终端 1：相机
 ros2 launch realsense2_camera rs_launch.py \
@@ -542,6 +563,7 @@ ros2 run g1_yolo_nav_py grasp_task
 ```
 
 **执行流程与关键日志：**
+
 ```
 ==================================================
 G1 抓取任务启动
@@ -560,6 +582,7 @@ armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
 ```
 
 **抓取完成后自动弹出交互菜单：**
+
 ```
 ========================================
   G1 抓取任务 — 操作菜单
@@ -572,14 +595,15 @@ armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
 请选择 [1-4]:
 ```
 
-| 选项 | 动作 | 说明 |
-|------|------|------|
-| 1 | 执行 `armdown.py` | 原地放下目标物 |
-| 2 | 右转 90° + `armdown.py` | 转身后放下 |
-| 3 | 输入 `x y z` 控制移动 | 如 `0.2 0.0 0.3`，输入 `q` 停止返回 |
-| 4 | 安全退出 | 停止运动并退出程序 |
+| 选项 | 动作                      | 说明                                    |
+| ---- | ------------------------- | --------------------------------------- |
+| 1    | 执行 `armdown.py`       | 原地放下目标物                          |
+| 2    | 右转 90° +`armdown.py` | 转身后放下                              |
+| 3    | 输入 `x y z` 控制移动   | 如 `0.2 0.0 0.3`，输入 `q` 停止返回 |
+| 4    | 安全退出                  | 停止运动并退出程序                      |
 
 **参数调优：**
+
 ```bash
 # 检测瓶子、降低速度
 ros2 run g1_yolo_nav_py grasp_task --ros-args \
@@ -592,15 +616,15 @@ ros2 run g1_yolo_nav_py grasp_task --ros-args \
   -p arm_script_dir:=/home/unitree/my_arm_scripts
 ```
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `target_class_id` | chair | YOLO 检测目标类别 |
-| `forward_speed` | 0.2 m/s | 接近速度（首次建议 0.15） |
-| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值 |
-| `search_yaw_speed` | 0.3 rad/s | 搜索旋转速度 |
-| `yaw_kp` | 2.0 | 偏航对齐 P 增益 |
-| `lost_timeout` | 2.0 s | 目标丢失超时 |
-| `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录 |
+| 参数                  | 默认值                                          | 说明                      |
+| --------------------- | ----------------------------------------------- | ------------------------- |
+| `target_class_id`   | chair                                           | YOLO 检测目标类别         |
+| `forward_speed`     | 0.2 m/s                                         | 接近速度（首次建议 0.15） |
+| `arrive_bbox_ratio` | 0.45                                            | 检测框占比到达阈值        |
+| `search_yaw_speed`  | 0.3 rad/s                                       | 搜索旋转速度              |
+| `yaw_kp`            | 2.0                                             | 偏航对齐 P 增益           |
+| `lost_timeout`      | 2.0 s                                           | 目标丢失超时              |
+| `arm_script_dir`    | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录              |
 
 > **安全提示**：首次运行建议 `forward_speed:=0.15`，随时准备急停。
 
