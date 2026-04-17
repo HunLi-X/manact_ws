@@ -202,15 +202,14 @@ class LocoForwardNode(Node):
 
 
 def main(args=None):
-    # 在 rclpy.init() 之前初始化 DDS，让 unitree SDK 先创建 CycloneDDS domain
     _iface = ""
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         _iface = sys.argv[1]
-    if LOCO_AVAILABLE:
-        try:
-            ChannelFactoryInitialize(0, _iface)
-        except Exception:
-            pass
+
+    # 在 rclpy.init() 之前初始化 unitree DDS（CycloneDDS 兼容层）
+    from g1_yolo_nav_py._dds_compat import init_unitree_dds_before_ros2
+    init_unitree_dds_before_ros2(_iface)
+
     rclpy.init(args=args)
     node = LocoForwardNode()
     try:
