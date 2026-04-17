@@ -77,7 +77,7 @@ g1act_ws/
 ```更新代码命令
 cd ~/g1act_ws/manact_ws
 git pull
-colcon build
+colcon build --packages-skip h1_description
 ```
 
 ```每次启动激活虚拟环境命令
