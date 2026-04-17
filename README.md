@@ -76,10 +76,14 @@ g1act_ws/
 
 ```更新代码命令
 cd ~/g1act_ws/manact_ws
-
 git pull
-
 colcon build
+```
+
+```每次启动激活虚拟环境命令
+cd ~/g1act_ws/manact_ws
+source ~/g1act_venv/bin/activate
+. install/setup.bash
 ```
 
 ### 📦 模型说明
