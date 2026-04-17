@@ -40,7 +40,6 @@ from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
 # unitree_sdk2py: 宇树机器人底层 SDK（可选依赖）
 try:
-    from unitree_sdk2py.core.channel import ChannelFactoryInitialize  # DDS 通信工厂初始化
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient  # G1 运动控制客户端
     LOCO_AVAILABLE = True
 except ImportError:
