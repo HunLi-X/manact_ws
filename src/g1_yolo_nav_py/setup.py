@@ -31,6 +31,7 @@ setup(
             "yaw_align = g1_yolo_nav_py.yaw_align:main",
             "rgbd_capture = g1_yolo_nav_py.rgbd_capture:main",
             "grasp_task = g1_yolo_nav_py.grasp_task:main",
+            "control_panel = g1_yolo_nav_py.control_panel:main",
         ],
     },
 )
