@@ -81,7 +81,7 @@ class DetectionVisualizerNode(Node):
             history=HistoryPolicy.KEEP_LAST, depth=5,
         )
         pub_qos = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST, depth=5,
         )
 
@@ -100,6 +100,8 @@ class DetectionVisualizerNode(Node):
         self._fps = 0.0
         self._frame_count = 0
         self._fps_time = time.time()
+        self._new_frame = False  # ROS2 回调标记有新帧
+        self._last_header = None  # 保存 header 用于发布
 
         # ---- tkinter GUI ----
         self._build_gui()
@@ -187,10 +189,10 @@ class DetectionVisualizerNode(Node):
         try:
             self._cv_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             self._frame_count += 1
+            self._new_frame = True
+            self._last_header = msg.header
         except Exception as e:
             self.get_logger().warn(f"图像转换失败: {e}")
-            return
-        self._publish_annotated(msg.header)
 
     def _detection_cb(self, msg: Detection2DArray):
         self._detections = msg
@@ -236,31 +238,34 @@ class DetectionVisualizerNode(Node):
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
 
-        # 先用 cv2 resize（比 PIL 快很多），再转 tkinter
-        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        rgb = np.ascontiguousarray(rgb)
         pil_img = PILImage.fromarray(rgb)
         return ImageTk.PhotoImage(image=pil_img)
 
     # ==================================================================
-    # 标注图像发布
+    # 标注图像发布（在主线程中执行，避免阻塞 ROS2 回调）
     # ==================================================================
-    def _publish_annotated(self, header) -> None:
+    def _publish_annotated(self) -> None:
         """绘制检测框并发布标注图像到话题。"""
-        if self._cv_image is None:
+        if self._cv_image is None or self._last_header is None:
             return
-        frame = self._cv_image.copy()
-        frame = self._draw_on_frame(frame)
-        annotated_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
-        annotated_msg.header = header
-        self._pub.publish(annotated_msg)
-        self._pub_count += 1
+        try:
+            frame = self._cv_image.copy()
+            frame = self._draw_on_frame(frame)
+            annotated_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            annotated_msg.header = self._last_header
+            self._pub.publish(annotated_msg)
+            self._pub_count += 1
+        except Exception as e:
+            self.get_logger().warn(f"发布标注图像失败: {e}")
 
     # ==================================================================
     # GUI 刷新
     # ==================================================================
     def _update_loop(self):
-        """定时刷新 GUI（约 20Hz）。"""
+        """定时刷新 GUI（约 60Hz）。"""
         if not self._running:
             return
 
@@ -269,9 +274,11 @@ class DetectionVisualizerNode(Node):
         except tk.TclError:
             self._running = False
             return
+        except Exception:
+            pass
 
         if self._running:
-            self.root.after(50, self._update_loop)
+            self.root.after(16, self._update_loop)
 
     def _do_update(self):
         # FPS 计算
@@ -283,19 +290,29 @@ class DetectionVisualizerNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
+        # 只在有新帧时刷新图像
+        if not self._new_frame:
+            return
+        self._new_frame = False
+
         if self._cv_image is not None:
+            frame_copy = self._cv_image.copy()
+
             # 原始图像
-            self._raw_photo = self._cv2_to_tk(self._cv_image.copy(), self._raw_canvas)
+            self._raw_photo = self._cv2_to_tk(frame_copy, self._raw_canvas)
             if self._raw_photo:
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
             # 检测标注图像
-            det_frame = self._draw_on_frame(self._cv_image.copy())
+            det_frame = self._draw_on_frame(frame_copy)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
                 self._det_canvas.delete("all")
                 self._det_canvas.create_image(0, 0, anchor=tk.NW, image=self._det_photo)
+
+            # 发布标注图像（移到主线程，避免阻塞 ROS2 回调）
+            self._publish_annotated()
 
             # 检测信息
             det_count = len(self._detections.detections) if self._detections else 0
