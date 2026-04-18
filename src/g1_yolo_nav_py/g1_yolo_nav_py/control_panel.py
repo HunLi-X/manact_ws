@@ -173,8 +173,8 @@ class ControlPanelNode(Node):
         # ---- ROS2 发布 ----
         self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
 
-        # ---- 延迟诊断（1秒后检查订阅状态）----
-        self.create_timer(2.0, self._diag_check, once=True)
+        # ---- 延迟诊断（2秒后检查订阅状态）----
+        self._diag_timer = self.create_timer(2.0, self._diag_check)
 
         # ---- 缓存 ----
         self._raw_image: Optional[np.ndarray] = None
