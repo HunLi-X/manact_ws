@@ -246,8 +246,6 @@ def main(args=None):
         if _iface_param and _iface_param != _iface:
             node.get_logger().info(f"[DDS] 使用参数接口 '{_iface_param}' 重试初始化...")
             dds_ok = init_unitree_dds_before_ros2(_iface_param)
-            if dds_ok:
-                node._init_loco()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
