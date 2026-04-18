@@ -471,15 +471,26 @@ class GraspTaskNode(Node):
 
 def main(args=None):
     _iface = ""
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        _iface = sys.argv[1]
+    for a in sys.argv[1:]:
+        if not a.startswith("-") and "." not in a and "/" not in a:
+            _iface = a
+            break
 
     # 在 rclpy.init() 之前初始化 unitree DDS（CycloneDDS 兼容层）
     from g1_yolo_nav_py._dds_compat import init_unitree_dds_before_ros2
-    init_unitree_dds_before_ros2(_iface)
+    dds_ok = init_unitree_dds_before_ros2(_iface)
 
     rclpy.init(args=args)
     node = GraspTaskNode()
+
+    # 如果 DDS 未初始化成功，从 ROS2 参数中再取一次接口名并重试
+    if not dds_ok:
+        _iface_param = node.get_parameter("network_interface").value
+        if _iface_param and _iface_param != _iface:
+            node.get_logger().info(f"[DDS] 使用参数接口 '{_iface_param}' 重试初始化...")
+            dds_ok = init_unitree_dds_before_ros2(_iface_param)
+            if dds_ok:
+                node._init_loco()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

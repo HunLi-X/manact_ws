@@ -108,7 +108,14 @@ class LocoForwardNode(Node):
             self._loco.Init()
             self.get_logger().info("LocoClient 初始化成功")
         except Exception as e:
-            self.get_logger().error(f"LocoClient 失败: {e}")
+            self._loco = None
+            self.get_logger().error(
+                f"LocoClient 失败: {e}\n"
+                f"  提示: 需要指定正确的网络接口，例如:\n"
+                f"  ros2 run g1_yolo_nav_py loco_forward eth0\n"
+                f"  或通过参数: --ros-args -p network_interface:=eth0\n"
+                f"  可用接口列表: ip link show | grep 'state UP'"
+            )
 
     def _on_detection(self, msg: Detection2DArray) -> None:
         best_det = None
@@ -201,16 +208,28 @@ class LocoForwardNode(Node):
 
 
 def main(args=None):
+    # 网络接口：优先从命令行第一个非 ROS 参数获取
     _iface = ""
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        _iface = sys.argv[1]
+    for a in sys.argv[1:]:
+        if not a.startswith("-") and "." not in a and "/" not in a:
+            _iface = a
+            break
 
     # 在 rclpy.init() 之前初始化 unitree DDS（CycloneDDS 兼容层）
     from g1_yolo_nav_py._dds_compat import init_unitree_dds_before_ros2
-    init_unitree_dds_before_ros2(_iface)
+    dds_ok = init_unitree_dds_before_ros2(_iface)
 
     rclpy.init(args=args)
     node = LocoForwardNode()
+
+    # 如果 DDS 未初始化成功，从 ROS2 参数中再取一次接口名并重试
+    if not dds_ok:
+        _iface_param = node.get_parameter("network_interface").value
+        if _iface_param and _iface_param != _iface:
+            node.get_logger().info(f"[DDS] 使用参数接口 '{_iface_param}' 重试初始化...")
+            dds_ok = init_unitree_dds_before_ros2(_iface_param)
+            if dds_ok:
+                node._init_loco()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

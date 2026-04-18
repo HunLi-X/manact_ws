@@ -70,18 +70,20 @@ def init_unitree_dds_before_ros2(iface: str = "") -> bool:
     except Exception as e:
         print(f"[WARNING] ChannelFactoryInitialize 失败: {e}", file=sys.stderr)
 
-    # 2. unitree SDK 初始化完成后，设置 CYCLONEDDS_URI 让 ROS2 使用 DomainId 1
-    #    这样 rclpy.init() 创建的 CycloneDDS domain 与 unitree SDK 的 domain 不冲突
-    _xml_content = _CYCLONEDDS_XML_TEMPLATE.format(domain_id=1)
-    try:
-        _xml_path = os.path.join(tempfile.gettempdir(), "ros2_cyclonedds_domain1.xml")
-        with open(_xml_path, "w") as f:
-            f.write(_xml_content)
-        os.environ["CYCLONEDDS_URI"] = f"file://{_xml_path}"
-    except Exception:
-        os.environ["CYCLONEDDS_URI"] = _xml_content.strip()
+    # 2. 只有 unitree SDK 初始化成功时，才设置 CYCLONEDDS_URI 让 ROS2 使用 DomainId 1
+    #    如果 ChannelFactoryInitialize 失败，不修改 ROS2 的 domain 配置，
+    #    保持 ROS2 在默认 Domain 0 上通信（否则收不到 Domain 0 的相机等数据）
+    if dds_ok:
+        _xml_content = _CYCLONEDDS_XML_TEMPLATE.format(domain_id=1)
+        try:
+            _xml_path = os.path.join(tempfile.gettempdir(), "ros2_cyclonedds_domain1.xml")
+            with open(_xml_path, "w") as f:
+                f.write(_xml_content)
+            os.environ["CYCLONEDDS_URI"] = f"file://{_xml_path}"
+        except Exception:
+            os.environ["CYCLONEDDS_URI"] = _xml_content.strip()
 
-    # 同时设置 ROS_DOMAIN_ID 与 CYCLONEDDS_URI 保持一致
-    os.environ.setdefault("ROS_DOMAIN_ID", "1")
+        # 同时设置 ROS_DOMAIN_ID 与 CYCLONEDDS_URI 保持一致
+        os.environ.setdefault("ROS_DOMAIN_ID", "1")
 
     return dds_ok
