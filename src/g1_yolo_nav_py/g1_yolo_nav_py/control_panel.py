@@ -52,12 +52,10 @@ from vision_msgs.msg import Detection2DArray
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 
-# unitree_sdk2py（可选依赖）
-try:
-    from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-    LOCO_AVAILABLE = True
-except ImportError:
-    LOCO_AVAILABLE = False
+# 注意：control_panel 不导入 unitree_sdk2py！
+# unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
+# 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
+# 前进/右转通过 cmd_vel → twist_bridge → Sport API 完成，无需 LocoClient。
 
 # ==================================================================
 # 3. 常量
@@ -171,11 +169,6 @@ class ControlPanelNode(Node):
         # ---- ROS2 发布 ----
         self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
 
-        # ---- LocoClient ----
-        self._loco = None
-        if LOCO_AVAILABLE:
-            self._init_loco()
-
         # ---- 缓存 ----
         self._raw_image: Optional[np.ndarray] = None
         self._detections: Optional[Detection2DArray] = None
@@ -210,34 +203,6 @@ class ControlPanelNode(Node):
         self.get_logger().info(f"armup: {self._armup_script}")
         self.get_logger().info(f"armdown: {self._armdown_script}")
         self.get_logger().info("=" * 50)
-
-    # ==================================================================
-    # LocoClient（参考 grasp_task.py）
-    # ==================================================================
-    def _init_loco(self) -> None:
-        try:
-            self._loco = LocoClient()
-            self._loco.SetTimeout(5.0)
-            self._loco.Init()
-            self.get_logger().info("[LocoClient] 初始化成功")
-        except Exception as e:
-            self.get_logger().error(f"[LocoClient] 初始化失败: {e}")
-
-    def _loco_move(self, vx=0.0, vy=0.0, vyaw=0.0, continuous=False) -> None:
-        if self._loco is None:
-            return
-        try:
-            self._loco.Move(vx=vx, vy=vy, vyaw=vyaw, continuous=continuous)
-        except Exception as e:
-            self.get_logger().warn(f"[LocoClient] Move 失败: {e}")
-
-    def _loco_stop(self) -> None:
-        if self._loco is None:
-            return
-        try:
-            self._loco.StopMove()
-        except Exception as e:
-            self.get_logger().warn(f"[LocoClient] StopMove 失败: {e}")
 
     # ==================================================================
     # cmd_vel 发布
@@ -559,7 +524,6 @@ class ControlPanelNode(Node):
         prev = self._state
         self._state = State.IDLE
         self._publish_stop()
-        self._loco_stop()
         self._align_start = None
         self._append_log(f"[状态] {prev.name} → IDLE: 手动停止")
         self._update_state_display()
@@ -584,7 +548,6 @@ class ControlPanelNode(Node):
             return
         self._state = State.GRABBING
         self._publish_stop()
-        self._loco_stop()
         self._run_grab()
         self._update_state_display()
 
@@ -601,17 +564,9 @@ class ControlPanelNode(Node):
             self._append_log("[提示] 请先停止当前任务")
             return
         self._append_log("[右转] 开始右转 90° ...")
-        if self._loco is not None:
-            try:
-                self._loco.Move(vx=0.0, vy=0.0, vyaw=-1.0, continuous=True)
-                time.sleep(1.6)
-                self._loco.StopMove()
-            except Exception as e:
-                self.get_logger().warn(f"[右转] LocoClient 失败: {e}")
-        else:
-            self._publish_cmd(vz=-0.6)
-            time.sleep(2.6)
-            self._publish_stop()
+        self._publish_cmd(vz=-0.6)
+        time.sleep(2.6)  # ≈ 90° at 0.6 rad/s
+        self._publish_stop()
         self._append_log("[右转] 右转完成")
         self._run_armdown()
 
@@ -750,7 +705,7 @@ class ControlPanelNode(Node):
         # 目标丢失 → 回搜索
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self._state = State.SEARCHING
-            self._loco_stop()
+            self._publish_stop()
             self._append_log("[状态] APPROACHING → SEARCHING: 目标丢失")
             self.root.after(0, self._update_state_display)
             return
@@ -758,7 +713,7 @@ class ControlPanelNode(Node):
         # 偏离中心 → 回对齐
         if abs(self._target_u - 0.5) > self._center_tol * 2:
             self._state = State.ALIGNING
-            self._loco_stop()
+            self._publish_stop()
             self._align_start = None
             self._append_log("[状态] APPROACHING → ALIGNING: 目标偏离中心")
             self.root.after(0, self._update_state_display)
@@ -767,7 +722,7 @@ class ControlPanelNode(Node):
         # 到达判断
         bbox_max = max(self._bbox_size_x, self._bbox_size_y)
         if bbox_max >= self._arrive_ratio:
-            self._loco_stop()
+            self._publish_stop()
             self._state = State.GRABBING
             self._append_log(
                 f"[状态] APPROACHING → GRABBING: 到达目标! bbox={bbox_max:.2f}"
@@ -776,8 +731,8 @@ class ControlPanelNode(Node):
             self.root.after(0, self._update_state_display)
             return
 
-        # 前进
-        self._loco_move(vx=self._fwd_speed, continuous=True)
+        # 前进（通过 cmd_vel → twist_bridge → Sport API）
+        self._publish_cmd(vx=self._fwd_speed)
 
     # ==================================================================
     # GUI 主循环
@@ -869,7 +824,6 @@ class ControlPanelNode(Node):
         self._state = State.IDLE
         try:
             self._publish_stop()
-            self._loco_stop()
         except Exception:
             pass
         try:
@@ -882,7 +836,6 @@ class ControlPanelNode(Node):
 
     def destroy_node(self) -> None:
         self._publish_stop()
-        self._loco_stop()
         self.get_logger().info("[清理] 控制面板节点已停止")
         super().destroy_node()
 
