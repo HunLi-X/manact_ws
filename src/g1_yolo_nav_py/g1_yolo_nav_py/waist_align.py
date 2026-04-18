@@ -133,7 +133,14 @@ class WaistAlignNode(Node):
             self._dds_ok = True
             self.get_logger().info("DDS 初始化成功")
         except Exception as e:
-            self.get_logger().error(f"DDS 失败: {e}")
+            self._dds_ok = False
+            self.get_logger().error(
+                f"DDS 失败: {e}\n"
+                f"  提示: 需要指定正确的网络接口，例如:\n"
+                f"  ros2 run g1_yolo_nav_py waist_align eth0\n"
+                f"  或: ros2 run g1_yolo_nav_py waist_align --ros-args -p network_interface:=eth0\n"
+                f"  可用接口: ip link show | grep 'state UP'"
+            )
 
     def _start_thread(self) -> None:
         t = threading.Thread(target=self._control_loop, daemon=True)
@@ -246,6 +253,9 @@ def main(args=None):
         if _iface_param and _iface_param != _iface:
             node.get_logger().info(f"[DDS] 使用参数接口 '{_iface_param}' 重试初始化...")
             dds_ok = init_unitree_dds_before_ros2(_iface_param)
+            if dds_ok:
+                node._init_dds()
+                node._start_thread()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
