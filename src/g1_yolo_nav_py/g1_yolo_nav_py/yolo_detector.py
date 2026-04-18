@@ -47,7 +47,7 @@ class YoloDetectorNode(Node):
         self.declare_parameter("model_path", "yolo_v11x_best.pt")
         self.declare_parameter("confidence_threshold", 0.8)
         self.declare_parameter("nms_threshold", 0.45)
-        self.declare_parameter("input_image_topic", "/robot1/D455_1/color/image_raw")
+        self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_classes", ["chair"])  # 按类别名称过滤
         self.declare_parameter("max_image_size", 640)
