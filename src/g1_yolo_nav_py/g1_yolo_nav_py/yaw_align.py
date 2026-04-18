@@ -110,6 +110,7 @@ class YawAlignNode(Node):
                 self.get_logger().info(
                     f"[对齐] 检测到目标: u={self._target_u:.3f}, vyaw={self._compute_vyaw():.3f}"
                 )
+                self._first_target_logged = True
         else:
             self._target_u = None
 
@@ -145,10 +146,11 @@ class YawAlignNode(Node):
         cmd = Twist()
         cmd.angular.z = vyaw
         self._cmd_pub.publish(cmd)
-        # 目标存在但速度为零时（容差内），发布日志确认
-        if self._target_u is not None and abs(vyaw) < 0.01:
+        # 首次 tick 且有目标时，打印一次状态确认
+        if self._first_target_logged and hasattr(self, '_tick_logged') is False:
+            self._tick_logged = True
             self.get_logger().info(
-                f"[对齐] 目标u={self._target_u:.3f} 在容差内，无需旋转", once=True
+                f"[对齐] tick 正常运行: target_u={self._target_u}, vyaw={vyaw:.3f}"
             )
 
     def destroy_node(self) -> None:
