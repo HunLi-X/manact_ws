@@ -607,6 +607,7 @@ class ControlPanelNode(Node):
 
     def _do_grab(self):
         """手动触发抓取（执行 armup.py）。"""
+        self._append_log(f"[调试] 抓取按钮: state={self._state.name}, armup={self._armup_script}")
         if self._state not in (State.IDLE, State.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
@@ -617,6 +618,7 @@ class ControlPanelNode(Node):
 
     def _do_put_down(self):
         """放下目标物（执行 armdown.py）。"""
+        self._append_log(f"[调试] 放下按钮: state={self._state.name}, armdown={self._armdown_script}")
         if self._state not in (State.IDLE, State.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
@@ -624,6 +626,7 @@ class ControlPanelNode(Node):
 
     def _do_turn_and_put_down(self):
         """右转 90° 后放下目标物。"""
+        self._append_log(f"[调试] 右转放下按钮: state={self._state.name}")
         if self._state not in (State.IDLE, State.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
@@ -651,23 +654,30 @@ class ControlPanelNode(Node):
             self._update_state_display()
             return
 
-        self._append_log("[抓取] 执行 armup.py ...")
+        self._append_log(f"[抓取] 执行 armup.py ... (python={sys.executable}, iface={self._net_iface})")
 
         def _worker():
             try:
                 args = [sys.executable, script]
                 if self._net_iface:
                     args.append(self._net_iface)
+                self._append_log(f"[抓取] 命令: {' '.join(args)}")
                 proc = subprocess.run(
                     args, check=True, input=b"\n",
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=120,
                 )
                 if proc.stdout:
                     for line in proc.stdout.decode(errors="replace").splitlines():
                         self._append_log(f"[armup] {line}")
                 self._append_log("[抓取] armup.py 完成")
+            except subprocess.TimeoutExpired:
+                self._append_log("[错误] armup.py 超时（120秒）")
             except subprocess.CalledProcessError as e:
                 self._append_log(f"[错误] armup.py 失败: 返回码={e.returncode}")
+                if e.stdout:
+                    for line in e.stdout.decode(errors="replace").splitlines()[:10]:
+                        self._append_log(f"[armup] {line}")
             except Exception as e:
                 self._append_log(f"[错误] armup.py 异常: {e}")
             finally:
@@ -677,6 +687,7 @@ class ControlPanelNode(Node):
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()
+        self._append_log(f"[抓取] 子线程已启动 tid={t.ident}")
 
     def _run_armdown(self) -> None:
         """执行 armdown.py 放下目标物。"""
@@ -684,23 +695,30 @@ class ControlPanelNode(Node):
         if not Path(script).exists():
             self._append_log(f"[错误] armdown.py 不存在: {script}")
             return
-        self._append_log("[放下] 执行 armdown.py ...")
+        self._append_log(f"[放下] 执行 armdown.py ... (python={sys.executable}, iface={self._net_iface})")
 
         def _worker():
             try:
                 args = [sys.executable, script]
                 if self._net_iface:
                     args.append(self._net_iface)
+                self._append_log(f"[放下] 命令: {' '.join(args)}")
                 proc = subprocess.run(
                     args, check=True, input=b"\n",
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=120,
                 )
                 if proc.stdout:
                     for line in proc.stdout.decode(errors="replace").splitlines():
                         self._append_log(f"[armdown] {line}")
                 self._append_log("[放下] armdown.py 完成")
+            except subprocess.TimeoutExpired:
+                self._append_log("[错误] armdown.py 超时（120秒）")
             except subprocess.CalledProcessError as e:
                 self._append_log(f"[错误] armdown.py 失败: 返回码={e.returncode}")
+                if e.stdout:
+                    for line in e.stdout.decode(errors="replace").splitlines()[:10]:
+                        self._append_log(f"[armdown] {line}")
             except Exception as e:
                 self._append_log(f"[错误] armdown.py 异常: {e}")
             finally:
@@ -710,6 +728,7 @@ class ControlPanelNode(Node):
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()
+        self._append_log(f"[放下] 子线程已启动 tid={t.ident}")
 
     # ==================================================================
     # 状态机 — 主循环（参考 grasp_task.py）
