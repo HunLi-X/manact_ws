@@ -186,6 +186,10 @@ class ControlPanelNode(Node):
         self._running = True
         self._first_image_received = False
         self._new_frame = False  # ROS2 回调标记有新帧
+        self._manual_vx = 0.0   # 手动控制速度（持续发布）
+        self._manual_vy = 0.0
+        self._manual_vz = 0.0
+        self._manual_active = False
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -576,14 +580,24 @@ class ControlPanelNode(Node):
     # 手动控制
     # ==================================================================
     def _manual_cmd(self, vx: float, vy: float, vz: float):
-        """手动方向控制（仅 IDLE 状态下生效）。"""
+        """手动方向控制（持续发布模式，点击后持续运动直到按停止）。"""
         if self._state not in (State.IDLE, State.MENU):
             self._append_log("[提示] 任务执行中，请先停止")
             return
-        self._publish_cmd(vx=vx, vy=vy, vz=vz)
+        self._manual_vx = vx
+        self._manual_vy = vy
+        self._manual_vz = vz
+        self._manual_active = True
+        self._append_log(f"[手动] 持续运动: vx={vx}, vz={vz}（按停止结束）")
 
     def _do_stop(self):
         """停止所有运动并回到 IDLE。"""
+        # 清除手动控制
+        self._manual_active = False
+        self._manual_vx = 0.0
+        self._manual_vy = 0.0
+        self._manual_vz = 0.0
+
         prev = self._state
         self._state = State.IDLE
         self._publish_stop()
@@ -733,6 +747,10 @@ class ControlPanelNode(Node):
     # 状态机 — 主循环（参考 grasp_task.py）
     # ==================================================================
     def _tick(self) -> None:
+        # 手动控制持续发布（twist_bridge 需要持续收到速度指令）
+        if self._manual_active and self._state in (State.IDLE, State.MENU):
+            self._publish_cmd(vx=self._manual_vx, vy=self._manual_vy, vz=self._manual_vz)
+
         if self._state == State.SEARCHING:
             self._tick_searching()
         elif self._state == State.ALIGNING:
