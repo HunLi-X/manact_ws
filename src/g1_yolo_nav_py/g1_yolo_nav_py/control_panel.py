@@ -184,6 +184,9 @@ class ControlPanelNode(Node):
         self._frame_count = 0
         self._fps_time = time.time()
         self._running = True
+        self._first_image_received = False
+        self._last_img_time = 0.0       # 上次图像刷新时间
+        self._img_interval = 0.033      # 图像刷新间隔（~30Hz）
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -222,7 +225,7 @@ class ControlPanelNode(Node):
         self._cmd_pub.publish(cmd)
 
     def _publish_stop(self) -> None:
-        self._publish_cmd(0, 0, 0)
+        self._publish_cmd(0.0, 0.0, 0.0)
 
     # ==================================================================
     # 诊断
@@ -485,7 +488,8 @@ class ControlPanelNode(Node):
         try:
             self._raw_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             self._frame_count += 1
-            if self._frame_count == 1:
+            if not self._first_image_received:
+                self._first_image_received = True
                 self.get_logger().info(
                     f"[图像] 首次收到图像: {msg.width}x{msg.height}, "
                     f"encoding={msg.encoding}"
