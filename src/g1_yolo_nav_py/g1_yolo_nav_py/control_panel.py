@@ -184,8 +184,6 @@ class ControlPanelNode(Node):
         self._frame_count = 0
         self._fps_time = time.time()
         self._running = True
-        self._last_display_time = 0.0  # 上次显示时间
-        self._display_interval = 0.1  # 显示刷新间隔（秒），约 10Hz
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -522,10 +520,11 @@ class ControlPanelNode(Node):
     # 图像绘制
     # ==================================================================
     def _draw_detections(self, frame: np.ndarray) -> np.ndarray:
-        """在图像上绘制检测框。"""
+        """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
+        out = frame.copy() if frame is self._raw_image else frame
         if self._detections is None:
-            return frame
-        h, w = frame.shape[:2]
+            return out
+        h, w = out.shape[:2]
         for det in self._detections.detections:
             if not det.results:
                 continue
@@ -540,20 +539,20 @@ class ControlPanelNode(Node):
             x1, y1 = int(cx - bw / 2), int(cy - bh / 2)
             x2, y2 = int(cx + bw / 2), int(cy + bh / 2)
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
             label = f"{class_id} {score:.0%}"
-            cv2.rectangle(frame, (x1, y1 - 22), (x1 + len(label) * 10, y1), color, -1)
-            cv2.putText(frame, label, (x1 + 3, y1 - 6),
+            cv2.rectangle(out, (x1, y1 - 22), (x1 + len(label) * 10, y1), color, -1)
+            cv2.putText(out, label, (x1 + 3, y1 - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
         # 绘制十字准心
         if self._target_u is not None and self._state in (State.ALIGNING, State.APPROACHING):
             cx = int(self._target_u * w)
             cy = h // 2
-            cv2.line(frame, (cx - 15, cy), (cx + 15, cy), (0, 255, 255), 1)
-            cv2.line(frame, (cx, cy - 15), (cx, cy + 15), (0, 255, 255), 1)
+            cv2.line(out, (cx - 15, cy), (cx + 15, cy), (0, 255, 255), 1)
+            cv2.line(out, (cx, cy - 15), (cx, cy + 15), (0, 255, 255), 1)
 
-        return frame
+        return out
 
     def _cv2_to_tk(self, frame: np.ndarray, canvas: tk.Canvas) -> Optional[ImageTk.PhotoImage]:
         """将 OpenCV 图像转为 tkinter 可显示格式并缩放适配画布。"""
@@ -562,9 +561,11 @@ class ControlPanelNode(Node):
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
 
-        # 先用 cv2 resize（比 PIL 快很多），再转 tkinter
-        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_AREA)
+        # 优先使用 INTER_LINEAR（比 INTER_AREA 快），小尺寸差异时效果一致
+        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
+        # BGR→RGB + 确保内存连续
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        rgb = np.ascontiguousarray(rgb)
         pil_img = PILImage.fromarray(rgb)
         return ImageTk.PhotoImage(image=pil_img)
 
@@ -802,7 +803,7 @@ class ControlPanelNode(Node):
     # GUI 主循环
     # ==================================================================
     def _update_loop(self):
-        """定时刷新 GUI（约 20Hz）。"""
+        """定时刷新 GUI（约 60Hz+）。"""
         if not self._running:
             return
 
@@ -816,9 +817,9 @@ class ControlPanelNode(Node):
             # 其他异常不要打断 after 链，否则 GUI 卡死
             self.get_logger().warn(f"[GUI] 刷新异常: {e}")
 
-        # 下一帧
+        # 下一帧（~16ms ≈ 60Hz）
         if self._running:
-            self.root.after(50, self._update_loop)
+            self.root.after(16, self._update_loop)
 
     def _do_update(self):
         """实际刷新逻辑（可被 _update_loop 安全捕获异常）。"""
@@ -831,13 +832,6 @@ class ControlPanelNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
-        # 限制显示刷新频率（避免每帧都做图像转换，减轻主线程负担）
-        if now - self._last_display_time < self._display_interval:
-            # 只更新文字状态，不刷新图像
-            self._update_status_text()
-            return
-        self._last_display_time = now
-
         # 更新图像
         if self._raw_image is not None:
             # copy() 避免修改原始图像（ROS2 回调仍在写入）
@@ -849,8 +843,8 @@ class ControlPanelNode(Node):
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
-            # 检测标注图像
-            det_frame = self._draw_detections(frame_copy.copy())
+            # 检测标注图像（frame_copy 已是 copy，_draw_detections 内部不会再 copy）
+            det_frame = self._draw_detections(frame_copy)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
                 self._det_canvas.delete("all")
