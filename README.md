@@ -41,17 +41,19 @@ g1act_ws/
 │   │   │   ├── __init__.py
 │   │   │   ├── yolo_detector.py              # YOLO 检测节点
 │   │   │   ├── spatial_target.py             # 3D 空间投影节点
-│   │   │   ├── detection_visualizer.py       # 检测可视化节点
+│   │   │   ├── detection_visualizer.py       # 检测可视化节点（tkinter）
+│   │   │   ├── control_panel.py              # 控制面板节点（tkinter GUI）
 │   │   │   ├── grasp_task.py                 # 抓取任务主控节点
 │   │   │   ├── yaw_align.py                  # 偏航对齐节点（整机旋转）
 │   │   │   ├── waist_align.py                # 腰部对齐节点
 │   │   │   ├── waist_tracker.py              # 腰部追踪控制器
 │   │   │   ├── loco_forward.py               # Loco 前进节点
 │   │   │   ├── rgbd_capture.py               # RGBD 数据采集节点
+│   │   │   ├── _dds_compat.py                # CycloneDDS 兼容层
 │   │   │   └── distence.py                   # 距离估算工具
 │   │   ├── arm/                              # 手臂控制脚本（unitree_sdk2py，非 ROS2 节点）
-│   │   │   ├── armup.py                      # 手臂抓取（伸出→抬起→夹紧保持）
-│   │   │   ├── armdown.py                    # 手臂放下（夹紧→下放→归零释放）
+│   │   │   ├── armup.py                      # 手臂抓取（伸出→抬起→夹紧，完成后自动退出）
+│   │   │   ├── armdown.py                    # 手臂放下（夹紧→下放→归零释放，完成后自动退出）
 │   │   │   ├── arm.py                        # 手臂 SDK 基础控制
 │   │   │   └── arm_multi_pose_demo.py        # 多姿态演示
 │   │   ├── launch/
@@ -310,8 +312,13 @@ python3 -c "from ultralytics import YOLO; print(YOLO('src/g1_yolo_nav_py/yolo_v1
 | 程序             | 功能               | 控制方式             | 入口命令                                 |
 | ---------------- | ------------------ | -------------------- | ---------------------------------------- |
 | `yaw_align`    | 整机旋转让目标居中 | cmd_vel → Sport API | `ros2 run g1_yolo_nav_py yaw_align`    |
-| `waist_align`  | 腰部旋转让目标居中 | Arm SDK DDS          | `ros2 run g1_yolo_nav_py waist_align`  |
-| `loco_forward` | 对齐后前进到目标   | LocoClient RPC       | `ros2 run g1_yolo_nav_py loco_forward` |
+| `waist_align`  | 腰部旋转让目标居中 | Arm SDK DDS          | `ros2 run g1_yolo_nav_py waist_align eth0`  |
+| `loco_forward` | 对齐后前进到目标   | LocoClient RPC       | `ros2 run g1_yolo_nav_py loco_forward eth0` |
+
+> **网络接口参数**：`waist_align` 和 `loco_forward` 使用 `unitree_sdk2py` 的 DDS 通信，
+> 需要指定正确的网络接口名（如 `eth0`、`enx...`），否则 DDS 初始化会失败。
+> 可通过 `ip link show | grep 'state UP'` 查看可用接口。
+> 也可通过 ROS2 参数指定：`--ros-args -p network_interface:=eth0`
 
 > **`yaw_align` vs `waist_align`**：
 >
@@ -519,6 +526,74 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 - 随时准备按遥控器急停
 - 确保前方无障碍物
 
+### 🎮 控制面板（GUI 集成控制）
+
+基于 tkinter 的图形化控制界面，集成检测可视化 + 手动遥控 + 一键抓取任务全流程。
+
+**功能：**
+
+- 左右双画布：原始相机图像 + YOLO 检测标注图像
+- 方向按钮：前进/后退/左转/右转/停止（IDLE 状态下可用）
+- 任务按钮：搜索/抓取/放下/右转放下
+- 速度滑块：0.05~0.5 m/s 可调
+- 实时 FPS、状态机状态、检测信息显示
+- 底部日志栏：arm 脚本输出实时显示
+
+**状态机流程：**
+
+```
+IDLE → [搜索] → SEARCHING（旋转找目标）
+                  ↓ 目标出现
+                ALIGNING（偏航对齐居中）
+                  ↓ 居中稳定
+                APPROACHING（前进接近）
+                  ↓ 到达目标
+                GRABBING（执行 armup.py）
+                  ↓ 抓取完成
+                MENU（可放下/右转放下）
+                  ↓ 放下完成
+                IDLE
+```
+
+**运行：**
+
+```bash
+source ~/g1act_venv/bin/activate
+cd ~/g1act_ws/manact_ws
+colcon build --packages-select g1_yolo_nav_py && . install/setup.bash
+
+# 需要同时运行 YOLO 检测（否则无检测结果）
+# 终端 1：YOLO 检测
+ros2 run g1_yolo_nav_py yolo_detector
+
+# 终端 2：控制面板
+ros2 run g1_yolo_nav_py control_panel
+
+# 如果使用 cmd_vel 控制运动，还需启动 twist_bridge
+# 终端 3：twist_bridge
+ros2 run g1_twist_bridge_py twist_bridge
+```
+
+> **注意**：控制面板不使用 `unitree_sdk2py`（避免 DDS 冲突导致收不到图像），
+> 所有运动控制通过 `cmd_vel → twist_bridge → Sport API` 完成。
+
+**参数：**
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `image_topic` | `/D455_1/color/image_raw` | 相机图像话题 |
+| `detection_topic` | `/g1/vision/detections` | 检测结果话题 |
+| `target_class_id` | `chair` | 目标类别 |
+| `forward_speed` | `0.2` | 前进速度 m/s |
+| `search_yaw_speed` | `0.3` | 搜索旋转速度 rad/s |
+| `yaw_kp` | `2.0` | 偏航对齐 P 增益 |
+| `arrive_bbox_ratio` | `0.45` | 到达判断阈值 |
+| `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录 |
+
+**依赖：** `pip install pillow`（PIL 图像显示）
+
+---
+
 ### 🤖 抓取任务（一键全流程）
 
 自动执行：目标检测 → 偏航对齐 → 前进接近 → 抓取 → 交互菜单。
@@ -527,7 +602,7 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 
 - G1 机器人已连接并站立
 - `unitree_sdk2py` 已安装在系统环境中
-- `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，由同事维护）
+- `armup.py` / `armdown.py` 已就位（`src/g1_yolo_nav_py/arm/` 目录下，抓取/放下完成后自动退出）
 
 **实机运行（一键启动）：**
 
@@ -562,8 +637,8 @@ ros2 launch realsense2_camera rs_launch.py \
 # 终端 3：twist_bridge
 ros2 run g1_twist_bridge_py twist_bridge
 
-# 终端 4：抓取任务
-ros2 run g1_yolo_nav_py grasp_task
+# 终端 4：抓取任务（需指定网络接口）
+ros2 run g1_yolo_nav_py grasp_task eth0
 ```
 
 **执行流程与关键日志：**
