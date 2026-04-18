@@ -229,6 +229,10 @@ class ControlPanelNode(Node):
     # ==================================================================
     def _diag_check(self):
         """启动后延迟检查订阅状态，帮助定位无法接收图像的问题。"""
+        # 只执行一次
+        if hasattr(self, '_diag_timer') and self._diag_timer is not None:
+            self._diag_timer.cancel()
+            self._diag_timer = None
         img_pub_count = self._img_sub.get_publisher_count()
         det_pub_count = self._det_sub.get_publisher_count()
         self.get_logger().info(
