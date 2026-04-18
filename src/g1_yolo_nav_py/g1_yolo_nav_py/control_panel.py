@@ -185,8 +185,7 @@ class ControlPanelNode(Node):
         self._fps_time = time.time()
         self._running = True
         self._first_image_received = False
-        self._last_img_time = 0.0       # 上次图像刷新时间
-        self._img_interval = 0.033      # 图像刷新间隔（~30Hz）
+        self._new_frame = False  # ROS2 回调标记有新帧
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -356,28 +355,28 @@ class ControlPanelNode(Node):
         # 方向控制
         self._btn_forward = tk.Button(
             btn_frame, text="前进", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.2, 0, 0),
+            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.2, 0.0, 0.0),
             **btn_style
         )
         self._btn_forward.pack(side=tk.LEFT, padx=2)
 
         self._btn_backward = tk.Button(
             btn_frame, text="后退", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(-0.2, 0, 0),
+            activebackground="#2a5ba5", command=lambda: self._manual_cmd(-0.2, 0.0, 0.0),
             **btn_style
         )
         self._btn_backward.pack(side=tk.LEFT, padx=2)
 
         self._btn_left = tk.Button(
             btn_frame, text="左转", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0, 0, 0.4),
+            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.0, 0.0, 0.4),
             **btn_style
         )
         self._btn_left.pack(side=tk.LEFT, padx=2)
 
         self._btn_right = tk.Button(
             btn_frame, text="右转", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0, 0, -0.4),
+            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.0, 0.0, -0.4),
             **btn_style
         )
         self._btn_right.pack(side=tk.LEFT, padx=2)
@@ -488,6 +487,7 @@ class ControlPanelNode(Node):
         try:
             self._raw_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             self._frame_count += 1
+            self._new_frame = True
             if not self._first_image_received:
                 self._first_image_received = True
                 self.get_logger().info(
@@ -836,9 +836,16 @@ class ControlPanelNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
+        # 状态文字始终更新
+        self._update_status_text()
+
+        # 只在有新帧时刷新图像（ROS2 回调驱动，不人为限速）
+        if not self._new_frame:
+            return
+        self._new_frame = False
+
         # 更新图像
         if self._raw_image is not None:
-            # copy() 避免修改原始图像（ROS2 回调仍在写入）
             frame_copy = self._raw_image.copy()
 
             # 原始图像
@@ -847,7 +854,7 @@ class ControlPanelNode(Node):
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
-            # 检测标注图像（frame_copy 已是 copy，_draw_detections 内部不会再 copy）
+            # 检测标注图像
             det_frame = self._draw_detections(frame_copy)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
@@ -869,9 +876,6 @@ class ControlPanelNode(Node):
                     )
             else:
                 self._det_info_label.config(text="检测: 无目标")
-
-            # 状态栏
-            self._update_status_text()
         else:
             self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
 
