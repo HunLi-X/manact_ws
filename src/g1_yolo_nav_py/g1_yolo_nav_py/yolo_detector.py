@@ -143,14 +143,15 @@ class YoloDetectorNode(Node):
                 hyp.score = float(box.conf[0])
 
                 # BoundingBox2D（归一化坐标）
+                # 注意：Pose2D 只有 x, y, theta，没有 position 嵌套
                 bbox = BoundingBox2D()
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 cx = (x1 + x2) / 2.0
                 cy = (y1 + y2) / 2.0
                 w = x2 - x1
                 h = y2 - y1
-                bbox.center.position.x = cx / orig_w
-                bbox.center.position.y = cy / orig_h
+                bbox.center.x = cx / orig_w
+                bbox.center.y = cy / orig_h
                 bbox.size_x = w / orig_w
                 bbox.size_y = h / orig_h
 
@@ -160,7 +161,7 @@ class YoloDetectorNode(Node):
 
                 self.get_logger().info(
                     f'检测到目标: {hyp.id} (置信度={hyp.score:.0%}), '
-                    f'中心=({bbox.center.position.x:.2f},{bbox.center.position.y:.2f})'
+                    f'中心=({bbox.center.x:.2f},{bbox.center.y:.2f})'
                 )
 
         self._pub.publish(det_array)
