@@ -34,7 +34,6 @@ for _p in [
 # ==================================================================
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置（保留供其他节点参考）
 from geometry_msgs.msg import Twist  # 速度指令消息
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
