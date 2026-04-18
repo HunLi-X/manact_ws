@@ -233,8 +233,8 @@ class ControlPanelNode(Node):
         if hasattr(self, '_diag_timer') and self._diag_timer is not None:
             self._diag_timer.cancel()
             self._diag_timer = None
-        img_pub_count = self._img_sub.get_publisher_count()
-        det_pub_count = self._det_sub.get_publisher_count()
+        img_pub_count = self.count_publishers(self._img_topic)
+        det_pub_count = self.count_publishers(self._det_topic)
         self.get_logger().info(
             f"[诊断] 图像话题 '{self._img_topic}': "
             f"发布者数={img_pub_count}, "
