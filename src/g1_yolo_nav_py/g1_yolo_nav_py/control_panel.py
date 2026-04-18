@@ -112,7 +112,7 @@ class ControlPanelNode(Node):
         super().__init__("g1_control_panel_node")
 
         # ---- 参数（参考 grasp_task.py）----
-        self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
+        self.declare_parameter("image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("target_class_id", "chair")
