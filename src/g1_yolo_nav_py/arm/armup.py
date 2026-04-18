@@ -249,9 +249,4 @@ if __name__ == '__main__':
     print(f"\r  进度: 100.0%  ({total:.0f}s/{ctrl.total_time:.0f}s)")
     print("  抓取完成，保持夹紧中...")
 
-    # 保持夹紧状态，等待外部终止
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n  手动终止")
+    # 抓取完成，自动退出（作为子进程调用时由 control_panel 管理）
