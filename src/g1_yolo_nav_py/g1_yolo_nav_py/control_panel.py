@@ -511,7 +511,7 @@ class ControlPanelNode(Node):
         now = time.time()
         if best_det is not None:
             bbox = best_det.bbox
-            self._target_u = bbox.center.position.x
+            self._target_u = bbox.center.x
             self._bbox_size_x = bbox.size_x
             self._bbox_size_y = bbox.size_y
             self._last_detect_time = now
@@ -533,8 +533,8 @@ class ControlPanelNode(Node):
             score = det.results[0].score
             color = _get_color(class_id)
 
-            cx = det.bbox.center.position.x * w
-            cy = det.bbox.center.position.y * h
+            cx = det.bbox.center.x * w
+            cy = det.bbox.center.y * h
             bw = det.bbox.size_x * w
             bh = det.bbox.size_y * h
             x1, y1 = int(cx - bw / 2), int(cy - bh / 2)

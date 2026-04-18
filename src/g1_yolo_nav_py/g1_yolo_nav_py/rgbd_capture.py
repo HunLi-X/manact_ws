@@ -149,8 +149,8 @@ class RGBDCaptureNode(Node):
             score = det.results[0].score
             color = _COLORS[hash(class_id) % len(_COLORS)]
 
-            cx = det.bbox.center.position.x * w
-            cy = det.bbox.center.position.y * h
+            cx = det.bbox.center.x * w
+            cy = det.bbox.center.y * h
             bw = det.bbox.size_x * w
             bh = det.bbox.size_y * h
             x1 = int(cx - bw / 2)

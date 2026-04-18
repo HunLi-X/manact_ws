@@ -148,7 +148,7 @@ class WaistAlignNode(Node):
                     best_score = det.results[0].score
                     best_det = det
         if best_det is not None:
-            self._target_u = best_det.bbox.center.position.x
+            self._target_u = best_det.bbox.center.x
             self._last_detect_time = time.time()
         else:
             self._target_u = None

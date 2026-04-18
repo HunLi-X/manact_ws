@@ -196,8 +196,8 @@ class SpatialTargetNode(Node):
             return
 
         # 取框底部中心（更贴近地面）
-        u = best_det.bbox.center.position.x
-        v = best_det.bbox.center.position.y + best_det.bbox.size_y / 2.0
+        u = best_det.bbox.center.x
+        v = best_det.bbox.center.y + best_det.bbox.size_y / 2.0
 
         # 获取深度
         depth = self._get_depth_at_pixel(

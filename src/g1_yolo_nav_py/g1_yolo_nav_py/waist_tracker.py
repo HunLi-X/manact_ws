@@ -263,8 +263,8 @@ class VisualServoNode(Node):
 
         if best_det is not None:
             bbox = best_det.bbox
-            self._target_u = bbox.center.position.x
-            self._target_v = bbox.center.position.y
+            self._target_u = bbox.center.x
+            self._target_v = bbox.center.y
             self._bbox_size_x = bbox.size_x
             self._bbox_size_y = bbox.size_y
             self._last_detect_time = time.time()
