@@ -40,7 +40,6 @@ from enum import Enum, auto
 # 2. 第三方库与 ROS2 导入
 # ==================================================================
 import tkinter as tk
-from tkinter import ttk
 import numpy as np
 import cv2
 from PIL import Image as PILImage, ImageTk
@@ -788,6 +787,19 @@ class ControlPanelNode(Node):
         if not self._running:
             return
 
+        try:
+            self._do_update()
+        except tk.TclError:
+            # 窗口已销毁，停止刷新
+            self._running = False
+            return
+
+        # 下一帧
+        if self._running:
+            self.root.after(50, self._update_loop)
+
+    def _do_update(self):
+        """实际刷新逻辑（可被 _update_loop 安全捕获异常）。"""
         # FPS 计算
         now = time.time()
         elapsed = now - self._fps_time
@@ -852,15 +864,18 @@ class ControlPanelNode(Node):
         else:
             self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
 
-        # 下一帧
-        self.root.after(50, self._update_loop)
-
     def _on_close(self):
         self._running = False
         self._state = State.IDLE
-        self._publish_stop()
-        self._loco_stop()
-        self.root.destroy()
+        try:
+            self._publish_stop()
+            self._loco_stop()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
 
     def run(self):
         self.root.mainloop()
@@ -873,14 +888,9 @@ class ControlPanelNode(Node):
 
 
 def main(args=None):
-    # 从命令行参数提取网卡名
-    _iface = ""
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        _iface = sys.argv[1]
-
-    # 在 rclpy.init() 之前初始化 unitree DDS（CycloneDDS 兼容层）
-    from g1_yolo_nav_py._dds_compat import init_unitree_dds_before_ros2
-    init_unitree_dds_before_ros2(_iface)
+    # control_panel 不使用 unitree SDK 的 ChannelFactoryInitialize，
+    # 因此不需要 DDS 兼容层（不调用 _dds_compat.py）。
+    # _dds_compat 会设置 ROS_DOMAIN_ID=1，导致 ROS2 收不到 Domain 0 的相机数据。
 
     rclpy.init(args=args)
     node = ControlPanelNode()
