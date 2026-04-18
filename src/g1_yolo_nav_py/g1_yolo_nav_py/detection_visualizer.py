@@ -236,9 +236,10 @@ class DetectionVisualizerNode(Node):
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 先用 cv2 resize（比 PIL 快很多），再转 tkinter
+        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_AREA)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         pil_img = PILImage.fromarray(rgb)
-        pil_img = pil_img.resize((cw, ch), PILImage.LANCZOS)
         return ImageTk.PhotoImage(image=pil_img)
 
     # ==================================================================

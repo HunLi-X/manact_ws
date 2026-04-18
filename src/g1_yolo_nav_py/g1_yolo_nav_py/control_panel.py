@@ -184,6 +184,8 @@ class ControlPanelNode(Node):
         self._frame_count = 0
         self._fps_time = time.time()
         self._running = True
+        self._last_display_time = 0.0  # 上次显示时间
+        self._display_interval = 0.1  # 显示刷新间隔（秒），约 10Hz
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -560,9 +562,10 @@ class ControlPanelNode(Node):
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 先用 cv2 resize（比 PIL 快很多），再转 tkinter
+        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_AREA)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         pil_img = PILImage.fromarray(rgb)
-        pil_img = pil_img.resize((cw, ch), PILImage.LANCZOS)
         return ImageTk.PhotoImage(image=pil_img)
 
     # ==================================================================
@@ -820,17 +823,23 @@ class ControlPanelNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
+        # 限制显示刷新频率（避免每帧都做图像转换，减轻主线程负担）
+        if now - self._last_display_time < self._display_interval:
+            # 只更新文字状态，不刷新图像
+            self._update_status_text()
+            return
+        self._last_display_time = now
+
         # 更新图像
         if self._raw_image is not None:
             # 原始图像
-            raw_frame = self._raw_image.copy()
-            self._raw_photo = self._cv2_to_tk(raw_frame, self._raw_canvas)
+            self._raw_photo = self._cv2_to_tk(self._raw_image, self._raw_canvas)
             if self._raw_photo:
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
             # 检测标注图像
-            det_frame = self._draw_detections(self._raw_image.copy())
+            det_frame = self._draw_detections(self._raw_image)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
                 self._det_canvas.delete("all")
@@ -853,27 +862,34 @@ class ControlPanelNode(Node):
                 self._det_info_label.config(text="检测: 无目标")
 
             # 状态栏
-            if self._state == State.IDLE:
-                self._status_label.config(text="状态: 空闲", fg="#aaaaaa")
-            elif self._state == State.SEARCHING:
-                self._status_label.config(text="状态: 搜索目标中...", fg="#ffaa00")
-            elif self._state == State.ALIGNING:
-                err = abs(self._target_u - 0.5) if self._target_u else 0
-                self._status_label.config(
-                    text=f"状态: 对齐中 err={err:.3f}", fg="#00d4ff"
-                )
-            elif self._state == State.APPROACHING:
-                bbox_max = max(self._bbox_size_x, self._bbox_size_y)
-                self._status_label.config(
-                    text=f"状态: 前进中 bbox={bbox_max:.2f}/{self._arrive_ratio:.2f}",
-                    fg="#3a7bd5"
-                )
-            elif self._state == State.GRABBING:
-                self._status_label.config(text="状态: 抓取中...", fg="#ff6666")
-            elif self._state == State.MENU:
-                self._status_label.config(text="状态: 抓取完成，可放下", fg="#00ff88")
+            self._update_status_text()
         else:
             self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
+
+    def _update_status_text(self):
+        """更新底部状态栏文字（轻量操作，可高频调用）。"""
+        if self._raw_image is None:
+            self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
+            return
+        if self._state == State.IDLE:
+            self._status_label.config(text="状态: 空闲", fg="#aaaaaa")
+        elif self._state == State.SEARCHING:
+            self._status_label.config(text="状态: 搜索目标中...", fg="#ffaa00")
+        elif self._state == State.ALIGNING:
+            err = abs(self._target_u - 0.5) if self._target_u else 0
+            self._status_label.config(
+                text=f"状态: 对齐中 err={err:.3f}", fg="#00d4ff"
+            )
+        elif self._state == State.APPROACHING:
+            bbox_max = max(self._bbox_size_x, self._bbox_size_y)
+            self._status_label.config(
+                text=f"状态: 前进中 bbox={bbox_max:.2f}/{self._arrive_ratio:.2f}",
+                fg="#3a7bd5"
+            )
+        elif self._state == State.GRABBING:
+            self._status_label.config(text="状态: 抓取中...", fg="#ff6666")
+        elif self._state == State.MENU:
+            self._status_label.config(text="状态: 抓取完成，可放下", fg="#00ff88")
 
     def _on_close(self):
         self._running = False
