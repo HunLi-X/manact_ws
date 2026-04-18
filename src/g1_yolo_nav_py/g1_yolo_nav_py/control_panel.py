@@ -163,11 +163,18 @@ class ControlPanelNode(Node):
         )
 
         # ---- ROS2 订阅 ----
-        self.create_subscription(Image, self._img_topic, self._image_cb, sensor_qos)
-        self.create_subscription(Detection2DArray, self._det_topic, self._detection_cb, sensor_qos)
+        self._img_sub = self.create_subscription(
+            Image, self._img_topic, self._image_cb, sensor_qos
+        )
+        self._det_sub = self.create_subscription(
+            Detection2DArray, self._det_topic, self._detection_cb, 10
+        )
 
         # ---- ROS2 发布 ----
         self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
+
+        # ---- 延迟诊断（1秒后检查订阅状态）----
+        self.create_timer(2.0, self._diag_check, once=True)
 
         # ---- 缓存 ----
         self._raw_image: Optional[np.ndarray] = None
@@ -216,6 +223,46 @@ class ControlPanelNode(Node):
 
     def _publish_stop(self) -> None:
         self._publish_cmd(0, 0, 0)
+
+    # ==================================================================
+    # 诊断
+    # ==================================================================
+    def _diag_check(self):
+        """启动后延迟检查订阅状态，帮助定位无法接收图像的问题。"""
+        img_pub_count = self._img_sub.get_publisher_count()
+        det_pub_count = self._det_sub.get_publisher_count()
+        self.get_logger().info(
+            f"[诊断] 图像话题 '{self._img_topic}': "
+            f"发布者数={img_pub_count}, "
+            f"QoS=BEST_EFFORT/depth=5"
+        )
+        self.get_logger().info(
+            f"[诊断] 检测话题 '{self._det_topic}': "
+            f"发布者数={det_pub_count}"
+        )
+        if img_pub_count == 0:
+            self.get_logger().warn(
+                f"[诊断] 图像话题无发布者! "
+                f"请检查: 1) 相机驱动是否启动 2) 话题名是否正确 "
+                f"(用 ros2 topic list 查看)"
+            )
+            # 尝试列出可用图像话题
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["ros2", "topic", "list"],
+                    capture_output=True, text=True, timeout=3
+                )
+                img_topics = [
+                    l for l in result.stdout.splitlines()
+                    if "image" in l.lower() or "color" in l.lower()
+                ]
+                if img_topics:
+                    self.get_logger().warn(
+                        f"[诊断] 发现可能的图像话题: {img_topics}"
+                    )
+            except Exception:
+                pass
 
     # ==================================================================
     # GUI 构建
@@ -434,8 +481,13 @@ class ControlPanelNode(Node):
         try:
             self._raw_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             self._frame_count += 1
-        except Exception:
-            pass
+            if self._frame_count == 1:
+                self.get_logger().info(
+                    f"[图像] 首次收到图像: {msg.width}x{msg.height}, "
+                    f"encoding={msg.encoding}"
+                )
+        except Exception as e:
+            self.get_logger().warn(f"[图像] 转换失败: {e}")
 
     def _detection_cb(self, msg: Detection2DArray):
         self._detections = msg
