@@ -623,11 +623,16 @@ class ControlPanelNode(Node):
             self._append_log("[提示] 请先停止当前任务")
             return
         self._append_log("[右转] 开始右转 90° ...")
-        self._publish_cmd(vz=-0.6)
-        time.sleep(2.6)  # ≈ 90° at 0.6 rad/s
-        self._publish_stop()
-        self._append_log("[右转] 右转完成")
-        self._run_armdown()
+
+        def _worker():
+            self._publish_cmd(vz=-0.6)
+            time.sleep(2.6)  # ≈ 90° at 0.6 rad/s
+            self._publish_stop()
+            self._append_log("[右转] 右转完成")
+            self._run_armdown()
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
 
     # ==================================================================
     # armup / armdown 子进程（参考 grasp_task.py）
@@ -807,6 +812,9 @@ class ControlPanelNode(Node):
             # 窗口已销毁，停止刷新
             self._running = False
             return
+        except Exception as e:
+            # 其他异常不要打断 after 链，否则 GUI 卡死
+            self.get_logger().warn(f"[GUI] 刷新异常: {e}")
 
         # 下一帧
         if self._running:
@@ -832,14 +840,17 @@ class ControlPanelNode(Node):
 
         # 更新图像
         if self._raw_image is not None:
+            # copy() 避免修改原始图像（ROS2 回调仍在写入）
+            frame_copy = self._raw_image.copy()
+
             # 原始图像
-            self._raw_photo = self._cv2_to_tk(self._raw_image, self._raw_canvas)
+            self._raw_photo = self._cv2_to_tk(frame_copy, self._raw_canvas)
             if self._raw_photo:
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
             # 检测标注图像
-            det_frame = self._draw_detections(self._raw_image)
+            det_frame = self._draw_detections(frame_copy.copy())
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
                 self._det_canvas.delete("all")
@@ -917,6 +928,17 @@ def main(args=None):
     # 因此不需要 DDS 兼容层（不调用 _dds_compat.py）。
     # _dds_compat 会设置 ROS_DOMAIN_ID=1，导致 ROS2 收不到 Domain 0 的相机数据。
 
+    """
+    控制面板主入口函数
+    
+    初始化 ROS2 节点并在后台线程中启动 ROS2 spin，然后运行 tkinter 主循环。
+    control_panel 不使用 unitree SDK 的 ChannelFactoryInitialize，
+    因此不需要 DDS 兼容层（不调用 _dds_compat.py）。
+    _dds_compat 会设置 ROS_DOMAIN_ID=1，导致 ROS2 收不到 Domain 0 的相机数据。
+    
+    Args:
+        args (list, optional): ROS2 命令行参数，默认为 None
+    """
     rclpy.init(args=args)
     node = ControlPanelNode()
 
