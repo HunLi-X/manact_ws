@@ -34,7 +34,7 @@ for _p in [
 # ==================================================================
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置（保留供其他节点参考）
 from geometry_msgs.msg import Twist  # 速度指令消息
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
@@ -70,12 +70,12 @@ class YawAlignNode(Node):
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._last_detect_time: float = 0.0
+        self._first_target_logged = False
 
         # ---- ROS2 订阅 ----
-        qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
-                         history=HistoryPolicy.KEEP_LAST, depth=5)
+        # YOLO 检测器用默认 RELIABLE 发布，这里也用 RELIABLE 确保兼容
         self.create_subscription(Detection2DArray, self._det_topic,
-                                 self._on_detection, qos)
+                                 self._on_detection, 10)
 
         # ---- ROS2 发布 ----
         self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
@@ -102,8 +102,14 @@ class YawAlignNode(Node):
                     best_score = det.results[0].score
                     best_det = det
         if best_det is not None:
+            prev_u = self._target_u
             self._target_u = best_det.bbox.center.x
             self._last_detect_time = time.time()
+            # 首次检测到目标时打印日志
+            if prev_u is None:
+                self.get_logger().info(
+                    f"[对齐] 检测到目标: u={self._target_u:.3f}, vyaw={self._compute_vyaw():.3f}"
+                )
         else:
             self._target_u = None
 
@@ -139,6 +145,11 @@ class YawAlignNode(Node):
         cmd = Twist()
         cmd.angular.z = vyaw
         self._cmd_pub.publish(cmd)
+        # 目标存在但速度为零时（容差内），发布日志确认
+        if self._target_u is not None and abs(vyaw) < 0.01:
+            self.get_logger().info(
+                f"[对齐] 目标u={self._target_u:.3f} 在容差内，无需旋转", once=True
+            )
 
     def destroy_node(self) -> None:
         self._publish_stop()
