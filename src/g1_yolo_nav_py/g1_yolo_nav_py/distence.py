@@ -130,6 +130,11 @@ class DistanceToG1(Node):
                 if cls_name != self._target_class:
                     continue
 
+                self.get_logger().info(
+                    f'检测到目标: {cls_name} (置信度={confidence:.0%}), '
+                    f'位置=({x1},{y1})-({x2},{y2})'
+                )
+
                 # 获取中心点深度
                 depth_z = self.get_depth_at_center(x1, y1, x2, y2)
                 if depth_z is None or depth_z <= 0:

@@ -158,6 +158,11 @@ class YoloDetectorNode(Node):
                 det.results.append(hyp)
                 det_array.detections.append(det)
 
+                self.get_logger().info(
+                    f'检测到目标: {hyp.id} (置信度={hyp.score:.0%}), '
+                    f'中心=({bbox.center.position.x:.2f},{bbox.center.position.y:.2f})'
+                )
+
         self._pub.publish(det_array)
 
 
