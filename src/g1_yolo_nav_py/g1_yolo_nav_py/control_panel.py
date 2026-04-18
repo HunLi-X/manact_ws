@@ -199,8 +199,7 @@ class ControlPanelNode(Node):
         # ---- tkinter GUI ----
         self._build_gui()
 
-        # ---- 状态机定时器（10Hz）----
-        self._timer = self.create_timer(0.1, self._tick)
+        # ---- 状态机 tick 合并到 GUI 主循环（tkinter 主线程），不再用 ROS2 定时器 ----
 
         # ---- GUI 刷新 ----
         self._update_loop()
@@ -749,7 +748,7 @@ class ControlPanelNode(Node):
             self._align_start = None
             self._publish_stop()
             self._append_log("[状态] SEARCHING → ALIGNING: 目标已找到")
-            self.root.after(0, self._update_state_display)
+            self._update_state_display()
             return
         self._publish_cmd(vz=self._search_speed)
 
@@ -763,7 +762,7 @@ class ControlPanelNode(Node):
             self._publish_stop()
             self._align_start = None
             self._append_log("[状态] ALIGNING → SEARCHING: 目标丢失")
-            self.root.after(0, self._update_state_display)
+            self._update_state_display()
             return
 
         error = self._target_u - 0.5
@@ -776,7 +775,7 @@ class ControlPanelNode(Node):
                 self._state = State.APPROACHING
                 self._publish_stop()
                 self._append_log("[状态] ALIGNING → APPROACHING: 目标已居中")
-                self.root.after(0, self._update_state_display)
+                self._update_state_display()
                 return
         else:
             self._align_start = None
@@ -795,7 +794,7 @@ class ControlPanelNode(Node):
             self._state = State.SEARCHING
             self._publish_stop()
             self._append_log("[状态] APPROACHING → SEARCHING: 目标丢失")
-            self.root.after(0, self._update_state_display)
+            self._update_state_display()
             return
 
         # 偏离中心 → 回对齐
@@ -804,7 +803,7 @@ class ControlPanelNode(Node):
             self._publish_stop()
             self._align_start = None
             self._append_log("[状态] APPROACHING → ALIGNING: 目标偏离中心")
-            self.root.after(0, self._update_state_display)
+            self._update_state_display()
             return
 
         # 到达判断
@@ -816,7 +815,7 @@ class ControlPanelNode(Node):
                 f"[状态] APPROACHING → GRABBING: 到达目标! bbox={bbox_max:.2f}"
             )
             self._run_grab()
-            self.root.after(0, self._update_state_display)
+            self._update_state_display()
             return
 
         # 前进（通过 cmd_vel → twist_bridge → Sport API）
@@ -826,11 +825,19 @@ class ControlPanelNode(Node):
     # GUI 主循环
     # ==================================================================
     def _update_loop(self):
-        """定时刷新 GUI（约 60Hz+）。"""
+        """定时刷新 GUI + 状态机 tick（约 60Hz+）。"""
         if not self._running:
             return
 
         try:
+            # 状态机 tick（10Hz，每 100ms 执行一次）
+            now = time.time()
+            if not hasattr(self, '_last_tick_time'):
+                self._last_tick_time = 0.0
+            if now - self._last_tick_time >= 0.1:
+                self._last_tick_time = now
+                self._tick()
+
             self._do_update()
         except tk.TclError:
             # 窗口已销毁，停止刷新
