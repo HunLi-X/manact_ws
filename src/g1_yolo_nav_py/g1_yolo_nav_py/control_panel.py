@@ -61,10 +61,14 @@ from cv_bridge import CvBridge
 # 3. 常量
 # ==================================================================
 
-# 预定义颜色表 (BGR)
+# 预定义颜色表 (BGR) — 与设计系统功能色对应
 _COLORS = [
-    (0, 255, 0), (255, 0, 0), (0, 0, 255),
-    (255, 255, 0), (0, 255, 255), (255, 0, 255),
+    (34, 211, 238),    # _ACCENT_CYAN
+    (59, 130, 246),    # _ACCENT_BLUE
+    (239, 68, 68),     # _ACCENT_RED
+    (245, 158, 11),    # _ACCENT_ORANGE
+    (34, 197, 94),     # _ACCENT_GREEN
+    (167, 139, 250),   # _ACCENT_PURPLE
 ]
 
 # arm 脚本默认目录
@@ -89,14 +93,38 @@ _STATE_LABELS = {
     State.MENU: "操作菜单",
 }
 
-# 状态对应颜色
+# ==================================================================
+# 设计系统 — 深色专业风格 (Dark Mode OLED)
+# ==================================================================
+# 主色调
+_BG_DEEP       = "#020617"   # 最深背景
+_BG_PRIMARY     = "#0F172A"   # 主背景 / 卡片背景
+_BG_SECONDARY   = "#1E293B"   # 次级背景 / 标题栏
+_BG_TERTIARY    = "#334155"   # 三级背景 / 悬停态
+_BORDER_COLOR   = "#334155"   # 边框
+_BORDER_ACTIVE  = "#475569"   # 激活边框
+
+# 功能色
+_ACCENT_CYAN    = "#22D3EE"   # 主强调色 (信息/对齐)
+_ACCENT_GREEN   = "#22C55E"   # 正向/成功/CTA
+_ACCENT_ORANGE  = "#F59E0B"   # 搜索/警告
+_ACCENT_RED     = "#EF4444"   # 危险/停止/抓取
+_ACCENT_BLUE    = "#3B82F6"   # 前进/导航
+_ACCENT_PURPLE  = "#A78BFA"   # 菜单
+
+# 文字色
+_TEXT_PRIMARY    = "#F8FAFC"   # 主文字
+_TEXT_SECONDARY  = "#94A3B8"   # 次级文字
+_TEXT_MUTED      = "#64748B"   # 弱化文字
+
+# 状态对应颜色（更新为新设计系统）
 _STATE_COLORS = {
-    State.IDLE: "#aaaaaa",
-    State.SEARCHING: "#ffaa00",
-    State.ALIGNING: "#00d4ff",
-    State.APPROACHING: "#3a7bd5",
-    State.GRABBING: "#ff6666",
-    State.MENU: "#00ff88",
+    State.IDLE:        _TEXT_SECONDARY,
+    State.SEARCHING:   _ACCENT_ORANGE,
+    State.ALIGNING:    _ACCENT_CYAN,
+    State.APPROACHING: _ACCENT_BLUE,
+    State.GRABBING:    _ACCENT_RED,
+    State.MENU:        _ACCENT_GREEN,
 }
 
 
@@ -279,183 +307,226 @@ class ControlPanelNode(Node):
     def _build_gui(self):
         self.root = tk.Tk()
         self.root.title("G1 NavGrasp 控制面板")
-        self.root.configure(bg="#1e1e1e")
-        self.root.geometry("880x620")
-        self.root.minsize(640, 480)
+        self.root.configure(bg=_BG_DEEP)
+        self.root.geometry("920x660")
+        self.root.minsize(720, 520)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # ---- 顶部标题栏 ----
-        title_frame = tk.Frame(self.root, bg="#2d2d2d", height=36)
+        title_frame = tk.Frame(self.root, bg=_BG_SECONDARY, height=42)
         title_frame.pack(fill=tk.X, padx=0, pady=0)
         title_frame.pack_propagate(False)
+
+        # 标题图标 + 文字
         tk.Label(
-            title_frame, text="G1 NavGrasp 控制面板",
-            font=("Arial", 13, "bold"), fg="#00d4ff", bg="#2d2d2d"
-        ).pack(side=tk.LEFT, padx=10, pady=5)
+            title_frame, text="  G1 NavGrasp",
+            font=("Consolas", 14, "bold"), fg=_ACCENT_CYAN, bg=_BG_SECONDARY
+        ).pack(side=tk.LEFT, padx=(12, 0), pady=8)
+
+        # 状态指示器（圆点 + 文字）
+        state_container = tk.Frame(title_frame, bg=_BG_SECONDARY)
+        state_container.pack(side=tk.LEFT, padx=(16, 0), pady=8)
+
+        self._state_dot = tk.Canvas(
+            state_container, width=10, height=10,
+            bg=_BG_SECONDARY, highlightthickness=0
+        )
+        self._state_dot.pack(side=tk.LEFT, padx=(0, 6))
+        self._state_dot_dot = self._state_dot.create_oval(1, 1, 9, 9, fill=_TEXT_SECONDARY, outline="")
 
         self._state_label = tk.Label(
-            title_frame, text="[ 空闲 ]",
-            font=("Arial", 12, "bold"), fg="#aaaaaa", bg="#2d2d2d"
+            state_container, text="空闲",
+            font=("Consolas", 11, "bold"), fg=_TEXT_SECONDARY, bg=_BG_SECONDARY
         )
-        self._state_label.pack(side=tk.LEFT, padx=10, pady=5)
+        self._state_label.pack(side=tk.LEFT)
 
+        # FPS 显示
         self._fps_label = tk.Label(
-            title_frame, text="FPS: --", font=("Consolas", 10),
-            fg="#aaaaaa", bg="#2d2d2d"
+            title_frame, text="FPS --", font=("Consolas", 10),
+            fg=_TEXT_MUTED, bg=_BG_SECONDARY
         )
-        self._fps_label.pack(side=tk.RIGHT, padx=10, pady=5)
+        self._fps_label.pack(side=tk.RIGHT, padx=12, pady=8)
 
         # ---- 图像区域 ----
-        img_frame = tk.Frame(self.root, bg="#1e1e1e")
-        img_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        img_frame = tk.Frame(self.root, bg=_BG_DEEP)
+        img_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(6, 4))
 
-        # 左侧：原始图像
-        left_frame = tk.LabelFrame(
-            img_frame, text=" 原始图像 ", font=("Arial", 10),
-            fg="#cccccc", bg="#1e1e1e", labelanchor="n"
-        )
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 2))
+        # 左侧：原始图像（卡片风格）
+        left_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
+        left_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
+
+        left_header = tk.Frame(left_card, bg=_BG_PRIMARY, height=28)
+        left_header.pack(fill=tk.X, padx=0, pady=0)
+        left_header.pack_propagate(False)
+        tk.Label(
+            left_header, text="  原始图像", font=("Consolas", 10),
+            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+        ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
+
         self._raw_canvas = tk.Canvas(
-            left_frame, width=self._disp_w, height=self._disp_h,
+            left_card, width=self._disp_w, height=self._disp_h,
             bg="#000000", highlightthickness=0
         )
-        self._raw_canvas.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self._raw_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
-        # 右侧：检测图像
-        right_frame = tk.LabelFrame(
-            img_frame, text=" 检测结果 ", font=("Arial", 10),
-            fg="#cccccc", bg="#1e1e1e", labelanchor="n"
-        )
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(2, 0))
+        # 右侧：检测图像（卡片风格）
+        right_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
+        right_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
+
+        right_header = tk.Frame(right_card, bg=_BG_PRIMARY, height=28)
+        right_header.pack(fill=tk.X, padx=0, pady=0)
+        right_header.pack_propagate(False)
+        tk.Label(
+            right_header, text="  检测结果", font=("Consolas", 10),
+            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+        ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
+
         self._det_canvas = tk.Canvas(
-            right_frame, width=self._disp_w, height=self._disp_h,
+            right_card, width=self._disp_w, height=self._disp_h,
             bg="#000000", highlightthickness=0
         )
-        self._det_canvas.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self._det_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
         # ---- 状态信息栏 ----
-        info_frame = tk.Frame(self.root, bg="#2d2d2d", height=28)
-        info_frame.pack(fill=tk.X, padx=5, pady=(0, 3))
+        info_frame = tk.Frame(self.root, bg=_BG_PRIMARY, height=30, highlightbackground=_BORDER_COLOR, highlightthickness=1)
+        info_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
         info_frame.pack_propagate(False)
         self._status_label = tk.Label(
-            info_frame, text="状态: 等待图像...",
-            font=("Consolas", 10), fg="#00ff88", bg="#2d2d2d", anchor="w"
+            info_frame, text="  等待图像...",
+            font=("Consolas", 10), fg=_TEXT_MUTED, bg=_BG_PRIMARY, anchor="w"
         )
-        self._status_label.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self._status_label.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         self._det_info_label = tk.Label(
-            info_frame, text="检测: --",
-            font=("Consolas", 10), fg="#ffaa00", bg="#2d2d2d"
+            info_frame, text="检测 --",
+            font=("Consolas", 10), fg=_ACCENT_ORANGE, bg=_BG_PRIMARY
         )
         self._det_info_label.pack(side=tk.RIGHT, padx=10)
 
         # ---- 控制按钮栏 ----
-        btn_frame = tk.Frame(self.root, bg="#1e1e1e")
-        btn_frame.pack(fill=tk.X, padx=5, pady=(0, 3))
+        btn_frame = tk.Frame(self.root, bg=_BG_DEEP)
+        btn_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
 
-        btn_style = {"font": ("Arial", 10), "width": 8, "height": 1, "bd": 0, "relief": "flat"}
+        # 通用按钮风格
+        btn_common = {"font": ("Consolas", 10), "width": 8, "height": 1, "bd": 0, "relief": "flat",
+                      "cursor": "hand2"}
 
-        # 方向控制
+        # 方向控制（蓝色系）
         self._btn_forward = tk.Button(
-            btn_frame, text="前进", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.2, 0.0, 0.0),
-            **btn_style
+            btn_frame, text="  前进", bg=_ACCENT_BLUE, fg="white",
+            activebackground="#2563EB", command=lambda: self._manual_cmd(0.2, 0.0, 0.0),
+            **btn_common
         )
         self._btn_forward.pack(side=tk.LEFT, padx=2)
 
         self._btn_backward = tk.Button(
-            btn_frame, text="后退", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(-0.2, 0.0, 0.0),
-            **btn_style
+            btn_frame, text="  后退", bg=_ACCENT_BLUE, fg="white",
+            activebackground="#2563EB", command=lambda: self._manual_cmd(-0.2, 0.0, 0.0),
+            **btn_common
         )
         self._btn_backward.pack(side=tk.LEFT, padx=2)
 
         self._btn_left = tk.Button(
-            btn_frame, text="左转", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.0, 0.0, 0.4),
-            **btn_style
+            btn_frame, text="  左转", bg=_ACCENT_BLUE, fg="white",
+            activebackground="#2563EB", command=lambda: self._manual_cmd(0.0, 0.0, 0.4),
+            **btn_common
         )
         self._btn_left.pack(side=tk.LEFT, padx=2)
 
         self._btn_right = tk.Button(
-            btn_frame, text="右转", bg="#3a7bd5", fg="white",
-            activebackground="#2a5ba5", command=lambda: self._manual_cmd(0.0, 0.0, -0.4),
-            **btn_style
+            btn_frame, text="  右转", bg=_ACCENT_BLUE, fg="white",
+            activebackground="#2563EB", command=lambda: self._manual_cmd(0.0, 0.0, -0.4),
+            **btn_common
         )
         self._btn_right.pack(side=tk.LEFT, padx=2)
 
+        # 停止按钮（红色突出）
         self._btn_stop = tk.Button(
-            btn_frame, text="停止", bg="#d9534f", fg="white",
-            activebackground="#b5352f", command=self._do_stop,
-            **btn_style
+            btn_frame, text="  停止", bg=_ACCENT_RED, fg="white",
+            activebackground="#DC2626", command=self._do_stop,
+            **btn_common
         )
         self._btn_stop.pack(side=tk.LEFT, padx=2)
 
         # 分隔线
-        tk.Frame(btn_frame, width=2, bg="#555555").pack(
-            side=tk.LEFT, fill=tk.Y, padx=6, pady=2
+        tk.Frame(btn_frame, width=2, bg=_BORDER_COLOR).pack(
+            side=tk.LEFT, fill=tk.Y, padx=8, pady=4
         )
 
         # 任务按钮
         self._btn_search = tk.Button(
-            btn_frame, text="搜索", bg="#e67e22", fg="white",
-            activebackground="#c0691e", command=self._do_start_search,
-            **btn_style
+            btn_frame, text="  搜索", bg=_ACCENT_ORANGE, fg="white",
+            activebackground="#D97706", command=self._do_start_search,
+            **btn_common
         )
         self._btn_search.pack(side=tk.LEFT, padx=2)
 
         self._btn_grab = tk.Button(
-            btn_frame, text="抓取", bg="#e74c3c", fg="white",
-            activebackground="#c0392b", command=self._do_grab,
-            **btn_style
+            btn_frame, text="  抓取", bg=_ACCENT_RED, fg="white",
+            activebackground="#DC2626", command=self._do_grab,
+            **btn_common
         )
         self._btn_grab.pack(side=tk.LEFT, padx=2)
 
         self._btn_putdown = tk.Button(
-            btn_frame, text="放下", bg="#27ae60", fg="white",
-            activebackground="#1e8449", command=self._do_put_down,
-            **btn_style
+            btn_frame, text="  放下", bg=_ACCENT_GREEN, fg="white",
+            activebackground="#16A34A", command=self._do_put_down,
+            **btn_common
         )
         self._btn_putdown.pack(side=tk.LEFT, padx=2)
 
         self._btn_turn_putdown = tk.Button(
-            btn_frame, text="右转放下", bg="#27ae60", fg="white",
-            activebackground="#1e8449", command=self._do_turn_and_put_down,
-            **btn_style
+            btn_frame, text="右转放下", bg=_ACCENT_GREEN, fg="white",
+            activebackground="#16A34A", command=self._do_turn_and_put_down,
+            **btn_common
         )
         self._btn_turn_putdown.pack(side=tk.LEFT, padx=2)
 
         # 速度控制
-        speed_frame = tk.Frame(btn_frame, bg="#1e1e1e")
-        speed_frame.pack(side=tk.RIGHT, padx=5)
-        tk.Label(speed_frame, text="速度:", font=("Arial", 9),
-                 fg="#aaaaaa", bg="#1e1e1e").pack(side=tk.LEFT)
+        speed_frame = tk.Frame(btn_frame, bg=_BG_DEEP)
+        speed_frame.pack(side=tk.RIGHT, padx=6)
+        tk.Label(speed_frame, text="速度", font=("Consolas", 9),
+                 fg=_TEXT_MUTED, bg=_BG_DEEP).pack(side=tk.LEFT, padx=(0, 4))
         self._speed_var = tk.DoubleVar(value=0.2)
         speed_scale = tk.Scale(
             speed_frame, from_=0.05, to=0.5, resolution=0.05,
             orient=tk.HORIZONTAL, variable=self._speed_var,
-            length=80, bg="#1e1e1e", fg="#cccccc",
-            highlightthickness=0, troughcolor="#3a3a3a"
+            length=90, bg=_BG_DEEP, fg=_TEXT_SECONDARY,
+            highlightthickness=0, troughcolor=_BG_TERTIARY,
+            activebackground=_ACCENT_CYAN, sliderrelief="flat"
         )
         speed_scale.pack(side=tk.LEFT)
 
         # ---- 日志栏 ----
-        log_frame = tk.LabelFrame(
-            self.root, text=" 日志 ", font=("Arial", 9),
-            fg="#888888", bg="#1e1e1e", labelanchor="nw", height=80
-        )
-        log_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
-        log_frame.pack_propagate(False)
+        log_card = tk.Frame(self.root, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
+        log_card.pack(fill=tk.X, padx=8, pady=(0, 6))
+
+        log_header = tk.Frame(log_card, bg=_BG_PRIMARY, height=24)
+        log_header.pack(fill=tk.X, padx=0, pady=0)
+        log_header.pack_propagate(False)
+        tk.Label(
+            log_header, text="  日志", font=("Consolas", 9),
+            fg=_TEXT_MUTED, bg=_BG_PRIMARY, anchor="w"
+        ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
+
+        log_inner = tk.Frame(log_card, bg=_BG_PRIMARY)
+        log_inner.pack(fill=tk.BOTH, expand=False, padx=0, pady=0)
+        log_inner.pack_propagate(False)
+        log_inner.configure(height=72)
 
         self._log_textbox = tk.Text(
-            log_frame, height=4, bg="#111111", fg="#00ff88",
+            log_inner, height=4, bg=_BG_DEEP, fg=_ACCENT_GREEN,
             font=("Consolas", 9), bd=0, wrap=tk.WORD,
-            state=tk.DISABLED, insertbackground="#00ff88"
+            state=tk.DISABLED, insertbackground=_ACCENT_GREEN,
+            selectbackground=_BG_TERTIARY, selectforeground=_TEXT_PRIMARY,
+            padx=8, pady=4
         )
-        scrollbar = tk.Scrollbar(log_frame, command=self._log_textbox.yview)
+        scrollbar = tk.Scrollbar(log_inner, command=self._log_textbox.yview,
+                                 bg=_BG_PRIMARY, troughcolor=_BG_DEEP,
+                                 activebackground=_BG_TERTIARY)
         self._log_textbox.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self._log_textbox.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 0))
+        self._log_textbox.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
     # ==================================================================
     # GUI 日志
@@ -480,8 +551,10 @@ class ControlPanelNode(Node):
     def _update_state_display(self):
         """更新顶部状态显示。"""
         label = _STATE_LABELS.get(self._state, "未知")
-        color = _STATE_COLORS.get(self._state, "#aaaaaa")
-        self._state_label.config(text=f"[ {label} ]", fg=color)
+        color = _STATE_COLORS.get(self._state, _TEXT_SECONDARY)
+        self._state_label.config(text=label, fg=color)
+        # 更新状态指示圆点颜色
+        self._state_dot.itemconfigure(self._state_dot_dot, fill=color)
 
     # ==================================================================
     # ROS2 回调
@@ -926,27 +999,27 @@ class ControlPanelNode(Node):
     def _update_status_text(self):
         """更新底部状态栏文字（轻量操作，可高频调用）。"""
         if self._raw_image is None:
-            self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
+            self._status_label.config(text="  等待图像...", fg=_TEXT_MUTED)
             return
         if self._state == State.IDLE:
-            self._status_label.config(text="状态: 空闲", fg="#aaaaaa")
+            self._status_label.config(text="  空闲", fg=_TEXT_MUTED)
         elif self._state == State.SEARCHING:
-            self._status_label.config(text="状态: 搜索目标中...", fg="#ffaa00")
+            self._status_label.config(text="  搜索目标中...", fg=_ACCENT_ORANGE)
         elif self._state == State.ALIGNING:
             err = abs(self._target_u - 0.5) if self._target_u else 0
             self._status_label.config(
-                text=f"状态: 对齐中 err={err:.3f}", fg="#00d4ff"
+                text=f"  对齐中 err={err:.3f}", fg=_ACCENT_CYAN
             )
         elif self._state == State.APPROACHING:
             bbox_max = max(self._bbox_size_x, self._bbox_size_y)
             self._status_label.config(
-                text=f"状态: 前进中 bbox={bbox_max:.2f}/{self._arrive_ratio:.2f}",
-                fg="#3a7bd5"
+                text=f"  前进中 bbox={bbox_max:.2f}/{self._arrive_ratio:.2f}",
+                fg=_ACCENT_BLUE
             )
         elif self._state == State.GRABBING:
-            self._status_label.config(text="状态: 抓取中...", fg="#ff6666")
+            self._status_label.config(text="  抓取中...", fg=_ACCENT_RED)
         elif self._state == State.MENU:
-            self._status_label.config(text="状态: 抓取完成，可放下", fg="#00ff88")
+            self._status_label.config(text="  抓取完成，可放下", fg=_ACCENT_GREEN)
 
     def _on_close(self):
         self._running = False
