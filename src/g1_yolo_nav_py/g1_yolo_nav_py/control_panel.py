@@ -63,12 +63,12 @@ from cv_bridge import CvBridge
 
 # 预定义颜色表 (BGR) — 与设计系统功能色对应
 _COLORS = [
-    (34, 211, 238),    # _ACCENT_CYAN
-    (59, 130, 246),    # _ACCENT_BLUE
-    (239, 68, 68),     # _ACCENT_RED
-    (245, 158, 11),    # _ACCENT_ORANGE
-    (34, 197, 94),     # _ACCENT_GREEN
-    (167, 139, 250),   # _ACCENT_PURPLE
+    (178, 145, 8),     # _ACCENT_CYAN  Teal-600 BGR
+    (246, 130, 59),    # _ACCENT_BLUE  Blue-500 BGR
+    (68, 68, 239),     # _ACCENT_RED   Red-500 BGR
+    (11, 158, 245),    # _ACCENT_ORANGE Amber-500 BGR
+    (129, 182, 16),    # _ACCENT_GREEN Emerald-500 BGR
+    (246, 92, 139),    # _ACCENT_PURPLE Violet-500 BGR
 ]
 
 # arm 脚本默认目录
@@ -94,28 +94,28 @@ _STATE_LABELS = {
 }
 
 # ==================================================================
-# 设计系统 — 深色专业风格 (Dark Mode OLED)
+# 设计系统 — 现代清新浅色 (Modern Light Teal)
 # ==================================================================
 # 主色调
-_BG_DEEP       = "#020617"   # 最深背景
-_BG_PRIMARY     = "#0F172A"   # 主背景 / 卡片背景
-_BG_SECONDARY   = "#1E293B"   # 次级背景 / 标题栏
-_BG_TERTIARY    = "#334155"   # 三级背景 / 悬停态
-_BORDER_COLOR   = "#334155"   # 边框
-_BORDER_ACTIVE  = "#475569"   # 激活边框
+_BG_DEEP       = "#F0FDFA"   # 窗口底色 (Teal-50)
+_BG_PRIMARY     = "#FFFFFF"   # 卡片背景 (White)
+_BG_SECONDARY   = "#0891B2"   # 标题栏 (Teal-600 渐变起点)
+_BG_TERTIARY    = "#E0F2FE"   # 次级区域 (Sky-100)
+_BORDER_COLOR   = "#D1E7E4"   # 边框 (Teal-muted)
+_BORDER_ACTIVE  = "#0891B2"   # 激活边框 (Teal-600)
 
 # 功能色
-_ACCENT_CYAN    = "#22D3EE"   # 主强调色 (信息/对齐)
-_ACCENT_GREEN   = "#22C55E"   # 正向/成功/CTA
-_ACCENT_ORANGE  = "#F59E0B"   # 搜索/警告
-_ACCENT_RED     = "#EF4444"   # 危险/停止/抓取
-_ACCENT_BLUE    = "#3B82F6"   # 前进/导航
-_ACCENT_PURPLE  = "#A78BFA"   # 菜单
+_ACCENT_CYAN    = "#0891B2"   # 主强调色 (Teal-600 信息/对齐)
+_ACCENT_GREEN   = "#10B981"   # 正向/成功/CTA (Emerald-500)
+_ACCENT_ORANGE  = "#F59E0B"   # 搜索/警告 (Amber-500)
+_ACCENT_RED     = "#EF4444"   # 危险/停止/抓取 (Red-500)
+_ACCENT_BLUE    = "#3B82F6"   # 前进/导航 (Blue-500)
+_ACCENT_PURPLE  = "#8B5CF6"   # 菜单 (Violet-500)
 
 # 文字色
-_TEXT_PRIMARY    = "#F8FAFC"   # 主文字
-_TEXT_SECONDARY  = "#94A3B8"   # 次级文字
-_TEXT_MUTED      = "#64748B"   # 弱化文字
+_TEXT_PRIMARY    = "#134E4A"   # 主文字 (Teal-900 对比 8.8:1)
+_TEXT_SECONDARY  = "#5F7A78"   # 次级文字
+_TEXT_MUTED      = "#94A3B8"   # 弱化文字 (Slate-400)
 
 # 状态对应颜色（更新为新设计系统）
 _STATE_COLORS = {
@@ -320,7 +320,7 @@ class ControlPanelNode(Node):
         # 标题图标 + 文字
         tk.Label(
             title_frame, text="  G1 NavGrasp",
-            font=("Consolas", 14, "bold"), fg=_ACCENT_CYAN, bg=_BG_SECONDARY
+            font=("Consolas", 14, "bold"), fg="white", bg=_BG_SECONDARY
         ).pack(side=tk.LEFT, padx=(12, 0), pady=8)
 
         # 状态指示器（圆点 + 文字）
@@ -336,14 +336,14 @@ class ControlPanelNode(Node):
 
         self._state_label = tk.Label(
             state_container, text="空闲",
-            font=("Consolas", 11, "bold"), fg=_TEXT_SECONDARY, bg=_BG_SECONDARY
+            font=("Consolas", 11, "bold"), fg="white", bg=_BG_SECONDARY
         )
         self._state_label.pack(side=tk.LEFT)
 
         # FPS 显示
         self._fps_label = tk.Label(
             title_frame, text="FPS --", font=("Consolas", 10),
-            fg=_TEXT_MUTED, bg=_BG_SECONDARY
+            fg="#CCEDF5", bg=_BG_SECONDARY
         )
         self._fps_label.pack(side=tk.RIGHT, padx=12, pady=8)
 
@@ -355,12 +355,12 @@ class ControlPanelNode(Node):
         left_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         left_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
 
-        left_header = tk.Frame(left_card, bg=_BG_PRIMARY, height=28)
+        left_header = tk.Frame(left_card, bg=_BG_TERTIARY, height=28)
         left_header.pack(fill=tk.X, padx=0, pady=0)
         left_header.pack_propagate(False)
         tk.Label(
             left_header, text="  原始图像", font=("Consolas", 10),
-            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+            fg=_TEXT_PRIMARY, bg=_BG_TERTIARY, anchor="w"
         ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         self._raw_canvas = tk.Canvas(
@@ -373,12 +373,12 @@ class ControlPanelNode(Node):
         right_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         right_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
 
-        right_header = tk.Frame(right_card, bg=_BG_PRIMARY, height=28)
+        right_header = tk.Frame(right_card, bg=_BG_TERTIARY, height=28)
         right_header.pack(fill=tk.X, padx=0, pady=0)
         right_header.pack_propagate(False)
         tk.Label(
             right_header, text="  检测结果", font=("Consolas", 10),
-            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+            fg=_TEXT_PRIMARY, bg=_BG_TERTIARY, anchor="w"
         ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         self._det_canvas = tk.Canvas(
@@ -393,7 +393,7 @@ class ControlPanelNode(Node):
         info_frame.pack_propagate(False)
         self._status_label = tk.Label(
             info_frame, text="  等待图像...",
-            font=("Consolas", 10), fg=_TEXT_MUTED, bg=_BG_PRIMARY, anchor="w"
+            font=("Consolas", 10), fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
         )
         self._status_label.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
@@ -470,14 +470,14 @@ class ControlPanelNode(Node):
 
         self._btn_putdown = tk.Button(
             btn_frame, text="  放下", bg=_ACCENT_GREEN, fg="white",
-            activebackground="#16A34A", command=self._do_put_down,
+            activebackground="#059669", command=self._do_put_down,
             **btn_common
         )
         self._btn_putdown.pack(side=tk.LEFT, padx=2)
 
         self._btn_turn_putdown = tk.Button(
             btn_frame, text="右转放下", bg=_ACCENT_GREEN, fg="white",
-            activebackground="#16A34A", command=self._do_turn_and_put_down,
+            activebackground="#059669", command=self._do_turn_and_put_down,
             **btn_common
         )
         self._btn_turn_putdown.pack(side=tk.LEFT, padx=2)
@@ -491,7 +491,7 @@ class ControlPanelNode(Node):
         speed_scale = tk.Scale(
             speed_frame, from_=0.05, to=0.5, resolution=0.05,
             orient=tk.HORIZONTAL, variable=self._speed_var,
-            length=90, bg=_BG_DEEP, fg=_TEXT_SECONDARY,
+            length=90, bg=_BG_DEEP, fg=_TEXT_PRIMARY,
             highlightthickness=0, troughcolor=_BG_TERTIARY,
             activebackground=_ACCENT_CYAN, sliderrelief="flat"
         )
@@ -501,12 +501,12 @@ class ControlPanelNode(Node):
         log_card = tk.Frame(self.root, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         log_card.pack(fill=tk.X, padx=8, pady=(0, 6))
 
-        log_header = tk.Frame(log_card, bg=_BG_PRIMARY, height=24)
+        log_header = tk.Frame(log_card, bg=_BG_TERTIARY, height=24)
         log_header.pack(fill=tk.X, padx=0, pady=0)
         log_header.pack_propagate(False)
         tk.Label(
             log_header, text="  日志", font=("Consolas", 9),
-            fg=_TEXT_MUTED, bg=_BG_PRIMARY, anchor="w"
+            fg=_TEXT_PRIMARY, bg=_BG_TERTIARY, anchor="w"
         ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         log_inner = tk.Frame(log_card, bg=_BG_PRIMARY)
@@ -515,15 +515,15 @@ class ControlPanelNode(Node):
         log_inner.configure(height=72)
 
         self._log_textbox = tk.Text(
-            log_inner, height=4, bg=_BG_DEEP, fg=_ACCENT_GREEN,
+            log_inner, height=4, bg=_BG_TERTIARY, fg="#059669",
             font=("Consolas", 9), bd=0, wrap=tk.WORD,
             state=tk.DISABLED, insertbackground=_ACCENT_GREEN,
-            selectbackground=_BG_TERTIARY, selectforeground=_TEXT_PRIMARY,
+            selectbackground=_BG_SECONDARY, selectforeground="white",
             padx=8, pady=4
         )
         scrollbar = tk.Scrollbar(log_inner, command=self._log_textbox.yview,
-                                 bg=_BG_PRIMARY, troughcolor=_BG_DEEP,
-                                 activebackground=_BG_TERTIARY)
+                                 bg=_BG_PRIMARY, troughcolor=_BG_TERTIARY,
+                                 activebackground=_BORDER_ACTIVE)
         self._log_textbox.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 0))
         self._log_textbox.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
