@@ -42,6 +42,7 @@ from unitree_api.msg import Request  # Sport API 请求消息
 # ==================================================================
 # 3. Sport API 常量
 # ==================================================================
+API_BALANCESTAND = 1002
 API_MOVE = 1008
 API_STOPMOVE = 1003
 
@@ -89,8 +90,9 @@ class YawAlignNode(Node):
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
 
-        # ---- 停转发布器（确保启动时为零速）----
-        self._publish_stop()
+        # ---- 启动时发送 BALANCESTAND（机器人必须处于站立平衡状态才能接受 MOVE 指令）----
+        self._publish_balancestand()
+        self._first_move_logged = False
 
         self.get_logger().info(
             f"偏航对齐节点就绪（Sport API）: 目标={self._target_class}, "
@@ -147,6 +149,10 @@ class YawAlignNode(Node):
         req.parameter = parameter
         self._sport_pub.publish(req)
 
+    def _publish_balancestand(self) -> None:
+        """发送 BALANCESTAND 指令，让机器人进入站立平衡状态。"""
+        self._publish_request(API_BALANCESTAND)
+
     def _publish_stop(self) -> None:
         """发送 STOPMOVE 指令停止旋转。"""
         self._publish_request(API_STOPMOVE)
@@ -156,8 +162,14 @@ class YawAlignNode(Node):
         vyaw = self._compute_vyaw()
         if abs(vyaw) > 1e-6:
             self._publish_request(API_MOVE, json.dumps({"x": 0.0, "y": 0.0, "z": vyaw}))
+            if not self._first_move_logged:
+                self.get_logger().info(
+                    f"[对齐] 发送 MOVE 指令: z={vyaw:.3f} rad/s"
+                )
+                self._first_move_logged = True
         else:
-            self._publish_request(API_STOPMOVE)
+            # 目标未检测到或已居中 → 发送 BALANCESTAND 保持站立状态
+            self._publish_balancestand()
 
         # 周期性日志：每 _log_interval 个 tick 打印一次状态
         self._tick_count += 1
@@ -170,8 +182,8 @@ class YawAlignNode(Node):
             )
 
     def destroy_node(self) -> None:
-        self._publish_stop()
-        self.get_logger().info("偏航对齐节点停止，已发送零速指令")
+        self._publish_balancestand()
+        self.get_logger().info("偏航对齐节点停止，已发送 BALANCESTAND 指令")
         super().destroy_node()
 
 
