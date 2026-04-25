@@ -42,34 +42,34 @@ from cv_bridge import CvBridge
 
 # 预定义颜色表（BGR）
 _COLORS = [
-    (34, 211, 238),    # _ACCENT_CYAN
-    (59, 130, 246),    # _ACCENT_BLUE
-    (239, 68, 68),     # _ACCENT_RED
-    (245, 158, 11),    # _ACCENT_ORANGE
-    (34, 197, 94),     # _ACCENT_GREEN
-    (167, 139, 250),   # _ACCENT_PURPLE
-    (251, 146, 60),    # Orange-400
-    (56, 189, 248),    # Sky-400
-    (232, 121, 249),   # Fuchsia-400
+    (178, 145, 8),     # Teal-600 BGR
+    (246, 130, 59),    # Blue-500 BGR
+    (68, 68, 239),     # Red-500 BGR
+    (11, 158, 245),    # Amber-500 BGR
+    (129, 182, 16),    # Emerald-500 BGR
+    (246, 92, 139),    # Violet-500 BGR
+    (60, 146, 251),    # Orange-400 BGR
+    (248, 189, 56),    # Sky-400 BGR
+    (249, 121, 232),   # Fuchsia-400 BGR
 ]
 
 
 # ==================================================================
-# 设计系统 — 深色专业风格 (Dark Mode OLED)
+# 设计系统 — 现代清新浅色 (Modern Light Teal)
 # ==================================================================
-_BG_DEEP       = "#020617"
-_BG_PRIMARY     = "#0F172A"
-_BG_SECONDARY   = "#1E293B"
-_BG_TERTIARY    = "#334155"
-_BORDER_COLOR   = "#334155"
-_ACCENT_CYAN    = "#22D3EE"
-_ACCENT_GREEN   = "#22C55E"
+_BG_DEEP       = "#F0FDFA"
+_BG_PRIMARY     = "#FFFFFF"
+_BG_SECONDARY   = "#0891B2"
+_BG_TERTIARY    = "#E0F2FE"
+_BORDER_COLOR   = "#D1E7E4"
+_ACCENT_CYAN    = "#0891B2"
+_ACCENT_GREEN   = "#10B981"
 _ACCENT_ORANGE  = "#F59E0B"
 _ACCENT_RED     = "#EF4444"
 _ACCENT_BLUE    = "#3B82F6"
-_TEXT_PRIMARY    = "#F8FAFC"
-_TEXT_SECONDARY  = "#94A3B8"
-_TEXT_MUTED      = "#64748B"
+_TEXT_PRIMARY    = "#134E4A"
+_TEXT_SECONDARY  = "#5F7A78"
+_TEXT_MUTED      = "#94A3B8"
 
 
 def _get_color(class_id: str) -> tuple:
@@ -153,18 +153,18 @@ class DetectionVisualizerNode(Node):
         title_frame.pack_propagate(False)
         tk.Label(
             title_frame, text="  G1 YOLO 检测可视化",
-            font=("Consolas", 13, "bold"), fg=_ACCENT_CYAN, bg=_BG_SECONDARY
+            font=("Consolas", 13, "bold"), fg="white", bg=_BG_SECONDARY
         ).pack(side=tk.LEFT, padx=(12, 0), pady=8)
 
         self._fps_label = tk.Label(
             title_frame, text="FPS --", font=("Consolas", 10),
-            fg=_TEXT_MUTED, bg=_BG_SECONDARY
+            fg="#CCEDF5", bg=_BG_SECONDARY
         )
         self._fps_label.pack(side=tk.RIGHT, padx=12, pady=8)
 
         self._det_label = tk.Label(
             title_frame, text="检测 --", font=("Consolas", 10),
-            fg=_ACCENT_ORANGE, bg=_BG_SECONDARY
+            fg="#CCEDF5", bg=_BG_SECONDARY
         )
         self._det_label.pack(side=tk.RIGHT, padx=10, pady=8)
 
@@ -176,12 +176,12 @@ class DetectionVisualizerNode(Node):
         left_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         left_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
 
-        left_header = tk.Frame(left_card, bg=_BG_PRIMARY, height=28)
+        left_header = tk.Frame(left_card, bg=_BG_TERTIARY, height=28)
         left_header.pack(fill=tk.X, padx=0, pady=0)
         left_header.pack_propagate(False)
         tk.Label(
             left_header, text="  原始图像", font=("Consolas", 10),
-            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+            fg=_TEXT_PRIMARY, bg=_BG_TERTIARY, anchor="w"
         ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         self._raw_canvas = tk.Canvas(
@@ -194,12 +194,12 @@ class DetectionVisualizerNode(Node):
         right_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         right_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
 
-        right_header = tk.Frame(right_card, bg=_BG_PRIMARY, height=28)
+        right_header = tk.Frame(right_card, bg=_BG_TERTIARY, height=28)
         right_header.pack(fill=tk.X, padx=0, pady=0)
         right_header.pack_propagate(False)
         tk.Label(
             right_header, text="  检测结果", font=("Consolas", 10),
-            fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
+            fg=_TEXT_PRIMARY, bg=_BG_TERTIARY, anchor="w"
         ).pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
         self._det_canvas = tk.Canvas(
@@ -214,7 +214,7 @@ class DetectionVisualizerNode(Node):
         status_frame.pack_propagate(False)
         self._status_label = tk.Label(
             status_frame, text="  等待图像...",
-            font=("Consolas", 9), fg=_TEXT_MUTED, bg=_BG_PRIMARY, anchor="w"
+            font=("Consolas", 9), fg=_TEXT_SECONDARY, bg=_BG_PRIMARY, anchor="w"
         )
         self._status_label.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
@@ -366,7 +366,7 @@ class DetectionVisualizerNode(Node):
 
             self._status_label.config(
                 text=f"  已发布 {self._pub_count} 帧 | {self._cv_image.shape[1]}x{self._cv_image.shape[0]}",
-                fg=_ACCENT_GREEN
+                fg=_ACCENT_CYAN
             )
         else:
             self._status_label.config(text="  等待图像...", fg=_TEXT_MUTED)
