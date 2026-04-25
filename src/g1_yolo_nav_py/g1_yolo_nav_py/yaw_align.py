@@ -60,7 +60,7 @@ class YawAlignNode(Node):
         self.declare_parameter("yaw_kp", 2.0)
         self.declare_parameter("max_yaw_speed", 0.6)
         self.declare_parameter("control_rate", 10.0)
-        self.declare_parameter("lost_timeout", 1.0)
+        self.declare_parameter("lost_timeout", 5.0)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -75,7 +75,8 @@ class YawAlignNode(Node):
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._last_detect_time: float = 0.0
-        self._first_target_logged = False
+        self._tick_count: int = 0
+        self._log_interval: int = 50  # 每 50 个 tick（~5s）打印一次状态
 
         # ---- ROS2 订阅 ----
         # YOLO 检测器用默认 RELIABLE 发布，这里也用 RELIABLE 确保兼容
@@ -84,7 +85,6 @@ class YawAlignNode(Node):
 
         # ---- Sport API 发布 ----
         self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
-        self._sport_req = Request()
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
@@ -94,7 +94,8 @@ class YawAlignNode(Node):
 
         self.get_logger().info(
             f"偏航对齐节点就绪（Sport API）: 目标={self._target_class}, "
-            f"kp={self._kp}, 容差={self._center_tol}"
+            f"kp={self._kp}, 容差={self._center_tol}, "
+            f"lost_timeout={self._lost_timeout}"
         )
 
     def _on_detection(self, msg: Detection2DArray) -> None:
@@ -115,7 +116,6 @@ class YawAlignNode(Node):
                 self.get_logger().info(
                     f"[对齐] 检测到目标: u={self._target_u:.3f}, vyaw={self._compute_vyaw():.3f}"
                 )
-                self._first_target_logged = True
         else:
             self._target_u = None
 
@@ -140,27 +140,33 @@ class YawAlignNode(Node):
 
         return vyaw
 
+    def _publish_request(self, api_id: int, parameter: str = '') -> None:
+        """创建新 Request 并发布（每次 publish 必须创建新对象，避免 DDS 缓冲区复用问题）。"""
+        req = Request()
+        req.header.identity.api_id = api_id
+        req.parameter = parameter
+        self._sport_pub.publish(req)
+
     def _publish_stop(self) -> None:
         """发送 STOPMOVE 指令停止旋转。"""
-        self._sport_req.header.identity.api_id = API_STOPMOVE
-        self._sport_req.parameter = ''
-        self._sport_pub.publish(self._sport_req)
+        self._publish_request(API_STOPMOVE)
 
     def _tick(self) -> None:
         """定时回调 — 计算并通过 Sport API 发布旋转指令。"""
         vyaw = self._compute_vyaw()
         if abs(vyaw) > 1e-6:
-            self._sport_req.header.identity.api_id = API_MOVE
-            self._sport_req.parameter = json.dumps({"x": 0.0, "y": 0.0, "z": vyaw})
+            self._publish_request(API_MOVE, json.dumps({"x": 0.0, "y": 0.0, "z": vyaw}))
         else:
-            self._sport_req.header.identity.api_id = API_STOPMOVE
-            self._sport_req.parameter = ''
-        self._sport_pub.publish(self._sport_req)
-        # 首次 tick 且有目标时，打印一次状态确认
-        if self._first_target_logged and hasattr(self, '_tick_logged') is False:
-            self._tick_logged = True
+            self._publish_request(API_STOPMOVE)
+
+        # 周期性日志：每 _log_interval 个 tick 打印一次状态
+        self._tick_count += 1
+        if self._tick_count % self._log_interval == 0:
+            target_lost = (self._target_u is None
+                           or (time.time() - self._last_detect_time > self._lost_timeout))
             self.get_logger().info(
-                f"[对齐] tick 正常运行: target_u={self._target_u}, vyaw={vyaw:.3f}"
+                f"[对齐] 状态: u={self._target_u if self._target_u is not None else 'N/A'}, "
+                f"vyaw={vyaw:.3f}, lost={target_lost}"
             )
 
     def destroy_node(self) -> None:
