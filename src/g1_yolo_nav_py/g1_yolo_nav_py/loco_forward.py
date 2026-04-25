@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-前进控制节点 — 检测到目标对齐后，通过 Loco API 控制机器人前进
+前进控制节点 — 检测到目标对齐后，通过 Loco API 控制机器人前进。
 
-控制方式：
-    参考 ctr_keyboard 的工作方式：
-    1. 启动时通过 SET_FSM_ID 做状态机切换（DAMP → STAND_UP）
-    2. 运动控制通过 SET_VELOCITY (7105)，参数格式 {"velocity": [vx,vy,vyaw], "duration": ...}
+运动控制通过 SportClient 统一封装。
+启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
 
 状态机：
     IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
 
 运行：
     ros2 run g1_yolo_nav_py loco_forward
+    ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
 """
 
 # ==================================================================
 # 1. 标准库导入
 # ==================================================================
-import json        # Sport API 参数序列化
-import time        # 计时与延时
-import threading   # 状态机切换线程
+import time  # 计时
 from typing import Optional  # 类型注解
 
 # ==================================================================
@@ -30,23 +27,11 @@ import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
-from unitree_api.msg import Request  # Sport API 请求消息
 
 # ==================================================================
-# 3. Loco API 常量（参考 ctrl_keyboard/auto_ctrl.py）
+# 3. 本项目导入
 # ==================================================================
-API_SET_FSM_ID = 7101
-API_SET_BALANCE_MODE = 7102
-API_SET_VELOCITY = 7105
-
-# FSM 状态 ID
-FSM_DAMP = 1
-FSM_SIT = 3
-FSM_STAND_UP = 4
-FSM_WALK_RUN = 801
-
-# 平衡模式
-BALANCE_CONTINUOUS_GAIT = 1
+from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
 
 
 class LocoForwardNode(Node):
@@ -94,7 +79,6 @@ class LocoForwardNode(Node):
         self._moving: bool = False
         self._align_start: Optional[float] = None
         self._last_forward_time: float = 0.0
-        self._ready: bool = False  # 状态机就绪标志
 
         # ---- ROS2 订阅 ----
         qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -102,96 +86,23 @@ class LocoForwardNode(Node):
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, qos)
 
-        # ---- Loco API 发布 ----
-        self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
+        # ---- 运动控制客户端 ----
+        self._sport = SportClient(self)
 
-        # ---- 启动状态机切换 ----
+        # ---- FSM 初始化 ----
         if self._auto_stand:
-            self._do_fsm_init()
+            self._sport.init_fsm(auto_walk_run=self._auto_walk_run)
         else:
-            self._ready = True
+            self._sport._ready = True
             self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
 
         self.get_logger().info(
-            f"Loco 前进节点就绪（Loco API）: 速度={self._speed}m/s, "
-            f"到达条件={self._arrive_ratio}, auto_stand={self._auto_stand}, "
-            f"auto_walk_run={self._auto_walk_run}"
+            f"Loco 前进节点就绪: 速度={self._speed}m/s, "
+            f"到达条件={self._arrive_ratio}, auto_stand={self._auto_stand}"
         )
-
-    # ==================================================================
-    #  状态机切换
-    # ==================================================================
-    def _do_fsm_init(self) -> None:
-        """执行完整状态机初始化：DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT。
-
-        参考 ctrl_keyboard/auto_ctrl.py 的自动行走流程。
-        """
-        def _init_thread():
-            self.get_logger().info("[状态机] 切换到 DAMP 模式...")
-            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_DAMP}))
-            time.sleep(2)
-
-            self.get_logger().info("[状态机] 切换到 STAND_UP 模式...")
-            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_STAND_UP}))
-            time.sleep(3)
-
-            if self._auto_walk_run:
-                self.get_logger().info("[状态机] 切换到 WALK_RUN 走跑模式...")
-                self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_WALK_RUN}))
-                time.sleep(1)
-
-                self.get_logger().info("[状态机] 开启连续步态 CONTINUOUS_GAIT...")
-                self._publish_request(API_SET_BALANCE_MODE, json.dumps({"data": BALANCE_CONTINUOUS_GAIT}))
-                time.sleep(1)
-
-            self._ready = True
-            self.get_logger().info("[状态机] 初始化完成，就绪")
-
-        t = threading.Thread(target=_init_thread, daemon=True)
-        t.start()
-
-    def _publish_request(self, api_id: int, parameter: str = '') -> None:
-        """创建新 Request 并发布。"""
-        req = Request()
-        req.header.identity.api_id = api_id
-        req.parameter = parameter
-        self._sport_pub.publish(req)
-
-    def _start_move(self) -> None:
-        """开始前进。"""
-        if self._moving:
-            return
-        self._publish_request(API_SET_VELOCITY, json.dumps({
-            "velocity": [self._speed, 0.0, 0.0],
-            "duration": self._vel_duration,
-        }))
-        self._moving = True
-        self._last_forward_time = time.time()
-        self.get_logger().info(f"开始前进: vx={self._speed} m/s")
-
-    def _continue_move(self) -> None:
-        """持续前进（每秒发送一次 SET_VELOCITY）。"""
-        now = time.time()
-        if now - self._last_forward_time >= 1.0:
-            self._publish_request(API_SET_VELOCITY, json.dumps({
-                "velocity": [self._speed, 0.0, 0.0],
-                "duration": self._vel_duration,
-            }))
-            self._last_forward_time = now
-
-    def _stop_move(self) -> None:
-        """停止前进。"""
-        if not self._moving:
-            return
-        self._publish_request(API_SET_VELOCITY, json.dumps({
-            "velocity": [0.0, 0.0, 0.0],
-            "duration": 0.5,
-        }))
-        self._moving = False
-        self.get_logger().info("停止前进")
 
     # ==================================================================
     #  检测回调
@@ -216,11 +127,35 @@ class LocoForwardNode(Node):
     # ==================================================================
     #  状态机
     # ==================================================================
+    def _start_move(self) -> None:
+        """开始前进。"""
+        if self._moving:
+            return
+        self._sport.set_velocity(vx=self._speed, duration=self._vel_duration)
+        self._moving = True
+        self._last_forward_time = time.time()
+        self.get_logger().info(f"开始前进: vx={self._speed} m/s")
+
+    def _continue_move(self) -> None:
+        """持续前进（每秒发送一次 SET_VELOCITY）。"""
+        now = time.time()
+        if now - self._last_forward_time >= 1.0:
+            self._sport.set_velocity(vx=self._speed, duration=self._vel_duration)
+            self._last_forward_time = now
+
+    def _stop_move(self) -> None:
+        """停止前进。"""
+        if not self._moving:
+            return
+        self._sport.stop()
+        self._moving = False
+        self.get_logger().info("停止前进")
+
     def _tick(self) -> None:
         now = time.time()
 
-        # 状态机未就绪时不处理
-        if not self._ready:
+        # FSM 未就绪时不处理
+        if not self._sport.ready:
             return
 
         # ---- 1. 目标丢失 ----
@@ -260,11 +195,9 @@ class LocoForwardNode(Node):
                 self._continue_move()
 
     def destroy_node(self) -> None:
-        self._publish_request(API_SET_VELOCITY, json.dumps({
-            "velocity": [0.0, 0.0, 0.0], "duration": 1.0
-        }))
+        self._sport.stop()
         time.sleep(0.2)
-        self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_SIT}))
+        self._sport.sit()
         super().destroy_node()
 
 

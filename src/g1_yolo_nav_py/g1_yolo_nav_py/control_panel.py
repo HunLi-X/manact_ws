@@ -15,6 +15,10 @@ G1 NavGrasp 控制面板 (tkinter)
     GRABBING    → 执行 armup.py 抓取
     MENU        → 交互菜单（放下/右转放下）
 
+控制方式：
+    所有运动控制通过 SportClient 统一封装（/api/sport/request），
+    不再依赖 cmd_vel / Twist / twist_bridge。
+
 运行：
     ros2 run g1_yolo_nav_py control_panel
     python3 -m g1_yolo_nav_py.control_panel
@@ -32,7 +36,6 @@ import subprocess
 import threading
 import time
 import math
-import json
 from pathlib import Path
 from typing import Optional
 from enum import Enum, auto
@@ -50,18 +53,18 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
-from geometry_msgs.msg import Twist
-from unitree_api.msg import Request
 from cv_bridge import CvBridge
 
 # 注意：control_panel 不导入 unitree_sdk2py！
 # unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
-# 前进/右转通过 cmd_vel → twist_bridge → Sport API 完成，无需 LocoClient。
+# 所有运动控制通过 SportClient 统一封装，无需 LocoClient / DDS。
 # unitree_api 是纯 ROS2 消息包，导入安全，不涉及 DDS。
 
-# Sport API 常量
-API_SET_VELOCITY = 7105
+# ==================================================================
+# 3. 本项目导入
+# ==================================================================
+from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
 
 # ==================================================================
 # 3. 常量
@@ -148,7 +151,7 @@ class ControlPanelNode(Node):
         # ---- 参数（参考 grasp_task.py）----
         self.declare_parameter("image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
-        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("auto_stand", True)
         self.declare_parameter("target_class_id", "chair")
         self.declare_parameter("camera_fov_deg", 87.0)
         self.declare_parameter("yaw_kp", 2.0)
@@ -168,7 +171,7 @@ class ControlPanelNode(Node):
         p = lambda n: self.get_parameter(n).value
         self._img_topic = p("image_topic")
         self._det_topic = p("detection_topic")
-        self._cmd_topic = p("cmd_vel_topic")
+        self._auto_stand = bool(p("auto_stand"))
         self._target_class = p("target_class_id")
         self._fov_rad = math.radians(float(p("camera_fov_deg")))
         self._kp = float(p("yaw_kp"))
@@ -206,11 +209,8 @@ class ControlPanelNode(Node):
             Detection2DArray, self._det_topic, self._detection_cb, 10
         )
 
-        # ---- ROS2 发布 ----
-        self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
-        # Sport API（前进、右转等需要 duration 的运动）
-        self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
-        self._sport_req = Request()
+        # ---- 运动控制客户端（替代 cmd_vel + Sport API 直接调用）----
+        self._sport = SportClient(self)
 
         # ---- 延迟诊断（2秒后检查订阅状态）----
         self._diag_timer = self.create_timer(2.0, self._diag_check)
@@ -229,8 +229,7 @@ class ControlPanelNode(Node):
         self._manual_vy = 0.0
         self._manual_vz = 0.0
         self._manual_active = False
-        self._last_forward_time = 0.0  # Sport API 前进节流
-        self._last_forward_time = 0.0  # Sport API 前进节流
+        self._last_forward_time = 0.0
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -258,41 +257,24 @@ class ControlPanelNode(Node):
         self.get_logger().info("=" * 50)
 
     # ==================================================================
-    # cmd_vel 发布
+    #  运动控制（通过 SportClient）
     # ==================================================================
     def _publish_cmd(self, vx=0.0, vy=0.0, vz=0.0) -> None:
-        cmd = Twist()
-        cmd.linear.x = vx
-        cmd.linear.y = vy
-        cmd.angular.z = vz
-        self._cmd_pub.publish(cmd)
+        """通过 SportClient 发送速度指令。"""
+        self._sport.set_velocity(vx=vx, vy=vy, vyaw=vz)
 
     def _publish_stop(self) -> None:
-        self._publish_cmd(0.0, 0.0, 0.0)
-
-    # ==================================================================
-    #  Sport API 发布
-    # ==================================================================
-    def _publish_sport(self, api_id: int, params: dict) -> None:
-        """发布 Sport API 请求。"""
-        self._sport_req.header.identity.api_id = api_id
-        self._sport_req.parameter = json.dumps(params)
-        self._sport_pub.publish(self._sport_req)
+        """停止运动。"""
+        self._sport.stop()
 
     def _sport_set_velocity(self, vx: float, vy: float = 0.0,
                             vyaw: float = 0.0, duration: float = 0.5) -> None:
-        """通过 Sport API SET_VELOCITY 控制运动。"""
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [vx, vy, vyaw],
-            "duration": duration,
-        })
+        """通过 SportClient SET_VELOCITY 控制运动。"""
+        self._sport.set_velocity(vx=vx, vy=vy, vyaw=vyaw, duration=duration)
 
     def _sport_stop(self) -> None:
-        """通过 Sport API 停止运动。"""
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [0.0, 0.0, 0.0],
-            "duration": 0.5,
-        })
+        """停止运动。"""
+        self._sport.stop()
 
     # ==================================================================
     # 诊断
@@ -704,7 +686,7 @@ class ControlPanelNode(Node):
         """停止所有运动并回到 IDLE。"""
         # 清除手动控制
         self._manual_active = False
-        self._last_forward_time = 0.0  # Sport API 前进节流
+        self._last_forward_time = 0.0
         self._manual_vx = 0.0
         self._manual_vy = 0.0
         self._manual_vz = 0.0
@@ -715,6 +697,14 @@ class ControlPanelNode(Node):
         self._align_start = None
         self._append_log(f"[状态] {prev.name} → IDLE: 手动停止")
         self._update_state_display()
+
+    def _do_init_fsm(self):
+        """手动触发 FSM 初始化。"""
+        if self._sport.ready:
+            self._append_log("[FSM] 已就绪，无需重复初始化")
+            return
+        self._append_log("[FSM] 开始初始化状态机...")
+        self._sport.init_fsm()
 
     # ==================================================================
     # 任务操作（参考 grasp_task.py）
@@ -908,8 +898,8 @@ class ControlPanelNode(Node):
         else:
             self._align_start = None
 
-        # P 控制偏航
-        vyaw = self._kp * error * self._fov_rad
+        # P 控制偏航（负号确保方向正确）
+        vyaw = -self._kp * error * self._fov_rad
         vyaw = max(-self._max_yaw, min(self._max_yaw, vyaw))
         self._publish_cmd(vz=vyaw)
 
@@ -1078,8 +1068,7 @@ class ControlPanelNode(Node):
         self.root.mainloop()
 
     def destroy_node(self) -> None:
-        self._publish_stop()
-        self._sport_stop()
+        self._sport.stop()
         self.get_logger().info("[清理] 控制面板节点已停止")
         super().destroy_node()
 
