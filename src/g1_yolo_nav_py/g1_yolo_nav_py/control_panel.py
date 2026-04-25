@@ -17,7 +17,7 @@ G1 NavGrasp 控制面板 (tkinter)
 
 控制方式：
     所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    不再依赖 cmd_vel / Twist / twist_bridge。
+    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API，不再依赖 cmd_vel / Twist / twist_bridge。
 
 运行：
     ros2 run g1_yolo_nav_py control_panel
@@ -58,7 +58,7 @@ from cv_bridge import CvBridge
 # 注意：control_panel 不导入 unitree_sdk2py！
 # unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
-# 所有运动控制通过 SportClient 统一封装，无需 LocoClient / DDS。
+# 所有运动控制通过 SportClient 统一封装（纯 Sport API），无需 LocoClient / DDS。
 # unitree_api 是纯 ROS2 消息包，导入安全，不涉及 DDS。
 
 # ==================================================================
@@ -166,7 +166,6 @@ class ControlPanelNode(Node):
         self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
         self.declare_parameter("display_width", 400)
         self.declare_parameter("display_height", 300)
-        self.declare_parameter("forward_duration", 0.5)
 
         p = lambda n: self.get_parameter(n).value
         self._img_topic = p("image_topic")
@@ -185,7 +184,6 @@ class ControlPanelNode(Node):
         self._net_iface = p("network_interface")
         self._disp_w = int(p("display_width"))
         self._disp_h = int(p("display_height"))
-        self._fwd_duration = float(p("forward_duration"))
 
         # arm 脚本路径
         arm_dir = p("arm_script_dir")
@@ -261,16 +259,16 @@ class ControlPanelNode(Node):
     # ==================================================================
     def _publish_cmd(self, vx=0.0, vy=0.0, vz=0.0) -> None:
         """通过 SportClient 发送速度指令。"""
-        self._sport.set_velocity(vx=vx, vy=vy, vyaw=vz)
+        self._sport.move(vx=vx, vy=vy, vyaw=vz)
 
     def _publish_stop(self) -> None:
         """停止运动。"""
         self._sport.stop()
 
-    def _sport_set_velocity(self, vx: float, vy: float = 0.0,
-                            vyaw: float = 0.0, duration: float = 0.5) -> None:
-        """通过 SportClient SET_VELOCITY 控制运动。"""
-        self._sport.set_velocity(vx=vx, vy=vy, vyaw=vyaw, duration=duration)
+    def _sport_move(self, vx: float, vy: float = 0.0,
+                            vyaw: float = 0.0) -> None:
+        """通过 SportClient MOVE 控制运动。"""
+        self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
 
     def _sport_stop(self) -> None:
         """停止运动。"""
@@ -747,7 +745,7 @@ class ControlPanelNode(Node):
         self._append_log("[右转] 开始右转 90° ...")
 
         def _worker():
-            self._sport_set_velocity(vyaw=-0.6, duration=2.6)
+            self._sport_move(vyaw=-0.6)
             time.sleep(2.6)
             self._append_log("[右转] 右转完成")
             self._run_armdown()
@@ -904,7 +902,7 @@ class ControlPanelNode(Node):
         self._publish_cmd(vz=vyaw)
 
     def _tick_approaching(self) -> None:
-        """前进到目标附近（Sport API SET_VELOCITY）。"""
+        """前进到目标附近（Sport API MOVE）。"""
         now = time.time()
 
         # 目标丢失 → 回搜索
@@ -938,8 +936,8 @@ class ControlPanelNode(Node):
 
         # 前进（Sport API，每秒发送一次）
         if now - self._last_forward_time >= 1.0:
-            self._sport_set_velocity(
-                vx=self._fwd_speed, duration=self._fwd_duration
+            self._sport_move(
+                vx=self._fwd_speed
             )
             self._last_forward_time = now
 

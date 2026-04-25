@@ -59,11 +59,10 @@ src/
 │   ├── g1_driver_py/              # ROS2 driver: odom, TF, joint_states
 │   ├── g1_teleop_ctrl_keyboard/   # Keyboard teleop via Sport API (MOVE=1008)
 │   ├── g1_twist_bridge_py/        # Twist → Sport API Request bridge
-│   ├── ctrl_keyboard/             # Reference: auto_ctrl.py (Loco API)
-│   └── h1_description/            # H1 robot description (separate robot)
+│   └── ctrl_keyboard/             # Reference: auto_ctrl.py (Loco API, deprecated)
 ├── g1_yolo_nav_py/                # YOLO detection + navigation + motion control
 │   ├── g1_yolo_nav_py/
-│   │   ├── sport_client.py        # ** 统一运动控制模块 (SportClient) **
+│   │   ├── sport_client.py        # ** 统一运动控制模块 (纯 Sport API) **
 │   │   ├── yolo_detector.py       # YOLO 目标检测节点
 │   │   ├── spatial_target.py      # 2D→3D 空间投影节点
 │   │   ├── yaw_align.py           # 偏航对齐节点
@@ -83,9 +82,9 @@ src/
 Camera Image (/D455_1/color/image_raw)
     → [g1_yolo_detector_node] → Detection2DArray (/g1/vision/detections)
                                       ↓
-                              [g1_yaw_align_node] → SportClient.set_velocity()
+                              [g1_yaw_align_node] → SportClient.move()
                                       ↓               → /api/sport/request
-                              [g1_loco_forward_node] → SportClient.set_velocity()
+                              [g1_loco_forward_node] → SportClient.move()
                                       ↓
                                  G1 Hardware
 ```
@@ -95,48 +94,61 @@ Camera Image (/D455_1/color/image_raw)
 Camera → YOLO Detector → Detection2DArray
                                   ↓
                     [grasp_task_node / control_panel]
-                         ↓ 使用 SportClient 统一控制
+                         ↓ 使用 SportClient 统一控制（纯 Sport API）
                     SEARCHING → ALIGNING → APPROACHING → GRABBING → MENU
                          ↓           ↓           ↓
-                    旋转搜索    P控制偏航    SET_VELOCITY前进
+                    旋转搜索    P控制偏航    MOVE前进
                          ↓           ↓           ↓
-                    /api/sport/request (Loco API: SET_VELOCITY 7105)
+                    /api/sport/request (Sport API: MOVE 1008, STOPMOVE 1003)
 ```
 
 ### Motion Control Architecture
 
-所有运动控制通过 **`SportClient`** (`sport_client.py`) 统一封装，不再直接构造 `Request` 对象或依赖 `cmd_vel`。
+所有运动控制通过 **`SportClient`** (`sport_client.py`) 统一封装，**全部使用 Sport API**，不使用任何 Loco API。
 
 #### SportClient 功能
 
 | 方法 | API | 说明 |
 |---|---|---|
-| `init_fsm()` | `SET_FSM_ID(7101)` + `SET_BALANCE_MODE(7102)` | 后台线程初始化: DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT |
-| `set_velocity(vx, vy, vyaw, duration)` | `SET_VELOCITY(7105)` | 速度控制（需 WALK_RUN 模式） |
-| `stop()` | `SET_VELOCITY` + zero velocity | 发送零速停止 |
-| `balance_stand()` | `BALANCESTAND(1002)` | Sport API 平衡站立 |
-| `stop_move()` | `STOPMOVE(1003)` | Sport API 停止运动 |
-| `sit()` | `SET_FSM_ID(7101)` + SIT(3) | 坐下 |
+| `init_fsm()` | `DAMP(101)` + `STANDUP(1004)` + `BALANCESTAND(1002)` + `CONTINUOUSGAIT(1019)` | 后台线程初始化: DAMP → STANDUP → BALANCESTAND → CONTINUOUSGAIT |
+| `move(vx, vy, vyaw)` | `MOVE(1008)` | 运动控制（参数 {x, y, z}，与 teleop_keyboard 一致） |
+| `stop()` | `STOPMOVE(1003)` | 停止运动 |
+| `balance_stand()` | `BALANCESTAND(1002)` | 平衡站立 |
+| `sit()` | `SIT(1009)` | 坐下 |
+| `stand_up()` | `STANDUP(1004)` | 站立 |
+| `stand_down()` | `STANDDOWN(1005)` | 趴下 |
+| `rise_sit()` | `RISESIT(1010)` | 从坐姿恢复站立 |
+| `continuous_gait()` | `CONTINUOUSGAIT(1019)` | 开启连续步态 |
+| `damp()` | `DAMP(101)` | 阻尼模式 |
 | `publish(api_id, params)` | 任意 API | 每次创建新 Request 对象 |
 
 #### FSM 状态机
 
 运动控制节点启动时通过 `init_fsm()` 自动初始化状态机：
 ```
-DAMP(1) → STAND_UP(4) → WALK_RUN(801) → CONTINUOUS_GAIT(1)
+DAMP(101) → STANDUP(1004) → BALANCESTAND(1002) → CONTINUOUSGAIT(1019)
 ```
-只有 WALK_RUN + CONTINUOUS_GAIT 模式下 `SET_VELOCITY(7105)` 才生效。
+BALANCESTAND + CONTINUOUSGAIT 模式下 `MOVE(1008)` 才生效。
 
-#### 两种 API（供参考）
+#### API 体系（纯 Sport API）
 
-| API | ID 范围 | 用途 | 使用者 |
+| API | ID | 用途 | 参数格式 |
 |---|---|---|---|
-| **Sport API** | 1002-1032 | 高级运动指令（MOVE, HELLO, DANCE 等） | `g1_teleop_ctrl_keyboard`, `g1_twist_bridge_py` |
-| **Loco API** | 7101-7107 | 走跑模式 FSM + 速度控制 | `SportClient`, `ctrl_keyboard/auto_ctrl.py` |
+| **DAMP** | 101 | 阻尼模式 | 无 |
+| **BALANCESTAND** | 1002 | 平衡站立 | 无 |
+| **STOPMOVE** | 1003 | 停止运动 | 无 |
+| **STANDUP** | 1004 | 站立 | 无 |
+| **STANDDOWN** | 1005 | 趴下 | 无 |
+| **MOVE** | 1008 | 运动控制 | `{"x": vx, "y": vy, "z": vyaw}` |
+| **SIT** | 1009 | 坐下 | 无 |
+| **RISESIT** | 1010 | 从坐姿恢复 | 无 |
+| **CONTINUOUSGAIT** | 1019 | 连续步态 | 无 |
+
+**不再使用的 Loco API（7xxx 系列）**：SET_FSM_ID(7101)、SET_BALANCE_MODE(7102)、SET_VELOCITY(7105)。
 
 ### Two Control Interfaces
 
-1. **unitree_api (high-level, via SportClient)**: All motion control nodes use `SportClient` to publish `unitree_api/msg/Request` to `/api/sport/request`. `SportClient` wraps both Sport API (MOVE=1008, BALANCESTAND=1002) and Loco API (SET_FSM_ID=7101, SET_VELOCITY=7105).
+1. **unitree_api (high-level, via SportClient)**: All motion control nodes use `SportClient` to publish `unitree_api/msg/Request` to `/api/sport/request`. `SportClient` wraps only Sport API — MOVE(1008), STOPMOVE(1003), SIT(1009), BALANCESTAND(1002), etc. This is the same API system used by `g1_teleop_ctrl_keyboard`.
 2. **unitree_sdk2py (low-level)**: `src/arm.py` and `arm/*.py` use `ChannelPublisher("rt/arm_sdk", LowCmd_)` for direct joint-level arm control. This bypasses ROS2 entirely and communicates via DDS.
 
 ### G1 Joint Index Mapping (from arm.py)
@@ -158,7 +170,7 @@ Joint names follow `snake_case`: `left_hip_pitch_joint`, `right_shoulder_yaw_joi
 
 | Topic | Type | Description |
 |---|---|---|
-| `/api/sport/request` | `unitree_api/Request` | All motion commands (via SportClient) |
+| `/api/sport/request` | `unitree_api/Request` | All motion commands (via SportClient, Sport API only) |
 | `/cmd_vel` | `geometry_msgs/Twist` | Legacy velocity (bridged by twist_bridge) |
 | `/g1/sensor/odom` | `nav_msgs/Odometry` | Robot odometry |
 | `/joint_states` | `sensor_msgs/JointState` | 29 joint positions |
@@ -183,6 +195,8 @@ All node parameters are declared via `declare_parameter()` then read with `get_p
 - Package naming: `g1_xxx_py`
 - Node naming: `snake_case`
 - **Motion control**: Always use `SportClient` from `sport_client.py`, never construct `Request` directly or use `cmd_vel`/`Twist` for motion
+- **Sport API only**: 不使用 Loco API (7xxx)，全部使用 Sport API (1xxx)。运动用 MOVE(1008)，停止用 STOPMOVE(1003)，姿态用 SIT(1009)/STANDUP(1004) 等
 - **Request publishing**: `SportClient.publish()` creates a new `Request()` each time (avoid DDS buffer reuse bugs)
+- **MOVE parameter format**: `{"x": vx, "y": vy, "z": vyaw}` — 与 g1_teleop_ctrl_keyboard 完全一致
 - **P controller sign**: `vyaw = -kp * error * fov` (negative sign: target on right → robot turns right → vyaw negative)
 - Safety: velocity clamping, low default speeds, `auto_stand` parameter for FSM initialization
