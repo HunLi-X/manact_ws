@@ -48,7 +48,7 @@ class YawAlignNode(Node):
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_class_id", "chair")
         self.declare_parameter("camera_fov_deg", 87.0)
-        self.declare_parameter("center_tolerance", 0.08)
+        self.declare_parameter("center_tolerance", 0.05)
         self.declare_parameter("yaw_kp", 2.0)
         self.declare_parameter("max_yaw_speed", 0.6)
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
@@ -127,7 +127,7 @@ class YawAlignNode(Node):
 
         # 偏移 → 角度误差 → P 控制
         error_angle = error * self._fov_rad
-        vyaw = self._kp * error_angle
+        vyaw = -self._kp * error_angle
 
         # 限速
         vyaw = max(-self._max_speed, min(self._max_speed, vyaw))
