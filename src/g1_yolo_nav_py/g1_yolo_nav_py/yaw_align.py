@@ -1,36 +1,26 @@
 """
 偏航对齐节点 — 通过 Loco API 控制机器人旋转使目标居中。
 
-运动控制通过 SET_VELOCITY (7105)，参数格式 {"velocity": [vx,vy,vyaw], "duration": ...}
+运动控制通过 SportClient 统一封装，使用 SET_VELOCITY (7105)。
+启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
 
 控制逻辑：
     1. 从检测结果提取目标 u 坐标（归一化 0~1，0.5 = 画面中央）
     2. 计算误差 error = u - 0.5
-    3. P 控制输出 vyaw = kp * error * FOV
+    3. P 控制输出 vyaw = -kp * error * FOV（负号：目标在右→机器人右转→vyaw 为负）
     4. 限速后通过 SET_VELOCITY API 发布
 
-注意：本节点不负责 FSM 状态切换，请用手柄将机器人进入走跑模式后再启动。
+运行：
+    ros2 run g1_yolo_nav_py yaw_align
+    ros2 run g1_yolo_nav_py yaw_align --ros-args -p auto_stand:=false
 """
 
 # ==================================================================
 # 1. 标准库导入
 # ==================================================================
-import json  # Sport API 参数序列化
-import os   # sys.path 修改
-import sys  # sys.path 修改
 import math  # 角度弧度转换
-import signal  # 信号处理
 import time  # 计时
 from typing import Optional  # 类型注解
-
-# ROS2 colcon 隔离 PYTHONPATH，必须在所有 import 之前追加路径
-for _p in [
-    "/usr/lib/python3/dist-packages",
-    os.path.expanduser("~/.local/lib/python3.8/site-packages"),
-    "/usr/local/lib/python3.8/dist-packages",
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
@@ -38,13 +28,11 @@ for _p in [
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
-from unitree_api.msg import Request  # Sport API 请求消息
-
 
 # ==================================================================
-# 3. Loco API 常量
+# 3. 本项目导入
 # ==================================================================
-API_SET_VELOCITY = 7105
+from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
 
 
 class YawAlignNode(Node):
@@ -63,17 +51,19 @@ class YawAlignNode(Node):
         self.declare_parameter("control_rate", 10.0)
         self.declare_parameter("lost_timeout", 5.0)
         self.declare_parameter("velocity_duration", 0.5)
+        self.declare_parameter("auto_stand", True)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
         self._target_class = p("target_class_id")
-        self._fov_rad = math.radians(p("camera_fov_deg"))
+        self._fov_rad = math.radians(float(p("camera_fov_deg")))
         self._center_tol = float(p("center_tolerance"))
         self._kp = float(p("yaw_kp"))
         self._max_speed = float(p("max_yaw_speed"))
         self._ctrl_rate = float(p("control_rate"))
         self._lost_timeout = float(p("lost_timeout"))
         self._vel_duration = float(p("velocity_duration"))
+        self._auto_stand = bool(p("auto_stand"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
@@ -86,8 +76,15 @@ class YawAlignNode(Node):
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, 10)
 
-        # ---- Loco API 发布 ----
-        self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
+        # ---- 运动控制客户端 ----
+        self._sport = SportClient(self)
+
+        # ---- FSM 初始化 ----
+        if self._auto_stand:
+            self._sport.init_fsm()
+        else:
+            self._sport._ready = True
+            self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
@@ -97,23 +94,12 @@ class YawAlignNode(Node):
         self.get_logger().info(
             f"偏航对齐节点就绪: 目标={self._target_class}, "
             f"kp={self._kp}, 容差={self._center_tol}, "
-            f"lost_timeout={self._lost_timeout}"
+            f"lost_timeout={self._lost_timeout}, auto_stand={self._auto_stand}"
         )
 
-    def _publish_request(self, api_id: int, parameter: str = '') -> None:
-        """创建新 Request 并发布（每次 publish 必须创建新对象，避免 DDS 缓冲区复用问题）。"""
-        req = Request()
-        req.header.identity.api_id = api_id
-        req.parameter = parameter
-        self._sport_pub.publish(req)
-
-    def _send_stop(self) -> None:
-        """发送零速停止指令（不阻塞，不切换状态机）。"""
-        self._publish_request(API_SET_VELOCITY, json.dumps({
-            "velocity": [0.0, 0.0, 0.0],
-            "duration": 0.5,
-        }))
-
+    # ==================================================================
+    #  检测回调
+    # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标。"""
         best_det = None
@@ -136,8 +122,15 @@ class YawAlignNode(Node):
             self._target_u = None
             self._first_move_logged = False  # 目标丢失时重置，方便下次调试
 
+    # ==================================================================
+    #  P 控制器
+    # ==================================================================
     def _compute_vyaw(self) -> float:
-        """P 控制计算偏航角速度。"""
+        """P 控制计算偏航角速度。
+
+        目标在画面右侧 (u > 0.5) → 机器人右转 (vyaw < 0)
+        目标在画面左侧 (u < 0.5) → 机器人左转 (vyaw > 0)
+        """
         # 目标丢失 → 不旋转
         if self._target_u is None or (time.time() - self._last_detect_time > self._lost_timeout):
             return 0.0
@@ -148,7 +141,7 @@ class YawAlignNode(Node):
         if abs(error) < self._center_tol:
             return 0.0
 
-        # 偏移 → 角度误差 → P 控制
+        # 偏移 → 角度误差 → P 控制（负号确保方向正确）
         error_angle = error * self._fov_rad
         vyaw = -self._kp * error_angle
 
@@ -157,14 +150,18 @@ class YawAlignNode(Node):
 
         return vyaw
 
+    # ==================================================================
+    #  定时回调
+    # ==================================================================
     def _tick(self) -> None:
         """定时回调 — 计算并通过 Loco API SET_VELOCITY 发布旋转指令。"""
+        # FSM 未就绪时不发送运动指令
+        if not self._sport.ready:
+            return
+
         vyaw = self._compute_vyaw()
         if abs(vyaw) > 1e-6:
-            self._publish_request(API_SET_VELOCITY, json.dumps({
-                "velocity": [0.0, 0.0, vyaw],
-                "duration": self._vel_duration,
-            }))
+            self._sport.set_velocity(vyaw=vyaw, duration=self._vel_duration)
             if not self._first_move_logged:
                 self.get_logger().info(
                     f"[对齐] 发送 SET_VELOCITY: vyaw={vyaw:.3f} rad/s"
@@ -173,7 +170,7 @@ class YawAlignNode(Node):
             self._is_moving = True
         elif self._is_moving:
             # 仅在运动→停止状态切换时发送零速（避免 10Hz 刷屏重置 API 状态）
-            self._send_stop()
+            self._sport.stop()
             self._is_moving = False
 
         # 周期性日志：每 _log_interval 个 tick 打印一次状态
@@ -191,24 +188,12 @@ def main(args=None):
     rclpy.init(args=args)
     node = YawAlignNode()
 
-    # 注册信号处理器：Ctrl+C 时先发零速停止，再退出
-    def _shutdown_handler(signum, frame):
-        node.get_logger().info("收到终止信号，发送零速停止...")
-        node._send_stop()
-        # 给 DDS 一点时间发布消息
-        time.sleep(0.1)
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _shutdown_handler)
-    signal.signal(signal.SIGTERM, _shutdown_handler)
-
     try:
         rclpy.spin(node)
-    except SystemExit:
-        pass
     except KeyboardInterrupt:
-        node._send_stop()
+        node._sport.stop()
     finally:
+        node._sport.stop()
         node.destroy_node()
         rclpy.shutdown()
 

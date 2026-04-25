@@ -13,8 +13,8 @@ G1 抓取任务主控程序
     MENU        → 交互菜单
 
 控制方式：
-    所有运动控制通过 Sport API（/api/sport/request）完成，
-    无需 unitree_sdk2py / LocoClient / DDS 依赖。
+    所有运动控制通过 SportClient 统一封装（/api/sport/request），
+    启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task
@@ -26,7 +26,6 @@ G1 抓取任务主控程序
 # ==================================================================
 import os          # 环境变量与路径操作
 import sys         # 命令行参数与 sys.executable
-import json        # Sport API 参数序列化
 import time        # 计时与延时
 import subprocess  # 子进程执行 armup.py / armdown.py
 import math        # 角度弧度转换
@@ -41,23 +40,11 @@ import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
-from unitree_api.msg import Request  # Sport API 请求消息
 
 # ==================================================================
-# 3. Sport API 常量（参考 ctrl_keyboard/auto_ctrl.py）
+# 3. 本项目导入
 # ==================================================================
-API_SET_FSM_ID = 7101
-API_SET_BALANCE_MODE = 7102
-API_SET_VELOCITY = 7105
-
-FSM_ZERO_TORQUE = 0
-FSM_DAMP = 1
-FSM_SIT = 3
-FSM_STAND_UP = 4
-FSM_START = 500
-FSM_WALK_RUN = 801
-
-BALANCE_CONTINUOUS_GAIT = 1
+from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
 
 
 class State(Enum):
@@ -74,7 +61,7 @@ _DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/a
 
 
 class GraspTaskNode(Node):
-    """G1 抓取任务主控节点 — 纯 Sport API 控制，无需 SDK。"""
+    """G1 抓取任务主控节点 — 通过 SportClient 统一控制运动。"""
 
     def __init__(self) -> None:
         super().__init__("g1_grasp_task_node")
@@ -123,8 +110,8 @@ class GraspTaskNode(Node):
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, det_qos)
 
-        # ---- Sport API 发布 ----
-        self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
+        # ---- 运动控制客户端 ----
+        self._sport = SportClient(self)
 
         # ---- 内部状态 ----
         self._target_u = None
@@ -136,83 +123,18 @@ class GraspTaskNode(Node):
 
         self._state = State.SEARCHING
 
-        # ---- 启动状态机初始化 ----
-        self._fsm_ready = False
-        self._do_fsm_init()
+        # ---- 启动 FSM 初始化 ----
+        self._sport.init_fsm(auto_walk_run=self._auto_walk_run)
 
         # ---- 定时器（10Hz）----
         self._timer = self.create_timer(0.1, self._tick)
 
         self.get_logger().info("=" * 50)
-        self.get_logger().info("G1 抓取任务启动（Sport API 模式）")
+        self.get_logger().info("G1 抓取任务启动（SportClient 模式）")
         self.get_logger().info(f"目标类别: {self._target_class}")
         self.get_logger().info(f"armup: {self._armup_script}")
         self.get_logger().info(f"armdown: {self._armdown_script}")
         self.get_logger().info("=" * 50)
-
-    # ==================================================================
-    #  状态机初始化（参考 ctrl_keyboard/auto_ctrl.py）
-    # ==================================================================
-    def _do_fsm_init(self) -> None:
-        """完整状态机初始化：DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT。
-
-        在后台线程执行，避免阻塞 ROS2 spin。
-        """
-        def _init_thread():
-            self.get_logger().info("[状态机] 切换到 DAMP 模式...")
-            self._publish_sport(API_SET_FSM_ID, {"data": FSM_DAMP})
-            time.sleep(2)
-
-            self.get_logger().info("[状态机] 切换到 STAND_UP 模式...")
-            self._publish_sport(API_SET_FSM_ID, {"data": FSM_STAND_UP})
-            time.sleep(3)
-
-            if self._auto_walk_run:
-                self.get_logger().info("[状态机] 切换到 WALK_RUN 走跑模式...")
-                self._publish_sport(API_SET_FSM_ID, {"data": FSM_WALK_RUN})
-                time.sleep(1)
-
-                self.get_logger().info("[状态机] 开启连续步态 CONTINUOUS_GAIT...")
-                self._publish_sport(API_SET_BALANCE_MODE, {"data": BALANCE_CONTINUOUS_GAIT})
-                time.sleep(1)
-
-            self._fsm_ready = True
-            self.get_logger().info("[状态机] 初始化完成，就绪")
-
-        t = threading.Thread(target=_init_thread, daemon=True)
-        t.start()
-
-    # ==================================================================
-    #  Sport API 发布
-    # ==================================================================
-    def _publish_sport(self, api_id: int, params: dict) -> None:
-        """发布 Sport API 请求（每次创建新 Request，避免 DDS 缓冲区复用）。"""
-        req = Request()
-        req.header.identity.api_id = api_id
-        req.parameter = json.dumps(params)
-        self._sport_pub.publish(req)
-
-    # ==================================================================
-    #  运动控制（全部通过 Sport API SET_VELOCITY）
-    # ==================================================================
-    def _sport_set_velocity(self, vx: float, vy: float = 0.0,
-                            vyaw: float = 0.0, duration: float = 0.5) -> None:
-        """通过 Sport API SET_VELOCITY 控制机器人运动。"""
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [vx, vy, vyaw],
-            "duration": duration,
-        })
-
-    def _sport_stop(self) -> None:
-        """通过 Sport API 停止运动。"""
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [0.0, 0.0, 0.0],
-            "duration": 0.5,
-        })
-
-    def _sport_rotate(self, vyaw: float, duration: float = 0.5) -> None:
-        """通过 Sport API SET_VELOCITY 控制旋转。"""
-        self._sport_set_velocity(vx=0.0, vy=0.0, vyaw=vyaw, duration=duration)
 
     # ==================================================================
     #  检测回调
@@ -246,8 +168,8 @@ class GraspTaskNode(Node):
     #  状态机 — 主循环
     # ==================================================================
     def _tick(self) -> None:
-        # 状态机未就绪时不发送运动指令
-        if not self._fsm_ready:
+        # FSM 未就绪时不发送运动指令
+        if not self._sport.ready:
             return
 
         if self._state == State.SEARCHING:
@@ -259,26 +181,26 @@ class GraspTaskNode(Node):
         # GRABBING 和 MENU 由子流程处理，不在 tick 中
 
     def _tick_searching(self) -> None:
-        """旋转搜索目标（Sport API SET_VELOCITY）。"""
+        """旋转搜索目标。"""
         if self._target_u is not None:
             self.get_logger().info("[状态] SEARCHING → ALIGNING: 目标已找到")
             self._state = State.ALIGNING
             self._align_start = None
-            self._sport_stop()
+            self._sport.stop()
             return
 
-        # 旋转搜索（Sport API SET_VELOCITY）
-        self._sport_rotate(vyaw=self._search_speed)
+        # 旋转搜索
+        self._sport.set_velocity(vyaw=self._search_speed)
 
     def _tick_aligning(self) -> None:
-        """偏航对齐让目标居中（Sport API SET_VELOCITY）。"""
+        """偏航对齐让目标居中。"""
         now = time.time()
 
         # 目标丢失 → 回搜索
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self.get_logger().warn("[状态] ALIGNING → SEARCHING: 目标丢失")
             self._state = State.SEARCHING
-            self._sport_stop()
+            self._sport.stop()
             self._align_start = None
             return
 
@@ -293,39 +215,39 @@ class GraspTaskNode(Node):
                     "[状态] ALIGNING → APPROACHING: 目标已居中"
                 )
                 self._state = State.APPROACHING
-                self._sport_stop()
+                self._sport.stop()
                 return
         else:
             self._align_start = None
 
-        # P 控制偏航（Sport API SET_VELOCITY）
-        vyaw = self._kp * error * self._fov_rad
+        # P 控制偏航（负号确保方向正确）
+        vyaw = -self._kp * error * self._fov_rad
         vyaw = max(-self._max_yaw, min(self._max_yaw, vyaw))
-        self._sport_rotate(vyaw=vyaw)
+        self._sport.set_velocity(vyaw=vyaw)
 
     def _tick_approaching(self) -> None:
-        """前进到目标附近（Sport API SET_VELOCITY）。"""
+        """前进到目标附近。"""
         now = time.time()
 
         # 目标丢失 → 回搜索
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self.get_logger().warn("[状态] APPROACHING → SEARCHING: 目标丢失")
             self._state = State.SEARCHING
-            self._sport_stop()
+            self._sport.stop()
             return
 
         # 偏离中心 → 回对齐
         if abs(self._target_u - 0.5) > self._center_tol * 2:
             self.get_logger().info("[状态] APPROACHING → ALIGNING: 目标偏离中心")
             self._state = State.ALIGNING
-            self._sport_stop()
+            self._sport.stop()
             self._align_start = None
             return
 
         # 到达判断
         bbox_max = max(self._bbox_size_x, self._bbox_size_y)
         if bbox_max >= self._arrive_ratio:
-            self._sport_stop()
+            self._sport.stop()
             self.get_logger().info(
                 f"[状态] APPROACHING → GRABBING: 到达目标! "
                 f"bbox={bbox_max:.2f} >= {self._arrive_ratio}"
@@ -334,11 +256,9 @@ class GraspTaskNode(Node):
             self._run_grab()
             return
 
-        # 前进（Sport API SET_VELOCITY，每秒发送一次）
+        # 前进（每秒发送一次）
         if now - self._last_forward_time >= 1.0:
-            self._sport_set_velocity(
-                vx=self._fwd_speed, duration=self._fwd_duration
-            )
+            self._sport.set_velocity(vx=self._fwd_speed, duration=self._fwd_duration)
             self._last_forward_time = now
 
     # ==================================================================
@@ -439,8 +359,7 @@ class GraspTaskNode(Node):
     def _do_turn_and_put_down(self) -> None:
         """右转 90° 后放下目标物。"""
         self.get_logger().info("[右转] 开始右转 90° ...")
-        # Sport API SET_VELOCITY 控制旋转
-        self._sport_set_velocity(vx=0.0, vy=0.0, vyaw=-0.6, duration=2.6)
+        self._sport.set_velocity(vyaw=-0.6, duration=2.6)
         time.sleep(2.6)
         self.get_logger().info("[右转] 右转完成")
         self._do_put_down()
@@ -459,7 +378,7 @@ class GraspTaskNode(Node):
                 break
 
             if line.lower() == "q":
-                self._sport_stop()
+                self._sport.stop()
                 print("  已停止运动，返回菜单")
                 return
 
@@ -482,16 +401,15 @@ class GraspTaskNode(Node):
             vz = max(-1.0, min(1.0, vz))
 
             self.get_logger().info(f"[自定义] cmd: vx={vx}, vy={vy}, vz={vz}")
-            self._sport_set_velocity(vx=vx, vy=vy, vyaw=vz, duration=1.0)
+            self._sport.set_velocity(vx=vx, vy=vy, vyaw=vz, duration=1.0)
 
     def destroy_node(self) -> None:
-        self._sport_stop()
+        self._sport.stop()
         self.get_logger().info("[清理] 抓取任务节点已停止")
         super().destroy_node()
 
 
 def main(args=None):
-    # grasp_task 不再需要 DDS 兼容层，纯 Sport API 通信
     rclpy.init(args=args)
     node = GraspTaskNode()
     try:
