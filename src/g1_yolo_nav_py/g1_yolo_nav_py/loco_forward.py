@@ -5,7 +5,7 @@
 
 控制方式：
     通过 unitree_api/msg/Request 发布到 /api/sport/request，
-    使用 SET_VELOCITY API 控制前进，无需 LocoClient / DDS。
+    使用 MOVE API 控制前进，与 ctrl_keyboard 保持一致。
 
 状态机：
     IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
@@ -33,7 +33,8 @@ from unitree_api.msg import Request  # Sport API 请求消息
 # ==================================================================
 # 3. Sport API 常量
 # ==================================================================
-API_SET_VELOCITY = 7105
+API_MOVE = 1008
+API_STOPMOVE = 1003
 
 
 class LocoForwardNode(Node):
@@ -109,21 +110,23 @@ class LocoForwardNode(Node):
         """开始前进。"""
         if self._moving:
             return
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [self._speed, 0.0, 0.0],
-            "duration": self._duration,
+        self._publish_sport(API_MOVE, {
+            "x": self._speed,
+            "y": 0.0,
+            "z": 0.0,
         })
         self._moving = True
         self._last_forward_time = time.time()
         self.get_logger().info(f"开始前进: vx={self._speed} m/s")
 
     def _continue_move(self) -> None:
-        """持续前进（每秒发送一次 SET_VELOCITY）。"""
+        """持续前进（每秒发送一次 MOVE）。"""
         now = time.time()
         if now - self._last_forward_time >= 1.0:
-            self._publish_sport(API_SET_VELOCITY, {
-                "velocity": [self._speed, 0.0, 0.0],
-                "duration": self._duration,
+            self._publish_sport(API_MOVE, {
+                "x": self._speed,
+                "y": 0.0,
+                "z": 0.0,
             })
             self._last_forward_time = now
 
@@ -131,10 +134,7 @@ class LocoForwardNode(Node):
         """停止前进。"""
         if not self._moving:
             return
-        self._publish_sport(API_SET_VELOCITY, {
-            "velocity": [0.0, 0.0, 0.0],
-            "duration": 0.5,
-        })
+        self._publish_sport(API_STOPMOVE, {})
         self._moving = False
         self.get_logger().info("停止前进")
 
