@@ -154,7 +154,7 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[config_file],
     )
 
-    # 前进控制节点（Sport API SET_VELOCITY）
+    # 前进控制节点（Sport API MOVE）
     loco_forward_node = Node(
         package="g1_yolo_nav_py",
         executable="loco_forward",

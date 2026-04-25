@@ -14,7 +14,8 @@ G1 抓取任务主控程序
 
 控制方式：
     所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
+    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API。
+    启动时自动执行 FSM 初始化（DAMP → STANDUP → BALANCESTAND → CONTINUOUSGAIT）。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task
@@ -61,7 +62,7 @@ _DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/a
 
 
 class GraspTaskNode(Node):
-    """G1 抓取任务主控节点 — 通过 SportClient 统一控制运动。"""
+    """G1 抓取任务主控节点 — 通过 SportClient (纯 Sport API) 统一控制运动。"""
 
     def __init__(self) -> None:
         super().__init__("g1_grasp_task_node")
@@ -74,13 +75,12 @@ class GraspTaskNode(Node):
         self.declare_parameter("max_yaw_speed", 0.6)
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("forward_speed", 0.2)
-        self.declare_parameter("forward_duration", 0.5)
         self.declare_parameter("arrive_bbox_ratio", 0.45)
         self.declare_parameter("align_stable_time", 1.0)
         self.declare_parameter("lost_timeout", 2.0)
         self.declare_parameter("search_yaw_speed", 0.6)
         self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
-        self.declare_parameter("auto_walk_run", True)
+        self.declare_parameter("auto_stand", True)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -90,12 +90,11 @@ class GraspTaskNode(Node):
         self._max_yaw = float(p("max_yaw_speed"))
         self._center_tol = float(p("center_tolerance"))
         self._fwd_speed = float(p("forward_speed"))
-        self._fwd_duration = float(p("forward_duration"))
         self._arrive_ratio = float(p("arrive_bbox_ratio"))
         self._stable_time = float(p("align_stable_time"))
         self._lost_timeout = float(p("lost_timeout"))
         self._search_speed = float(p("search_yaw_speed"))
-        self._auto_walk_run = bool(p("auto_walk_run"))
+        self._auto_stand = bool(p("auto_stand"))
 
         # arm 脚本路径
         arm_dir = p("arm_script_dir")
@@ -124,13 +123,17 @@ class GraspTaskNode(Node):
         self._state = State.SEARCHING
 
         # ---- 启动 FSM 初始化 ----
-        self._sport.init_fsm(auto_walk_run=self._auto_walk_run)
+        if self._auto_stand:
+            self._sport.init_fsm()
+        else:
+            self._sport._ready = True
+            self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
 
         # ---- 定时器（10Hz）----
         self._timer = self.create_timer(0.1, self._tick)
 
         self.get_logger().info("=" * 50)
-        self.get_logger().info("G1 抓取任务启动（SportClient 模式）")
+        self.get_logger().info("G1 抓取任务启动（纯 Sport API 模式）")
         self.get_logger().info(f"目标类别: {self._target_class}")
         self.get_logger().info(f"armup: {self._armup_script}")
         self.get_logger().info(f"armdown: {self._armdown_script}")
@@ -147,28 +150,33 @@ class GraspTaskNode(Node):
                 if det.results[0].score > best_score:
                     best_score = det.results[0].score
                     best_det = det
-
-        now = time.time()
         if best_det is not None:
             bbox = best_det.bbox
             self._target_u = bbox.center.x
             self._bbox_size_x = bbox.size_x
             self._bbox_size_y = bbox.size_y
-            self._last_detect_time = now
-
-            if self._state == State.SEARCHING:
-                self.get_logger().info(
-                    f"[检测] 识别到目标: {self._target_class}, "
-                    f"置信度={best_score:.1%}, u={self._target_u:.3f}"
-                )
+            self._last_detect_time = time.time()
         else:
             self._target_u = None
 
     # ==================================================================
-    #  状态机 — 主循环
+    #  P 控制器
+    # ==================================================================
+    def _compute_vyaw(self) -> float:
+        """P 控制计算偏航角速度。"""
+        if self._target_u is None or (time.time() - self._last_detect_time > self._lost_timeout):
+            return 0.0
+        error = self._target_u - 0.5
+        if abs(error) < self._center_tol:
+            return 0.0
+        error_angle = error * self._fov_rad
+        vyaw = -self._kp * error_angle
+        return max(-self._max_yaw, min(self._max_yaw, vyaw))
+
+    # ==================================================================
+    #  状态机
     # ==================================================================
     def _tick(self) -> None:
-        # FSM 未就绪时不发送运动指令
         if not self._sport.ready:
             return
 
@@ -178,87 +186,84 @@ class GraspTaskNode(Node):
             self._tick_aligning()
         elif self._state == State.APPROACHING:
             self._tick_approaching()
-        # GRABBING 和 MENU 由子流程处理，不在 tick 中
+        # GRABBING / MENU / DONE 由子线程管理
 
     def _tick_searching(self) -> None:
-        """旋转搜索目标。"""
-        if self._target_u is not None:
-            self.get_logger().info("[状态] SEARCHING → ALIGNING: 目标已找到")
+        """搜索阶段：原地旋转搜索目标。"""
+        # 检测到目标 → 切换到对齐
+        if self._target_u is not None and (time.time() - self._last_detect_time < self._lost_timeout):
+            self._sport.stop()
             self._state = State.ALIGNING
             self._align_start = None
-            self._sport.stop()
+            self.get_logger().info(f"[状态] SEARCHING → ALIGNING (u={self._target_u:.3f})")
             return
 
-        # 旋转搜索
-        self._sport.set_velocity(vyaw=self._search_speed)
+        # 持续旋转搜索
+        self._sport.move(vyaw=self._search_speed)
 
     def _tick_aligning(self) -> None:
-        """偏航对齐让目标居中。"""
-        now = time.time()
-
+        """对齐阶段：P 控制偏航让目标居中。"""
         # 目标丢失 → 回搜索
-        if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            self.get_logger().warn("[状态] ALIGNING → SEARCHING: 目标丢失")
-            self._state = State.SEARCHING
+        if self._target_u is None or (time.time() - self._last_detect_time > self._lost_timeout):
             self._sport.stop()
-            self._align_start = None
+            self._state = State.SEARCHING
+            self.get_logger().info("[状态] ALIGNING → SEARCHING (目标丢失)")
             return
 
-        error = self._target_u - 0.5
+        vyaw = self._compute_vyaw()
 
-        # 居中 → 切换到前进
-        if abs(error) < self._center_tol:
+        if abs(vyaw) < 1e-6:
+            # 居中 → 开始计时
             if self._align_start is None:
-                self._align_start = now
-            if now - self._align_start >= self._stable_time:
-                self.get_logger().info(
-                    "[状态] ALIGNING → APPROACHING: 目标已居中"
-                )
-                self._state = State.APPROACHING
-                self._sport.stop()
-                return
-        else:
-            self._align_start = None
+                self._align_start = time.time()
 
-        # P 控制偏航（负号确保方向正确）
-        vyaw = -self._kp * error * self._fov_rad
-        vyaw = max(-self._max_yaw, min(self._max_yaw, vyaw))
-        self._sport.set_velocity(vyaw=vyaw)
+            aligned_dur = time.time() - self._align_start
+            if aligned_dur >= self._stable_time:
+                self._sport.stop()
+                self._state = State.APPROACHING
+                self._last_forward_time = 0.0
+                self.get_logger().info("[状态] ALIGNING → APPROACHING (已对齐)")
+                return
+
+            self._sport.stop()
+        else:
+            # 未居中 → 继续旋转
+            self._align_start = None
+            self._sport.move(vyaw=vyaw)
 
     def _tick_approaching(self) -> None:
-        """前进到目标附近。"""
-        now = time.time()
-
+        """接近阶段：前进到目标附近。"""
         # 目标丢失 → 回搜索
-        if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            self.get_logger().warn("[状态] APPROACHING → SEARCHING: 目标丢失")
+        if self._target_u is None or (time.time() - self._last_detect_time > self._lost_timeout):
+            self._sport.stop()
             self._state = State.SEARCHING
-            self._sport.stop()
-            return
-
-        # 偏离中心 → 回对齐
-        if abs(self._target_u - 0.5) > self._center_tol * 2:
-            self.get_logger().info("[状态] APPROACHING → ALIGNING: 目标偏离中心")
-            self._state = State.ALIGNING
-            self._sport.stop()
-            self._align_start = None
+            self.get_logger().info("[状态] APPROACHING → SEARCHING (目标丢失)")
             return
 
         # 到达判断
         bbox_max = max(self._bbox_size_x, self._bbox_size_y)
         if bbox_max >= self._arrive_ratio:
             self._sport.stop()
-            self.get_logger().info(
-                f"[状态] APPROACHING → GRABBING: 到达目标! "
-                f"bbox={bbox_max:.2f} >= {self._arrive_ratio}"
-            )
             self._state = State.GRABBING
+            self.get_logger().info(
+                f"[状态] APPROACHING → GRABBING (bbox={bbox_max:.2f} >= {self._arrive_ratio})"
+            )
             self._run_grab()
             return
 
-        # 前进（每秒发送一次）
+        # 目标偏离 → 回对齐
+        error = abs(self._target_u - 0.5)
+        if error > self._center_tol * 2:
+            self._sport.stop()
+            self._state = State.ALIGNING
+            self._align_start = None
+            self.get_logger().info("[状态] APPROACHING → ALIGNING (目标偏离)")
+            return
+
+        # 前进（每秒发一次 MOVE）
+        now = time.time()
         if now - self._last_forward_time >= 1.0:
-            self._sport.set_velocity(vx=self._fwd_speed, duration=self._fwd_duration)
+            self._sport.move(vx=self._fwd_speed)
             self._last_forward_time = now
 
     # ==================================================================
@@ -359,8 +364,10 @@ class GraspTaskNode(Node):
     def _do_turn_and_put_down(self) -> None:
         """右转 90° 后放下目标物。"""
         self.get_logger().info("[右转] 开始右转 90° ...")
-        self._sport.set_velocity(vyaw=-0.6, duration=2.6)
+        # MOVE 的 z 参数控制偏航，负值为右转
+        self._sport.move(vyaw=-0.6)
         time.sleep(2.6)
+        self._sport.stop()
         self.get_logger().info("[右转] 右转完成")
         self._do_put_down()
 
@@ -401,7 +408,7 @@ class GraspTaskNode(Node):
             vz = max(-1.0, min(1.0, vz))
 
             self.get_logger().info(f"[自定义] cmd: vx={vx}, vy={vy}, vz={vz}")
-            self._sport.set_velocity(vx=vx, vy=vy, vyaw=vz, duration=1.0)
+            self._sport.move(vx=vx, vy=vy, vyaw=vz)
 
     def destroy_node(self) -> None:
         self._sport.stop()

@@ -51,8 +51,7 @@ g1_yaw_align_node:
     max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
     control_rate: 10.0                        # 控制频率 Hz
     lost_timeout: 5.0                         # 目标丢失超时 s
-    velocity_duration: 0.5                    # SET_VELOCITY 持续时间 s
-    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STAND_UP→WALK_RUN）
+    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STANDUP→BALANCESTAND→CONTINUOUSGAIT）
 
 # ---- 前进控制节点参数 ----
 g1_loco_forward_node:
@@ -60,11 +59,9 @@ g1_loco_forward_node:
     detection_topic: "/g1/vision/detections"  # 检测结果输入
     target_class_id: "chair"                  # 目标类别
     forward_speed: 0.3                        # 前进速度 m/s
-    velocity_duration: 0.5                    # SET_VELOCITY 持续时间 s
     center_tolerance: 0.08                    # 居中容差
     align_stable_time: 0.8                    # 对齐稳定时间 s
     arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
     lost_timeout: 1.0                         # 目标丢失超时 s
     check_rate: 10.0                          # 检查频率 Hz
     auto_stand: true                          # 是否自动初始化 FSM
-    auto_walk_run: true                       # 是否自动切换到走跑模式

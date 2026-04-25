@@ -345,7 +345,7 @@ ros2 run g1_yolo_nav_py yolo_detector
 # 终端 3：twist_bridge
 ros2 run g1_twist_bridge_py twist_bridge
 
-# 终端 4：抓取任务（Sport API 模式，无需 DDS）
+# 终端 4：抓取任务（纯 Sport API 模式，无需 DDS）
 ros2 run g1_yolo_nav_py grasp_task
 ```
 
@@ -353,7 +353,7 @@ ros2 run g1_yolo_nav_py grasp_task
 
 ```
 ==================================================
-G1 抓取任务启动（Sport API 模式）
+G1 抓取任务启动（纯 Sport API 模式）
 目标类别: chair
 armup: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armup.py
 armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
@@ -430,16 +430,23 @@ ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
   -p interval_sec:=2.0 -p duration_sec:=30.0
 ```
 
-## 控制方式对比
+## 运动控制方式
 
-| 维度 | cmd_vel (yaw_align) | Sport API (loco_forward/grasp_task) |
-| --- | --- | --- |
-| 话题 | `/cmd_vel` | `/api/sport/request` |
-| 消息类型 | `Twist` | `unitree_api/Request` |
-| 速度控制 | 持续发布 | `SET_VELOCITY` 带 duration |
-| 适用场景 | 偏航对齐、搜索旋转 | 前进、右转、状态机切换 |
-| 需要桥接 | 需要 twist_bridge | 直接发布 |
-| DDS 依赖 | 无 | 无 |
+所有运动控制节点统一使用 **纯 Sport API**，通过 `SportClient` 封装发布到 `/api/sport/request`。
+
+| API | ID | 用途 | 参数格式 |
+| --- | --- | --- | --- |
+| MOVE | 1008 | 运动控制 | `{"x": vx, "y": vy, "z": vyaw}` |
+| STOPMOVE | 1003 | 停止运动 | 无 |
+| DAMP | 101 | 阻尼模式 | 无 |
+| STANDUP | 1004 | 站立 | 无 |
+| BALANCESTAND | 1002 | 平衡站立 | 无 |
+| SIT | 1009 | 坐下 | 无 |
+| RISESIT | 1010 | 从坐姿恢复 | 无 |
+| CONTINUOUSGAIT | 1019 | 连续步态 | 无 |
+
+> **注意**：不再使用 Loco API (SET_FSM_ID=7101, SET_VELOCITY=7105 等)。
+> 所有运动控制与 `g1_teleop_ctrl_keyboard` 使用完全相同的 API 体系。
 
 ---
 
