@@ -1,14 +1,15 @@
 """
-偏航对齐节点 — 高层运动控制，通过 Sport API MOVE 指令旋转机器人让目标居中。
+偏航对齐节点 — 通过 Loco API 控制机器人旋转使目标居中。
 
-直接发布 unitree_api/msg/Request 到 /api/sport/request，
-使用 MOVE (1008) API 控制旋转，与 ctrl_keyboard 保持一致。
+参考 ctr_keyboard 的工作方式：
+    1. 启动时通过 SET_FSM_ID 做状态机切换（DAMP → STAND_UP）
+    2. 运动控制通过 SET_VELOCITY (7105)，参数格式 {"velocity": [vx,vy,vyaw], "duration": ...}
 
 控制逻辑：
     1. 从检测结果提取目标 u 坐标（归一化 0~1，0.5 = 画面中央）
     2. 计算误差 error = u - 0.5
     3. P 控制输出 vyaw = kp * error * FOV
-    4. 限速后通过 MOVE API 发布
+    4. 限速后通过 SET_VELOCITY API 发布
 """
 
 # ==================================================================
@@ -40,15 +41,19 @@ from unitree_api.msg import Request  # Sport API 请求消息
 
 
 # ==================================================================
-# 3. Sport API 常量
+# 3. Loco API 常量（参考 ctr_keyboard.py）
 # ==================================================================
-API_BALANCESTAND = 1002
-API_MOVE = 1008
-API_STOPMOVE = 1003
+API_SET_FSM_ID = 7101
+API_SET_VELOCITY = 7105
+
+# FSM 状态 ID
+FSM_DAMP = 1
+FSM_STAND_UP = 4
+FSM_SIT = 3
 
 
 class YawAlignNode(Node):
-    """偏航对齐节点 — 通过 Sport API MOVE 指令让目标保持在画面中央。"""
+    """偏航对齐节点 — 通过 Loco API SET_VELOCITY 让目标保持在画面中央。"""
 
     def __init__(self) -> None:
         super().__init__("g1_yaw_align_node")
@@ -62,6 +67,8 @@ class YawAlignNode(Node):
         self.declare_parameter("max_yaw_speed", 0.6)
         self.declare_parameter("control_rate", 10.0)
         self.declare_parameter("lost_timeout", 5.0)
+        self.declare_parameter("auto_stand", True)
+        self.declare_parameter("velocity_duration", 0.5)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -72,34 +79,70 @@ class YawAlignNode(Node):
         self._max_speed = float(p("max_yaw_speed"))
         self._ctrl_rate = float(p("control_rate"))
         self._lost_timeout = float(p("lost_timeout"))
+        self._auto_stand = bool(p("auto_stand"))
+        self._vel_duration = float(p("velocity_duration"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._last_detect_time: float = 0.0
         self._tick_count: int = 0
         self._log_interval: int = 50  # 每 50 个 tick（~5s）打印一次状态
-        self._is_moving: bool = False  # 追踪运动状态，避免重复发送 STOPMOVE
+        self._is_moving: bool = False  # 追踪运动状态，避免重复发送零速
+        self._ready: bool = False  # 状态机就绪标志
 
         # ---- ROS2 订阅 ----
-        # YOLO 检测器用默认 RELIABLE 发布，这里也用 RELIABLE 确保兼容
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, 10)
 
-        # ---- Sport API 发布 ----
+        # ---- Loco API 发布 ----
         self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
+
+        # ---- 启动状态机切换 ----
+        if self._auto_stand:
+            self._do_stand_up()
+        else:
+            self._ready = True
+            self.get_logger().info("跳过自动站立，请确保机器人已处于站立状态")
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
 
-        # ---- 启动时发送 BALANCESTAND（机器人必须处于站立平衡状态才能接受 MOVE 指令）----
-        self._publish_balancestand()
         self._first_move_logged = False
 
         self.get_logger().info(
-            f"偏航对齐节点就绪（Sport API）: 目标={self._target_class}, "
+            f"偏航对齐节点就绪（Loco API）: 目标={self._target_class}, "
             f"kp={self._kp}, 容差={self._center_tol}, "
-            f"lost_timeout={self._lost_timeout}"
+            f"lost_timeout={self._lost_timeout}, auto_stand={self._auto_stand}"
         )
+
+    def _publish_request(self, api_id: int, parameter: str = '') -> None:
+        """创建新 Request 并发布（每次 publish 必须创建新对象，避免 DDS 缓冲区复用问题）。"""
+        req = Request()
+        req.header.identity.api_id = api_id
+        req.parameter = parameter
+        self._sport_pub.publish(req)
+
+    def _do_stand_up(self) -> None:
+        """执行状态机切换：DAMP → STAND_UP（参考 ctr_keyboard.py）。
+
+        在单独线程中执行，避免阻塞 ROS2 spin。
+        """
+        import threading
+
+        def _stand_up_thread():
+            self.get_logger().info("[状态机] 切换到 DAMP 模式...")
+            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_DAMP}))
+            time.sleep(2)
+
+            self.get_logger().info("[状态机] 切换到 STAND_UP 模式...")
+            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_STAND_UP}))
+            time.sleep(3)
+
+            self._ready = True
+            self.get_logger().info("[状态机] 站立完成，就绪")
+
+        t = threading.Thread(target=_stand_up_thread, daemon=True)
+        t.start()
 
     def _on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标。"""
@@ -144,35 +187,30 @@ class YawAlignNode(Node):
 
         return vyaw
 
-    def _publish_request(self, api_id: int, parameter: str = '') -> None:
-        """创建新 Request 并发布（每次 publish 必须创建新对象，避免 DDS 缓冲区复用问题）。"""
-        req = Request()
-        req.header.identity.api_id = api_id
-        req.parameter = parameter
-        self._sport_pub.publish(req)
-
-    def _publish_balancestand(self) -> None:
-        """发送 BALANCESTAND 指令，让机器人进入站立平衡状态。"""
-        self._publish_request(API_BALANCESTAND, json.dumps({"x": 0.0, "y": 0.0, "z": 0.0}))
-
-    def _publish_stop(self) -> None:
-        """发送 STOPMOVE 指令停止旋转。"""
-        self._publish_request(API_STOPMOVE, json.dumps({"x": 0.0, "y": 0.0, "z": 0.0}))
-
     def _tick(self) -> None:
-        """定时回调 — 计算并通过 Sport API 发布旋转指令。"""
+        """定时回调 — 计算并通过 Loco API SET_VELOCITY 发布旋转指令。"""
+        # 状态机未就绪时不发送指令
+        if not self._ready:
+            return
+
         vyaw = self._compute_vyaw()
         if abs(vyaw) > 1e-6:
-            self._publish_request(API_MOVE, json.dumps({"x": 0.0, "y": 0.0, "z": vyaw}))
+            self._publish_request(API_SET_VELOCITY, json.dumps({
+                "velocity": [0.0, 0.0, vyaw],
+                "duration": self._vel_duration,
+            }))
             if not self._first_move_logged:
                 self.get_logger().info(
-                    f"[对齐] 发送 MOVE 指令: z={vyaw:.3f} rad/s"
+                    f"[对齐] 发送 SET_VELOCITY: vyaw={vyaw:.3f} rad/s"
                 )
                 self._first_move_logged = True
             self._is_moving = True
         elif self._is_moving:
-            # 仅在运动→停止状态切换时发送 STOPMOVE（避免 10Hz 刷屏重置 API 状态）
-            self._publish_stop()
+            # 仅在运动→停止状态切换时发送零速（避免 10Hz 刷屏重置 API 状态）
+            self._publish_request(API_SET_VELOCITY, json.dumps({
+                "velocity": [0.0, 0.0, 0.0],
+                "duration": 0.5,
+            }))
             self._is_moving = False
 
         # 周期性日志：每 _log_interval 个 tick 打印一次状态
@@ -186,8 +224,13 @@ class YawAlignNode(Node):
             )
 
     def destroy_node(self) -> None:
-        self._publish_balancestand()
-        self.get_logger().info("偏航对齐节点停止，已发送 BALANCESTAND 指令")
+        # 发送零速 + 坐下指令
+        self._publish_request(API_SET_VELOCITY, json.dumps({
+            "velocity": [0.0, 0.0, 0.0], "duration": 1.0
+        }))
+        time.sleep(0.2)
+        self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_SIT}))
+        self.get_logger().info("偏航对齐节点停止，已发送停止+坐下指令")
         super().destroy_node()
 
 
