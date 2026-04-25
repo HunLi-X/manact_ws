@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-前进控制节点 — 检测到目标对齐后，通过 Sport API 控制机器人前进
+前进控制节点 — 检测到目标对齐后，通过 Loco API 控制机器人前进
 
 控制方式：
-    通过 unitree_api/msg/Request 发布到 /api/sport/request，
-    使用 MOVE API 控制前进，与 ctrl_keyboard 保持一致。
+    参考 ctr_keyboard 的工作方式：
+    1. 启动时通过 SET_FSM_ID 做状态机切换（DAMP → STAND_UP）
+    2. 运动控制通过 SET_VELOCITY (7105)，参数格式 {"velocity": [vx,vy,vyaw], "duration": ...}
 
 状态机：
     IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
@@ -19,6 +20,7 @@
 # ==================================================================
 import json        # Sport API 参数序列化
 import time        # 计时与延时
+import threading   # 状态机切换线程
 from typing import Optional  # 类型注解
 
 # ==================================================================
@@ -31,15 +33,20 @@ from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 from unitree_api.msg import Request  # Sport API 请求消息
 
 # ==================================================================
-# 3. Sport API 常量
+# 3. Loco API 常量（参考 ctr_keyboard.py）
 # ==================================================================
-API_MOVE = 1008
-API_STOPMOVE = 1003
+API_SET_FSM_ID = 7101
+API_SET_VELOCITY = 7105
+
+# FSM 状态 ID
+FSM_DAMP = 1
+FSM_STAND_UP = 4
+FSM_SIT = 3
 
 
 class LocoForwardNode(Node):
     """
-    前进节点 — 目标对齐后通过 Sport API 前进到目标。
+    前进节点 — 目标对齐后通过 Loco API SET_VELOCITY 前进到目标。
 
     状态机：
         IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
@@ -52,23 +59,25 @@ class LocoForwardNode(Node):
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_class_id", "chair")
         self.declare_parameter("forward_speed", 0.3)
-        self.declare_parameter("forward_duration", 0.5)
+        self.declare_parameter("velocity_duration", 0.5)
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("align_stable_time", 0.8)
         self.declare_parameter("arrive_bbox_ratio", 0.45)
         self.declare_parameter("lost_timeout", 1.0)
         self.declare_parameter("check_rate", 10.0)
+        self.declare_parameter("auto_stand", True)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
         self._target_class = p("target_class_id")
         self._speed = float(p("forward_speed"))
-        self._duration = float(p("forward_duration"))
+        self._vel_duration = float(p("velocity_duration"))
         self._center_tol = float(p("center_tolerance"))
         self._stable_time = float(p("align_stable_time"))
         self._arrive_ratio = float(p("arrive_bbox_ratio"))
         self._lost_timeout = float(p("lost_timeout"))
         self._rate = float(p("check_rate"))
+        self._auto_stand = bool(p("auto_stand"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
@@ -78,6 +87,7 @@ class LocoForwardNode(Node):
         self._moving: bool = False
         self._align_start: Optional[float] = None
         self._last_forward_time: float = 0.0
+        self._ready: bool = False  # 状态机就绪标志
 
         # ---- ROS2 订阅 ----
         qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -85,56 +95,81 @@ class LocoForwardNode(Node):
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, qos)
 
-        # ---- Sport API 发布 ----
+        # ---- Loco API 发布 ----
         self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
-        self._sport_req = Request()
+
+        # ---- 启动状态机切换 ----
+        if self._auto_stand:
+            self._do_stand_up()
+        else:
+            self._ready = True
+            self.get_logger().info("跳过自动站立，请确保机器人已处于站立状态")
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
 
         self.get_logger().info(
-            f"Loco 前进节点就绪（Sport API）: 速度={self._speed}m/s, "
-            f"到达条件={self._arrive_ratio}"
+            f"Loco 前进节点就绪（Loco API）: 速度={self._speed}m/s, "
+            f"到达条件={self._arrive_ratio}, auto_stand={self._auto_stand}"
         )
 
     # ==================================================================
-    #  Sport API
+    #  状态机切换
     # ==================================================================
-    def _publish_sport(self, api_id: int, params: dict) -> None:
-        """发布 Sport API 请求。"""
-        self._sport_req.header.identity.api_id = api_id
-        self._sport_req.parameter = json.dumps(params)
-        self._sport_pub.publish(self._sport_req)
+    def _do_stand_up(self) -> None:
+        """执行状态机切换：DAMP → STAND_UP（参考 ctr_keyboard.py）。"""
+        def _stand_up_thread():
+            self.get_logger().info("[状态机] 切换到 DAMP 模式...")
+            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_DAMP}))
+            time.sleep(2)
+
+            self.get_logger().info("[状态机] 切换到 STAND_UP 模式...")
+            self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_STAND_UP}))
+            time.sleep(3)
+
+            self._ready = True
+            self.get_logger().info("[状态机] 站立完成，就绪")
+
+        t = threading.Thread(target=_stand_up_thread, daemon=True)
+        t.start()
+
+    def _publish_request(self, api_id: int, parameter: str = '') -> None:
+        """创建新 Request 并发布。"""
+        req = Request()
+        req.header.identity.api_id = api_id
+        req.parameter = parameter
+        self._sport_pub.publish(req)
 
     def _start_move(self) -> None:
         """开始前进。"""
         if self._moving:
             return
-        self._publish_sport(API_MOVE, {
-            "x": self._speed,
-            "y": 0.0,
-            "z": 0.0,
-        })
+        self._publish_request(API_SET_VELOCITY, json.dumps({
+            "velocity": [self._speed, 0.0, 0.0],
+            "duration": self._vel_duration,
+        }))
         self._moving = True
         self._last_forward_time = time.time()
         self.get_logger().info(f"开始前进: vx={self._speed} m/s")
 
     def _continue_move(self) -> None:
-        """持续前进（每秒发送一次 MOVE）。"""
+        """持续前进（每秒发送一次 SET_VELOCITY）。"""
         now = time.time()
         if now - self._last_forward_time >= 1.0:
-            self._publish_sport(API_MOVE, {
-                "x": self._speed,
-                "y": 0.0,
-                "z": 0.0,
-            })
+            self._publish_request(API_SET_VELOCITY, json.dumps({
+                "velocity": [self._speed, 0.0, 0.0],
+                "duration": self._vel_duration,
+            }))
             self._last_forward_time = now
 
     def _stop_move(self) -> None:
         """停止前进。"""
         if not self._moving:
             return
-        self._publish_sport(API_STOPMOVE, {})
+        self._publish_request(API_SET_VELOCITY, json.dumps({
+            "velocity": [0.0, 0.0, 0.0],
+            "duration": 0.5,
+        }))
         self._moving = False
         self.get_logger().info("停止前进")
 
@@ -163,6 +198,10 @@ class LocoForwardNode(Node):
     # ==================================================================
     def _tick(self) -> None:
         now = time.time()
+
+        # 状态机未就绪时不处理
+        if not self._ready:
+            return
 
         # ---- 1. 目标丢失 ----
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
@@ -201,12 +240,15 @@ class LocoForwardNode(Node):
                 self._continue_move()
 
     def destroy_node(self) -> None:
-        self._stop_move()
+        self._publish_request(API_SET_VELOCITY, json.dumps({
+            "velocity": [0.0, 0.0, 0.0], "duration": 1.0
+        }))
+        time.sleep(0.2)
+        self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_SIT}))
         super().destroy_node()
 
 
 def main(args=None):
-    # 纯 Sport API 通信，无需 DDS 兼容层
     rclpy.init(args=args)
     node = LocoForwardNode()
     try:
