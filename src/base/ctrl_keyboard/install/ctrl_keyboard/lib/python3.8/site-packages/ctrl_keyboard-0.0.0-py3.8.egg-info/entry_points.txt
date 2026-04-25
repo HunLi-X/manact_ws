@@ -1,0 +1,4 @@
+[console_scripts]
+auto_walk = ctrl_keyboard.auto_ctrl:main
+ctrl_keyboard = ctrl_keyboard.ctrl_keyboard:main
+

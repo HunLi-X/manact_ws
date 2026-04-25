@@ -1,0 +1,27 @@
+[1.256s] Invoking command in '/home/unitree/ctrl_keyboard': PYTHONPATH=/home/unitree/ctrl_keyboard/build/ctrl_keyboard/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base build/ctrl_keyboard build --build-base /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build install --record /home/unitree/ctrl_keyboard/build/ctrl_keyboard/install.log --install-scripts $base/lib/ctrl_keyboard --single-version-externally-managed install_data
+[1.625s] running egg_info
+[1.626s] writing build/ctrl_keyboard/ctrl_keyboard.egg-info/PKG-INFO
+[1.626s] writing dependency_links to build/ctrl_keyboard/ctrl_keyboard.egg-info/dependency_links.txt
+[1.627s] writing entry points to build/ctrl_keyboard/ctrl_keyboard.egg-info/entry_points.txt
+[1.627s] writing requirements to build/ctrl_keyboard/ctrl_keyboard.egg-info/requires.txt
+[1.627s] writing top-level names to build/ctrl_keyboard/ctrl_keyboard.egg-info/top_level.txt
+[1.680s] reading manifest file 'build/ctrl_keyboard/ctrl_keyboard.egg-info/SOURCES.txt'
+[1.681s] writing manifest file 'build/ctrl_keyboard/ctrl_keyboard.egg-info/SOURCES.txt'
+[1.682s] running build
+[1.682s] running build_py
+[1.683s] copying ctrl_keyboard/ctrl_keyboard.py -> /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard
+[1.683s] copying ctrl_keyboard/auto_ctrl.py -> /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard
+[1.683s] running install
+[1.685s] running install_lib
+[1.687s] copying /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard/ctrl_keyboard.py -> /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard
+[1.687s] copying /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard/auto_ctrl.py -> /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard
+[1.688s] byte-compiling /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard/ctrl_keyboard.py to ctrl_keyboard.cpython-38.pyc
+[1.694s] byte-compiling /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard/auto_ctrl.py to auto_ctrl.cpython-38.pyc
+[1.695s] running install_data
+[1.695s] running install_egg_info
+[1.698s] removing '/home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard-0.0.0-py3.8.egg-info' (and everything under it)
+[1.699s] Copying build/ctrl_keyboard/ctrl_keyboard.egg-info to /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard-0.0.0-py3.8.egg-info
+[1.701s] running install_scripts
+[1.730s] Installing ctrl_keyboard script to /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/ctrl_keyboard
+[1.731s] writing list of installed files to '/home/unitree/ctrl_keyboard/build/ctrl_keyboard/install.log'
+[1.787s] Invoked command in '/home/unitree/ctrl_keyboard' returned '0': PYTHONPATH=/home/unitree/ctrl_keyboard/build/ctrl_keyboard/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base build/ctrl_keyboard build --build-base /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build install --record /home/unitree/ctrl_keyboard/build/ctrl_keyboard/install.log --install-scripts $base/lib/ctrl_keyboard --single-version-externally-managed install_data

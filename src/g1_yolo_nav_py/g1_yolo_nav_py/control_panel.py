@@ -32,6 +32,7 @@ import subprocess
 import threading
 import time
 import math
+import json
 from pathlib import Path
 from typing import Optional
 from enum import Enum, auto
@@ -50,12 +51,17 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 from geometry_msgs.msg import Twist
+from unitree_api.msg import Request
 from cv_bridge import CvBridge
 
 # 注意：control_panel 不导入 unitree_sdk2py！
 # unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
 # 前进/右转通过 cmd_vel → twist_bridge → Sport API 完成，无需 LocoClient。
+# unitree_api 是纯 ROS2 消息包，导入安全，不涉及 DDS。
+
+# Sport API 常量
+API_SET_VELOCITY = 7105
 
 # ==================================================================
 # 3. 常量
@@ -157,6 +163,7 @@ class ControlPanelNode(Node):
         self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
         self.declare_parameter("display_width", 400)
         self.declare_parameter("display_height", 300)
+        self.declare_parameter("forward_duration", 0.5)
 
         p = lambda n: self.get_parameter(n).value
         self._img_topic = p("image_topic")
@@ -175,6 +182,7 @@ class ControlPanelNode(Node):
         self._net_iface = p("network_interface")
         self._disp_w = int(p("display_width"))
         self._disp_h = int(p("display_height"))
+        self._fwd_duration = float(p("forward_duration"))
 
         # arm 脚本路径
         arm_dir = p("arm_script_dir")
@@ -200,6 +208,9 @@ class ControlPanelNode(Node):
 
         # ---- ROS2 发布 ----
         self._cmd_pub = self.create_publisher(Twist, self._cmd_topic, 10)
+        # Sport API（前进、右转等需要 duration 的运动）
+        self._sport_pub = self.create_publisher(Request, '/api/sport/request', 10)
+        self._sport_req = Request()
 
         # ---- 延迟诊断（2秒后检查订阅状态）----
         self._diag_timer = self.create_timer(2.0, self._diag_check)
@@ -218,6 +229,8 @@ class ControlPanelNode(Node):
         self._manual_vy = 0.0
         self._manual_vz = 0.0
         self._manual_active = False
+        self._last_forward_time = 0.0  # Sport API 前进节流
+        self._last_forward_time = 0.0  # Sport API 前进节流
 
         # ---- 状态机（参考 grasp_task.py）----
         self._target_u = None
@@ -256,6 +269,30 @@ class ControlPanelNode(Node):
 
     def _publish_stop(self) -> None:
         self._publish_cmd(0.0, 0.0, 0.0)
+
+    # ==================================================================
+    #  Sport API 发布
+    # ==================================================================
+    def _publish_sport(self, api_id: int, params: dict) -> None:
+        """发布 Sport API 请求。"""
+        self._sport_req.header.identity.api_id = api_id
+        self._sport_req.parameter = json.dumps(params)
+        self._sport_pub.publish(self._sport_req)
+
+    def _sport_set_velocity(self, vx: float, vy: float = 0.0,
+                            vyaw: float = 0.0, duration: float = 0.5) -> None:
+        """通过 Sport API SET_VELOCITY 控制运动。"""
+        self._publish_sport(API_SET_VELOCITY, {
+            "velocity": [vx, vy, vyaw],
+            "duration": duration,
+        })
+
+    def _sport_stop(self) -> None:
+        """通过 Sport API 停止运动。"""
+        self._publish_sport(API_SET_VELOCITY, {
+            "velocity": [0.0, 0.0, 0.0],
+            "duration": 0.5,
+        })
 
     # ==================================================================
     # 诊断
@@ -667,6 +704,7 @@ class ControlPanelNode(Node):
         """停止所有运动并回到 IDLE。"""
         # 清除手动控制
         self._manual_active = False
+        self._last_forward_time = 0.0  # Sport API 前进节流
         self._manual_vx = 0.0
         self._manual_vy = 0.0
         self._manual_vz = 0.0
@@ -719,9 +757,8 @@ class ControlPanelNode(Node):
         self._append_log("[右转] 开始右转 90° ...")
 
         def _worker():
-            self._publish_cmd(vz=-0.6)
-            time.sleep(2.6)  # ≈ 90° at 0.6 rad/s
-            self._publish_stop()
+            self._sport_set_velocity(vyaw=-0.6, duration=2.6)
+            time.sleep(2.6)
             self._append_log("[右转] 右转完成")
             self._run_armdown()
 
@@ -877,13 +914,13 @@ class ControlPanelNode(Node):
         self._publish_cmd(vz=vyaw)
 
     def _tick_approaching(self) -> None:
-        """前进到目标附近。"""
+        """前进到目标附近（Sport API SET_VELOCITY）。"""
         now = time.time()
 
         # 目标丢失 → 回搜索
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self._state = State.SEARCHING
-            self._publish_stop()
+            self._sport_stop()
             self._append_log("[状态] APPROACHING → SEARCHING: 目标丢失")
             self._update_state_display()
             return
@@ -891,7 +928,7 @@ class ControlPanelNode(Node):
         # 偏离中心 → 回对齐
         if abs(self._target_u - 0.5) > self._center_tol * 2:
             self._state = State.ALIGNING
-            self._publish_stop()
+            self._sport_stop()
             self._align_start = None
             self._append_log("[状态] APPROACHING → ALIGNING: 目标偏离中心")
             self._update_state_display()
@@ -900,7 +937,7 @@ class ControlPanelNode(Node):
         # 到达判断
         bbox_max = max(self._bbox_size_x, self._bbox_size_y)
         if bbox_max >= self._arrive_ratio:
-            self._publish_stop()
+            self._sport_stop()
             self._state = State.GRABBING
             self._append_log(
                 f"[状态] APPROACHING → GRABBING: 到达目标! bbox={bbox_max:.2f}"
@@ -909,8 +946,12 @@ class ControlPanelNode(Node):
             self._update_state_display()
             return
 
-        # 前进（通过 cmd_vel → twist_bridge → Sport API）
-        self._publish_cmd(vx=self._fwd_speed)
+        # 前进（Sport API，每秒发送一次）
+        if now - self._last_forward_time >= 1.0:
+            self._sport_set_velocity(
+                vx=self._fwd_speed, duration=self._fwd_duration
+            )
+            self._last_forward_time = now
 
     # ==================================================================
     # GUI 主循环
@@ -1038,6 +1079,7 @@ class ControlPanelNode(Node):
 
     def destroy_node(self) -> None:
         self._publish_stop()
+        self._sport_stop()
         self.get_logger().info("[清理] 控制面板节点已停止")
         super().destroy_node()
 

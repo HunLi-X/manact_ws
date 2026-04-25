@@ -1,0 +1,26 @@
+running egg_info
+writing build/ctrl_keyboard/ctrl_keyboard.egg-info/PKG-INFO
+writing dependency_links to build/ctrl_keyboard/ctrl_keyboard.egg-info/dependency_links.txt
+writing entry points to build/ctrl_keyboard/ctrl_keyboard.egg-info/entry_points.txt
+writing requirements to build/ctrl_keyboard/ctrl_keyboard.egg-info/requires.txt
+writing top-level names to build/ctrl_keyboard/ctrl_keyboard.egg-info/top_level.txt
+reading manifest file 'build/ctrl_keyboard/ctrl_keyboard.egg-info/SOURCES.txt'
+writing manifest file 'build/ctrl_keyboard/ctrl_keyboard.egg-info/SOURCES.txt'
+running build
+running build_py
+copying ctrl_keyboard/ctrl_keyboard.py -> /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard
+copying ctrl_keyboard/ctrl_keyboard (copy).py -> /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard
+running install
+running install_lib
+copying /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard/ctrl_keyboard.py -> /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard
+copying /home/unitree/ctrl_keyboard/build/ctrl_keyboard/build/lib/ctrl_keyboard/ctrl_keyboard (copy).py -> /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard
+byte-compiling /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard/ctrl_keyboard.py to ctrl_keyboard.cpython-38.pyc
+byte-compiling /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard/ctrl_keyboard (copy).py to ctrl_keyboard (copy).cpython-38.pyc
+running install_data
+running install_egg_info
+removing '/home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard-0.0.0-py3.8.egg-info' (and everything under it)
+Copying build/ctrl_keyboard/ctrl_keyboard.egg-info to /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/python3.8/site-packages/ctrl_keyboard-0.0.0-py3.8.egg-info
+running install_scripts
+Installing auto_walk script to /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/ctrl_keyboard
+Installing ctrl_keyboard script to /home/unitree/ctrl_keyboard/install/ctrl_keyboard/lib/ctrl_keyboard
+writing list of installed files to '/home/unitree/ctrl_keyboard/build/ctrl_keyboard/install.log'

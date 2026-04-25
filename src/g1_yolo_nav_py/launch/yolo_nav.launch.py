@@ -1,23 +1,23 @@
 """
-Launch 文件：启动 YOLO 目标识别 + 空间投影 + 导航规划 + 视觉伺服趋近
+Launch 文件：启动 YOLO 目标识别 + 偏航对齐 + 前进接近
 
 启动节点：
     1. g1_yolo_detector_node     - YOLO 目标检测
-    2. g1_spatial_target_node    - 2D→3D 空间投影
-    3. g1_nav_planner_node       - 路径规划与趋近控制
-    4. g1_visual_servo_node      - 视觉伺服：腰部对齐+Loco前进（可选）
-    5. d455_camera_tf_publisher   - D455 相机静态 TF
+    2. g1_yaw_align_node         - 偏航对齐（机器人旋转，非腰部旋转）
+    3. g1_loco_forward_node      - Sport API 前进控制
+    4. d455_camera_tf_publisher   - D455 相机静态 TF
+
+控制方式：
+    所有运动控制通过 Sport API（/api/sport/request）和 cmd_vel 完成，
+    无需 unitree_sdk2py / LocoClient / DDS 依赖。
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py target_class:=person model_path:=yolov8n.pt
-    ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_waist_tracking:=true
 
 TF 树结构：
     odom → base_link → pelvis → torso_link → robot1/D455_1_link → camera_optical_frame
-           └──────────────────────────────────────────────────────────────────────────┘
-                              （由 static_transform_publisher 连接）
 """
 
 import math
@@ -47,7 +47,7 @@ def generate_launch_description() -> LaunchDescription:
         description="是否启动 RViz2 可视化界面",
     )
 
-    # 是否使用 Nav2 导航栈（false 时使用简单 P 控制趋近）
+    # 是否使用 Nav2 导航栈
     use_nav2 = DeclareLaunchArgument(
         name="use_nav2",
         default_value="false",
@@ -61,7 +61,7 @@ def generate_launch_description() -> LaunchDescription:
         description="YOLO 模型文件名（相对于 share/models/ 目录，或绝对路径）",
     )
 
-    # 是否使用深度传感器获取目标距离
+    # 是否使用深度传感器
     use_depth = DeclareLaunchArgument(
         name="use_depth_sensor",
         default_value="false",
@@ -75,33 +75,17 @@ def generate_launch_description() -> LaunchDescription:
         description="目标类别名称（如 chair, person，也支持数字 ID）",
     )
 
-    # 是否启用视觉伺服趋近（需要 unitree_sdk2py）
-    enable_waist_tracking = DeclareLaunchArgument(
-        name="enable_waist_tracking",
-        default_value="false",
-        description="是否启用视觉伺服（腰部对齐+LocoClient前进）",
+    # 是否启用前进控制
+    enable_approach = DeclareLaunchArgument(
+        name="enable_approach",
+        default_value="true",
+        description="是否启用偏航对齐+前进接近",
     )
 
     # ==================================================================
     # D455 相机静态 TF
     # ==================================================================
-    # 将相机坐标系连接到机器人本体 TF 树
-    #
-    # 安装参数（来自工程图）：
-    #   - 前向偏移：~47.65mm（相机在头部前方）
-    #   - 俯仰角：42° 向下（低头看地，适合地面目标检测）
-    #   - 安装高度：~462.68mm（从地面到光学中心）
-    #
-    # 坐标变换：
-    #   parent: torso_link（躯干坐标系）
-    #   child:  robot1/D455_1_link（RealSense 基座坐标系）
-    #   translation: (0.04765, 0, 0) meters
-    #   rotation: pitch = -42° (向下为负)
-    #
-    # 四元数计算：
-    #   绕 Y 轴旋转 pitch 角 → (sin(pitch/2), 0, 0, cos(pitch/2))
-    # ==================================================================
-    camera_pitch_deg = -42.0  # 向下俯仰角度（负值）
+    camera_pitch_deg = -42.0
     camera_pitch_rad = math.radians(camera_pitch_deg)
     q_x = math.sin(camera_pitch_rad / 2.0)
     q_w = math.cos(camera_pitch_rad / 2.0)
@@ -111,16 +95,13 @@ def generate_launch_description() -> LaunchDescription:
         executable="static_transform_publisher",
         name="d455_camera_tf_publisher",
         arguments=[
-            # 平移向量 (meters)
-            "--x", "0.04765",      # 前向偏移 47.65mm
-            "--y", "0.0",          # 无侧向偏移
-            "--z", "0.0",          # 相对于 torso_link 无高度偏移（头部位置）
-            # 四元数旋转 (绕 Y 轴俯仰 -42°)
+            "--x", "0.04765",
+            "--y", "0.0",
+            "--z", "0.0",
             "--qx", str(q_x),
             "--qy", "0.0",
             "--qz", "0.0",
             "--qw", str(q_w),
-            # 坐标系名称
             "--frame-id", "torso_link",
             "--child-frame-id", "robot1/D455_1_link",
         ],
@@ -131,8 +112,6 @@ def generate_launch_description() -> LaunchDescription:
     # ==================================================================
 
     # YOLO 目标检测节点
-    # 输入: /robot1/D455_1/color/image_raw (彩色图像)
-    # 输出: /g1/vision/detections (Detection2DArray)
     yolo_detector_node = Node(
         package="g1_yolo_nav_py",
         executable="yolo_detector",
@@ -145,10 +124,6 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     # 空间投影节点
-    # 输入: /g1/vision/detections (检测结果)
-    #        /robot1/D455_1/depth/image_rect_raw (深度图，可选)
-    #        /robot1/D455_1/color/camera_info (相机内参)
-    # 输出: /g1/nav/target_pose (PoseStamped, odom 坐标系)
     spatial_target_node = Node(
         package="g1_yolo_nav_py",
         executable="spatial_target",
@@ -160,10 +135,6 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     # 导航规划节点
-    # 输入: /g1/nav/target_pose (目标位姿)
-    #        TF: odom → base_link (机器人位姿)
-    # 输出: /cmd_vel (Twist, 速度指令)
-    # 模式: use_nav2=true 使用 Nav2 栈，false 使用简单 P 控制趋近
     nav_planner_node = Node(
         package="g1_yolo_nav_py",
         executable="nav_planner",
@@ -172,6 +143,24 @@ def generate_launch_description() -> LaunchDescription:
             config_file,
             {"use_nav2": LaunchConfiguration("use_nav2")},
         ],
+    )
+
+    # 偏航对齐节点（机器人旋转，通过 cmd_vel）
+    yaw_align_node = Node(
+        package="g1_yolo_nav_py",
+        executable="yaw_align",
+        name="g1_yaw_align_node",
+        condition=IfCondition(LaunchConfiguration("enable_approach")),
+        parameters=[config_file],
+    )
+
+    # 前进控制节点（Sport API SET_VELOCITY）
+    loco_forward_node = Node(
+        package="g1_yolo_nav_py",
+        executable="loco_forward",
+        name="g1_loco_forward_node",
+        condition=IfCondition(LaunchConfiguration("enable_approach")),
+        parameters=[config_file],
     )
 
     # RViz2 可视化（可选）
@@ -184,26 +173,6 @@ def generate_launch_description() -> LaunchDescription:
         else [],
     )
 
-    # 腰部对齐节点（需要 unitree_sdk2py）
-    # 功能: 旋转腰部让目标保持在画面中心 (Arm SDK DDS)
-    waist_align_node = Node(
-        package="g1_yolo_nav_py",
-        executable="waist_align",
-        name="g1_waist_align_node",
-        condition=IfCondition(LaunchConfiguration("enable_waist_tracking")),
-        parameters=[config_file],
-    )
-
-    # Loco 前进节点（需要 unitree_sdk2py）
-    # 功能: 目标对齐后，通过 LocoClient 控制机器人前进到目标位置
-    loco_forward_node = Node(
-        package="g1_yolo_nav_py",
-        executable="loco_forward",
-        name="g1_loco_forward_node",
-        condition=IfCondition(LaunchConfiguration("enable_waist_tracking")),
-        parameters=[config_file],
-    )
-
     # ==================================================================
     # Launch 描述
     # ==================================================================
@@ -214,14 +183,14 @@ def generate_launch_description() -> LaunchDescription:
         model_path_arg,
         use_depth,
         target_class,
-        enable_waist_tracking,
+        enable_approach,
         # 静态 TF
         camera_static_tf,
         # 功能节点
         yolo_detector_node,
         spatial_target_node,
         nav_planner_node,
-        waist_align_node,
+        yaw_align_node,
         loco_forward_node,
         rviz_node,
     ])
