@@ -6,8 +6,7 @@ Launch 文件：G1 抓取任务一键全流程
 启动节点：
     1. RealSense D455 相机驱动
     2. g1_yolo_detector_node    - YOLO 目标检测
-    3. g1_twist_bridge          - cmd_vel → Sport API 桥接
-    4. g1_grasp_task_node       - 抓取任务主控（搜索→对齐→接近→抓取→菜单）
+    3. g1_grasp_task_node       - 抓取任务主控（搜索→对齐→接近→抓取→菜单）
     5. D455 相机静态 TF
 
 使用示例：
@@ -160,16 +159,7 @@ def generate_launch_description() -> LaunchDescription:
         )
 
     # ==================================================================
-    # 4. twist_bridge（cmd_vel → Sport API）
-    # ==================================================================
-    twist_bridge_node = Node(
-        package="g1_twist_bridge_py",
-        executable="twist_bridge",
-        name="g1_twist_bridge_node",
-    )
-
-    # ==================================================================
-    # 5. 抓取任务主控节点
+    # 4. 抓取任务主控节点
     # ==================================================================
     grasp_task_node = Node(
         package="g1_yolo_nav_py",
@@ -203,9 +193,8 @@ def generate_launch_description() -> LaunchDescription:
         # 相机
         camera_launch,
         camera_static_tf,
-        # 检测 + 桥接
+        # 检测
         yolo_detector_cmd,
-        twist_bridge_node,
         # 主控
         grasp_task_node,
     ])
