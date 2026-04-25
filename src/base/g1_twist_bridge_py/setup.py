@@ -20,6 +20,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
+            "twist_bridge = g1_twist_bridge_py.twist_bridge:main",
             "g1_twist_bridge = g1_twist_bridge_py.twist_bridge:main",
         ],
     },

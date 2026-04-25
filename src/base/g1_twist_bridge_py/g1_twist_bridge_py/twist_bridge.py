@@ -35,11 +35,12 @@ class TwistBridge(Node):
         x = twist.linear.x
         y = twist.linear.y
         z = twist.angular.z
-        api_id = ROBOT_SPORT_API_IDS["BALANCESTAND"]
+        js = {"x": x, "y": y, "z": z}
+        request.parameter = json.dumps(js)
         if x != 0 or y != 0 or z != 0:
             api_id = ROBOT_SPORT_API_IDS["MOVE"]
-            js = {"x": x, "y": y, "z": z}
-            request.parameter = json.dumps(js)
+        else:
+            api_id = ROBOT_SPORT_API_IDS["STOPMOVE"]
         request.header.identity.api_id = api_id
         self.request_pub.publish(request)
 
