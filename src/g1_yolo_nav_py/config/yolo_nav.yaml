@@ -46,7 +46,7 @@ g1_yaw_align_node:
     detection_topic: "/g1/vision/detections"  # 检测结果输入
     target_class_id: "chair"                  # 目标类别
     camera_fov_deg: 87.0                      # D455 水平视场角
-    center_tolerance: 0.08                    # 居中容差（归一化）
+    center_tolerance: 0.05                    # 居中容差（归一化）
     yaw_kp: 2.0                               # 偏航 P 增益
     max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
     cmd_vel_topic: "/cmd_vel"                 # 速度指令输出话题
