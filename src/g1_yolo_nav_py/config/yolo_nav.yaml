@@ -33,7 +33,7 @@ g1_spatial_target_node:
 g1_nav_planner_node:
   ros__parameters:
     target_topic: "/g1/nav/target_pose"       # 目标位姿输入话题
-    cmd_vel_topic: "/cmd_vel"                 # 速度指令输出话题
+    cmd_vel_topic: "/cmd_vel"                 # 速度指令输出话题（Nav2 模式下使用）
     max_linear_speed: 0.3                     # 最大线速度 (m/s), 范围 [0.0, 1.0]
     max_angular_speed: 0.5                    # 最大角速度 (rad/s), 范围 [0.0, 2.0]
     goal_tolerance: 0.3                       # 到达容差 (m)

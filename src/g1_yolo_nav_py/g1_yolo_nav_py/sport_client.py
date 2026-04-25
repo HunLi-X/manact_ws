@@ -12,7 +12,6 @@
     - 速度等级: SPEEDLEVEL(1015)
 
 不再使用任何 Loco API (7xxx 系列)。
-与 g1_teleop_ctrl_keyboard 和 twist_bridge 使用完全相同的 API 体系。
 
 使用方式：
     from g1_yolo_nav_py.sport_client import SportClient, SportAPI
@@ -32,7 +31,7 @@
 """
 
 # ==================================================================
-# Sport API 常量 (参考 g1_teleop_ctrl_keyboard/g1_teleop_ctrl_keyboard.py)
+# Sport API 常量
 # ==================================================================
 class SportAPI:
     """Sport Mode API ID 常量。"""
@@ -186,7 +185,6 @@ class SportClient:
              vyaw: float = 0.0) -> None:
         """通过 Sport API MOVE 控制机器人运动。
 
-        使用方式与 g1_teleop_ctrl_keyboard 完全一致。
         需要机器人已在 BALANCESTAND 模式下。
 
         Args:

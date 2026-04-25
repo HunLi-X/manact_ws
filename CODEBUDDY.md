@@ -14,7 +14,6 @@ cd g1act_ws && colcon build
 
 # Build specific package
 colcon build --packages-select g1_yolo_nav_py
-colcon build --packages-select g1_driver_py
 
 # Source environment after build
 . install/setup.bash
@@ -24,12 +23,6 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py
 
 # Launch with Nav2 and depth sensor
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
-
-# Launch G1 driver + RViz
-ros2 launch g1_driver_py driver.launch.py
-
-# Keyboard teleop (requires G1 connected)
-ros2 run g1_teleop_ctrl_keyboard g1_teleop_keyboard
 
 # YOLO detection + yaw align + forward approach
 ros2 run g1_yolo_nav_py yolo_detector
@@ -56,9 +49,9 @@ Python dependency: `pip3 install ultralytics`
 src/
 ├── base/                          # G1 robot base packages
 │   ├── g1_description/            # URDF/MJCF models (12dof, 23dof, 29dof variants)
-│   ├── g1_driver_py/              # ROS2 driver: odom, TF, joint_states
-│   ├── g1_teleop_ctrl_keyboard/   # Keyboard teleop via Sport API (MOVE=1008)
-│   ├── g1_twist_bridge_py/        # Twist → Sport API Request bridge
+│   ├── g1_driver_py/              # (independent) ROS2 driver: odom, TF, joint_states
+│   ├── g1_teleop_ctrl_keyboard/   # (independent) Keyboard teleop via Sport API
+│   ├── g1_twist_bridge_py/        # (independent) Twist → Sport API Request bridge
 │   └── ctrl_keyboard/             # Reference: auto_ctrl.py (Loco API, deprecated)
 ├── g1_yolo_nav_py/                # YOLO detection + navigation + motion control
 │   ├── g1_yolo_nav_py/
@@ -148,7 +141,7 @@ BALANCESTAND + CONTINUOUSGAIT 模式下 `MOVE(1008)` 才生效。
 
 ### Two Control Interfaces
 
-1. **unitree_api (high-level, via SportClient)**: All motion control nodes use `SportClient` to publish `unitree_api/msg/Request` to `/api/sport/request`. `SportClient` wraps only Sport API — MOVE(1008), STOPMOVE(1003), SIT(1009), BALANCESTAND(1002), etc. This is the same API system used by `g1_teleop_ctrl_keyboard`.
+1. **unitree_api (high-level, via SportClient)**: All motion control nodes use `SportClient` to publish `unitree_api/msg/Request` to `/api/sport/request`. `SportClient` wraps only Sport API — MOVE(1008), STOPMOVE(1003), SIT(1009), BALANCESTAND(1002), etc. 参考 ctrl_keyboard/auto_ctrl.py。
 2. **unitree_sdk2py (low-level)**: `src/arm.py` and `arm/*.py` use `ChannelPublisher("rt/arm_sdk", LowCmd_)` for direct joint-level arm control. This bypasses ROS2 entirely and communicates via DDS.
 
 ### G1 Joint Index Mapping (from arm.py)
@@ -171,7 +164,6 @@ Joint names follow `snake_case`: `left_hip_pitch_joint`, `right_shoulder_yaw_joi
 | Topic | Type | Description |
 |---|---|---|
 | `/api/sport/request` | `unitree_api/Request` | All motion commands (via SportClient, Sport API only) |
-| `/cmd_vel` | `geometry_msgs/Twist` | Legacy velocity (bridged by twist_bridge) |
 | `/g1/sensor/odom` | `nav_msgs/Odometry` | Robot odometry |
 | `/joint_states` | `sensor_msgs/JointState` | 29 joint positions |
 | `/g1/vision/detections` | `vision_msgs/Detection2DArray` | YOLO 2D detections |
@@ -197,6 +189,6 @@ All node parameters are declared via `declare_parameter()` then read with `get_p
 - **Motion control**: Always use `SportClient` from `sport_client.py`, never construct `Request` directly or use `cmd_vel`/`Twist` for motion
 - **Sport API only**: 不使用 Loco API (7xxx)，全部使用 Sport API (1xxx)。运动用 MOVE(1008)，停止用 STOPMOVE(1003)，姿态用 SIT(1009)/STANDUP(1004) 等
 - **Request publishing**: `SportClient.publish()` creates a new `Request()` each time (avoid DDS buffer reuse bugs)
-- **MOVE parameter format**: `{"x": vx, "y": vy, "z": vyaw}` — 与 g1_teleop_ctrl_keyboard 完全一致
+- **MOVE parameter format**: `{"x": vx, "y": vy, "z": vyaw}` — MOVE 参数格式与 Unitree Sport API 标准一致
 - **P controller sign**: `vyaw = -kp * error * fov` (negative sign: target on right → robot turns right → vyaw negative)
 - Safety: velocity clamping, low default speeds, `auto_stand` parameter for FSM initialization

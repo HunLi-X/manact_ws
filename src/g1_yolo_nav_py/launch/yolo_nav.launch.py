@@ -8,8 +8,7 @@ Launch 文件：启动 YOLO 目标识别 + 偏航对齐 + 前进接近
     4. d455_camera_tf_publisher   - D455 相机静态 TF
 
 控制方式：
-    所有运动控制通过 Sport API（/api/sport/request）和 cmd_vel 完成，
-    无需 unitree_sdk2py / LocoClient / DDS 依赖。
+    所有运动控制通过 Sport API（/api/sport/request）完成。
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
@@ -145,7 +144,7 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # 偏航对齐节点（机器人旋转，通过 cmd_vel）
+    # 偏航对齐节点（通过 Sport API 旋转机器人）
     yaw_align_node = Node(
         package="g1_yolo_nav_py",
         executable="yaw_align",
