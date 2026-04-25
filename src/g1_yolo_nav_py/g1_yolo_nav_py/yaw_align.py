@@ -78,6 +78,7 @@ class YawAlignNode(Node):
         self._last_detect_time: float = 0.0
         self._tick_count: int = 0
         self._log_interval: int = 50  # 每 50 个 tick（~5s）打印一次状态
+        self._is_moving: bool = False  # 追踪运动状态，避免重复发送 STOPMOVE
 
         # ---- ROS2 订阅 ----
         # YOLO 检测器用默认 RELIABLE 发布，这里也用 RELIABLE 确保兼容
@@ -120,6 +121,7 @@ class YawAlignNode(Node):
                 )
         else:
             self._target_u = None
+            self._first_move_logged = False  # 目标丢失时重置，方便下次调试
 
     def _compute_vyaw(self) -> float:
         """P 控制计算偏航角速度。"""
@@ -151,11 +153,11 @@ class YawAlignNode(Node):
 
     def _publish_balancestand(self) -> None:
         """发送 BALANCESTAND 指令，让机器人进入站立平衡状态。"""
-        self._publish_request(API_BALANCESTAND)
+        self._publish_request(API_BALANCESTAND, json.dumps({"x": 0.0, "y": 0.0, "z": 0.0}))
 
     def _publish_stop(self) -> None:
         """发送 STOPMOVE 指令停止旋转。"""
-        self._publish_request(API_STOPMOVE)
+        self._publish_request(API_STOPMOVE, json.dumps({"x": 0.0, "y": 0.0, "z": 0.0}))
 
     def _tick(self) -> None:
         """定时回调 — 计算并通过 Sport API 发布旋转指令。"""
@@ -167,9 +169,11 @@ class YawAlignNode(Node):
                     f"[对齐] 发送 MOVE 指令: z={vyaw:.3f} rad/s"
                 )
                 self._first_move_logged = True
-        else:
-            # 目标未检测到或已居中 → 发送 BALANCESTAND 保持站立状态
-            self._publish_balancestand()
+            self._is_moving = True
+        elif self._is_moving:
+            # 仅在运动→停止状态切换时发送 STOPMOVE（避免 10Hz 刷屏重置 API 状态）
+            self._publish_stop()
+            self._is_moving = False
 
         # 周期性日志：每 _log_interval 个 tick 打印一次状态
         self._tick_count += 1
