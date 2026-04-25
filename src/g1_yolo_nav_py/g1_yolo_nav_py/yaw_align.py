@@ -41,15 +41,20 @@ from unitree_api.msg import Request  # Sport API 请求消息
 
 
 # ==================================================================
-# 3. Loco API 常量（参考 ctr_keyboard.py）
+# 3. Loco API 常量（参考 ctrl_keyboard/auto_ctrl.py）
 # ==================================================================
 API_SET_FSM_ID = 7101
+API_SET_BALANCE_MODE = 7102
 API_SET_VELOCITY = 7105
 
 # FSM 状态 ID
 FSM_DAMP = 1
-FSM_STAND_UP = 4
 FSM_SIT = 3
+FSM_STAND_UP = 4
+FSM_WALK_RUN = 801
+
+# 平衡模式
+BALANCE_CONTINUOUS_GAIT = 1
 
 
 class YawAlignNode(Node):
@@ -64,10 +69,11 @@ class YawAlignNode(Node):
         self.declare_parameter("camera_fov_deg", 87.0)
         self.declare_parameter("center_tolerance", 0.05)
         self.declare_parameter("yaw_kp", 2.0)
-        self.declare_parameter("max_yaw_speed", 0.6)
+        self.declare_parameter("max_yaw_speed", 1.2)
         self.declare_parameter("control_rate", 10.0)
         self.declare_parameter("lost_timeout", 5.0)
         self.declare_parameter("auto_stand", True)
+        self.declare_parameter("auto_walk_run", True)
         self.declare_parameter("velocity_duration", 0.5)
 
         p = lambda n: self.get_parameter(n).value
@@ -80,6 +86,7 @@ class YawAlignNode(Node):
         self._ctrl_rate = float(p("control_rate"))
         self._lost_timeout = float(p("lost_timeout"))
         self._auto_stand = bool(p("auto_stand"))
+        self._auto_walk_run = bool(p("auto_walk_run"))
         self._vel_duration = float(p("velocity_duration"))
 
         # ---- 内部状态 ----
@@ -99,10 +106,10 @@ class YawAlignNode(Node):
 
         # ---- 启动状态机切换 ----
         if self._auto_stand:
-            self._do_stand_up()
+            self._do_fsm_init()
         else:
             self._ready = True
-            self.get_logger().info("跳过自动站立，请确保机器人已处于站立状态")
+            self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
@@ -112,7 +119,8 @@ class YawAlignNode(Node):
         self.get_logger().info(
             f"偏航对齐节点就绪（Loco API）: 目标={self._target_class}, "
             f"kp={self._kp}, 容差={self._center_tol}, "
-            f"lost_timeout={self._lost_timeout}, auto_stand={self._auto_stand}"
+            f"lost_timeout={self._lost_timeout}, auto_stand={self._auto_stand}, "
+            f"auto_walk_run={self._auto_walk_run}"
         )
 
     def _publish_request(self, api_id: int, parameter: str = '') -> None:
@@ -122,14 +130,15 @@ class YawAlignNode(Node):
         req.parameter = parameter
         self._sport_pub.publish(req)
 
-    def _do_stand_up(self) -> None:
-        """执行状态机切换：DAMP → STAND_UP（参考 ctr_keyboard.py）。
+    def _do_fsm_init(self) -> None:
+        """执行完整状态机初始化：DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT。
 
+        参考 ctrl_keyboard/auto_ctrl.py 的自动行走流程。
         在单独线程中执行，避免阻塞 ROS2 spin。
         """
         import threading
 
-        def _stand_up_thread():
+        def _init_thread():
             self.get_logger().info("[状态机] 切换到 DAMP 模式...")
             self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_DAMP}))
             time.sleep(2)
@@ -138,10 +147,19 @@ class YawAlignNode(Node):
             self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_STAND_UP}))
             time.sleep(3)
 
-            self._ready = True
-            self.get_logger().info("[状态机] 站立完成，就绪")
+            if self._auto_walk_run:
+                self.get_logger().info("[状态机] 切换到 WALK_RUN 走跑模式...")
+                self._publish_request(API_SET_FSM_ID, json.dumps({"data": FSM_WALK_RUN}))
+                time.sleep(1)
 
-        t = threading.Thread(target=_stand_up_thread, daemon=True)
+                self.get_logger().info("[状态机] 开启连续步态 CONTINUOUS_GAIT...")
+                self._publish_request(API_SET_BALANCE_MODE, json.dumps({"data": BALANCE_CONTINUOUS_GAIT}))
+                time.sleep(1)
+
+            self._ready = True
+            self.get_logger().info("[状态机] 初始化完成，就绪")
+
+        t = threading.Thread(target=_init_thread, daemon=True)
         t.start()
 
     def _on_detection(self, msg: Detection2DArray) -> None:
