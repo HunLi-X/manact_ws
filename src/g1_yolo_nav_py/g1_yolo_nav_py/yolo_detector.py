@@ -18,8 +18,6 @@ for _p in [
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
 # ==================================================================
-import cv2  # OpenCV 图像格式处理
-import numpy as np  # 数值计算
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
