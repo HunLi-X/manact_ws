@@ -8,7 +8,7 @@ g1_yolo_detector_node:
     model_path: "yolo_v11x_best.pt"           # YOLO 模型文件路径
     confidence_threshold: 0.5                 # 检测置信度阈值
     nms_threshold: 0.45                       # NMS IoU 阈值
-    input_image_topic: "/robot1/D455_1/color/image_raw"  # D455 彩色图像话题
+    input_image_topic: "/D455_1/color/image_raw"  # D455 彩色图像话题
     output_detection_topic: "/g1/vision/detections"  # 检测结果话题
     target_classes: ["chair"]                   # 目标类别名称（也支持数字 ID）
     max_image_size: 640                       # 推理图像尺寸
@@ -17,8 +17,8 @@ g1_yolo_detector_node:
 g1_spatial_target_node:
   ros__parameters:
     detection_topic: "/g1/vision/detections"  # 检测结果输入话题
-    depth_topic: "/robot1/D455_1/depth/image_rect_raw"    # D455 校正深度图话题
-    camera_info_topic: "/robot1/D455_1/color/camera_info"  # D455 彩色相机内参话题
+    depth_topic: "/D455_1/depth/image_rect_raw"    # D455 校正深度图话题
+    camera_info_topic: "/D455_1/color/camera_info"  # D455 彩色相机内参话题
     target_frame: "odom"                      # 目标坐标系
     base_frame: "base_link"                   # 机器人基座坐标系
     camera_frame: "robot1/D455_1_color_optical_frame"  # D455 相机坐标系

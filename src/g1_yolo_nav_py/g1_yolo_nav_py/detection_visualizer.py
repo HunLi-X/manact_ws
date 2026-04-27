@@ -68,7 +68,7 @@ class DetectionVisualizerNode(Node):
         super().__init__("g1_detection_visualizer_node")
 
         # ---- 参数 ----
-        self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
+        self.declare_parameter("image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("annotated_topic", "/g1/vision/annotated_image")
         self.declare_parameter("display_width", 400)

@@ -40,8 +40,8 @@ class SpatialTargetNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
-        self.declare_parameter("depth_topic", "/robot1/D455_1/depth/image_rect_raw")
-        self.declare_parameter("camera_info_topic", "/robot1/D455_1/color/camera_info")
+        self.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
+        self.declare_parameter("camera_info_topic", "/D455_1/color/camera_info")
         self.declare_parameter("target_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("camera_frame", "robot1/D455_1_color_optical_frame")

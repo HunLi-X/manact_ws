@@ -64,8 +64,8 @@ class RGBDCaptureNode(Node):
         super().__init__("g1_rgbd_capture_node")
 
         # ---- 参数 ----
-        self.declare_parameter("color_topic", "/robot1/D455_1/color/image_raw")
-        self.declare_parameter("depth_topic", "/robot1/D455_1/aligned_depth_to_color/image_raw")
+        self.declare_parameter("color_topic", "/D455_1/color/image_raw")
+        self.declare_parameter("depth_topic", "/D455_1/aligned_depth_to_color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("interval_sec", 5.0)
         self.declare_parameter("duration_sec", 60.0)
