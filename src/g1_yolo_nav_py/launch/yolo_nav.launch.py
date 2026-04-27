@@ -46,13 +46,6 @@ def generate_launch_description() -> LaunchDescription:
         description="是否启动 RViz2 可视化界面",
     )
 
-    # 是否使用 Nav2 导航栈
-    use_nav2 = DeclareLaunchArgument(
-        name="use_nav2",
-        default_value="false",
-        description="是否使用 Nav2 导航（false 时使用简单趋近模式）",
-    )
-
     # YOLO 模型文件路径
     model_path_arg = DeclareLaunchArgument(
         name="model_path",
