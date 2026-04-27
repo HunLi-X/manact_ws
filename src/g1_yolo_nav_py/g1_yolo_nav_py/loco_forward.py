@@ -104,6 +104,39 @@ class LocoForwardNode(Node):
         )
 
     # ==================================================================
+    #  诊断
+    # ==================================================================
+    def _diag_check(self):
+        """启动后延迟检查关键话题状态。"""
+        if self._diag_done:
+            return
+        self._diag_done = True
+        if hasattr(self, '_diag_timer') and self._diag_timer is not None:
+            self._diag_timer.cancel()
+
+        det_pub_count = self.count_publishers(self._det_topic)
+        self.get_logger().info(
+            f"[诊断] 检测话题 '{self._det_topic}': 发布者数={det_pub_count}"
+        )
+        if det_pub_count == 0:
+            self.get_logger().warn(
+                f"[诊断] 检测话题无发布者! "
+                f"请先启动 yolo_detector: "
+                f"ros2 run g1_yolo_nav_py yolo_detector"
+            )
+
+        sport_sub_count = self.count_subscribers('/api/sport/request')
+        self.get_logger().info(
+            f"[诊断] 运动话题 '/api/sport/request': 订阅者数={sport_sub_count}"
+        )
+        if sport_sub_count == 0:
+            self.get_logger().error(
+                "[诊断] ⚠ 运动话题无订阅者! "
+                "MOVE 命令不会被机器人执行! "
+                "请确认 unitree SDK bridge 已启动。"
+            )
+
+    # ==================================================================
     #  检测回调
     # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
