@@ -35,31 +35,32 @@ g1act_ws/
 ├── src/
 │   ├── g1_yolo_nav_py/                      # YOLO 目标识别与导航功能包
 │   │   ├── g1_yolo_nav_py/
-│   │   │   ├── yolo_detector.py              # YOLO 检测节点
-│   │   │   ├── spatial_target.py             # 3D 空间投影节点
-│   │   │   ├── detection_visualizer.py       # 检测可视化节点（tkinter）
-│   │   │   ├── control_panel.py              # 控制面板节点（tkinter GUI）
-│   │   │   ├── grasp_task.py                 # 抓取任务主控节点
-│   │   │   ├── yaw_align.py                  # 偏航对齐节点（机器人旋转）
-│   │   │   ├── loco_forward.py               # 前进控制节点（Sport API）
-│   │   │   ├── rgbd_capture.py               # RGBD 数据采集节点
-│   │   │   └── distence.py                   # 距离估算工具
-│   │   ├── arm/                              # 手臂控制脚本（unitree_sdk2py，非 ROS2 节点）
-│   │   │   ├── armup.py                      # 手臂抓取（完成后自动退出）
-│   │   │   ├── armdown.py                    # 手臂放下（完成后自动退出）
-│   │   │   └── arm.py                        # 手臂 SDK 基础控制
+│   │   │   ├── sport_client.py              # 统一运动控制模块（Loco API）
+│   │   │   ├── yolo_detector.py             # YOLO 检测节点
+│   │   │   ├── spatial_target.py            # 3D 空间投影节点
+│   │   │   ├── detection_visualizer.py      # 检测可视化节点（tkinter）
+│   │   │   ├── control_panel.py             # 控制面板节点（tkinter GUI）
+│   │   │   ├── grasp_task.py                # 抓取任务主控节点
+│   │   │   ├── yaw_align.py                 # 偏航对齐节点（机器人旋转）
+│   │   │   ├── loco_forward.py              # 前进控制节点（Loco API）
+│   │   │   ├── rgbd_capture.py              # RGBD 数据采集节点
+│   │   │   └── distence.py                  # 距离估算工具
+│   │   ├── arm/                             # 手臂控制脚本（unitree_sdk2py，非 ROS2 节点）
+│   │   │   ├── armup.py                     # 手臂抓取（完成后自动退出）
+│   │   │   ├── armdown.py                   # 手臂放下（完成后自动退出）
+│   │   │   └── arm.py                       # 手臂 SDK 基础控制
 │   │   ├── launch/
-│   │   │   └── yolo_nav.launch.py            # 导航管线启动文件
+│   │   │   └── yolo_nav.launch.py           # 导航管线启动文件
 │   │   ├── config/
-│   │   │   └── yolo_nav.yaml                 # 参数配置
-│   │   └── yolo_v11x_best.pt                 # YOLOv11 自定义训练模型权重
-│   └── base/                                 # G1 机器人基础包
-│       ├── g1_description/                   # URDF/MJCF 模型（12/23/29dof 变体）
-│       ├── g1_driver_py/                     # ROS2 驱动：odom, TF, joint_states
-│       ├── g1_teleop_ctrl_keyboard/          # 键盘遥控（Sport API）
-│       ├── g1_twist_bridge_py/               # Twist → Sport API 桥接
-│       ├── ctrl_keyboard/                    # 键盘+语音控制（Sport API + 手臂动作）
-│       └── h1_description/                   # H1 机器人描述
+│   │   │   └── yolo_nav.yaml                # 参数配置
+│   │   └── yolo_v11x_best.pt                # YOLOv11 自定义训练模型权重
+│   └── base/                                # G1 机器人基础包
+│       ├── g1_description/                  # URDF/MJCF 模型（12/23/29dof 变体）
+│       ├── g1_driver_py/                    # ROS2 驱动：odom, TF, joint_states
+│       ├── g1_teleop_ctrl_keyboard/         # 键盘遥控（Sport API）
+│       ├── g1_twist_bridge_py/              # Twist → Sport API 桥接
+│       ├── ctrl_keyboard/                   # 键盘+语音控制（Loco API + 手臂动作）
+│       └── h1_description/                  # H1 机器人描述
 ├── requirements.txt
 └── README.md
 ```
@@ -154,13 +155,10 @@ ros2 launch realsense2_camera rs_launch.py \
 # 终端 2：YOLO 检测
 ros2 run g1_yolo_nav_py yolo_detector
 
-# 终端 3：偏航对齐（cmd_vel → twist_bridge → Sport API）
+# 终端 3：偏航对齐（Loco API SET_VELOCITY）
 ros2 run g1_yolo_nav_py yaw_align
 
-# 终端 4：twist_bridge（将 cmd_vel 转为 Sport API）
-ros2 run g1_twist_bridge_py twist_bridge
-
-# 终端 5（可选）：可视化
+# 终端 4（可选）：可视化
 ros2 run g1_yolo_nav_py detection_visualizer
 ```
 
@@ -200,9 +198,9 @@ ros2 run g1_yolo_nav_py yaw_align --ros-args -p max_yaw_speed:=0.3
 **只验证**：目标居中后机器人能否前进并自动停止。
 
 ```bash
-# 终端 1~4：同上（相机 + YOLO + yaw_align + twist_bridge）
+# 终端 1~3：同上（相机 + YOLO + yaw_align）
 
-# 终端 5：前进控制（Sport API SET_VELOCITY，无需 DDS）
+# 终端 4：前进控制（Loco API SET_VELOCITY）
 ros2 run g1_yolo_nav_py loco_forward
 ```
 
@@ -226,7 +224,6 @@ ros2 run g1_yolo_nav_py loco_forward --ros-args -p arrive_bbox_ratio:=0.6
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `forward_speed` | 0.3 m/s | 前进速度（首次建议 0.15） |
-| `forward_duration` | 0.5 s | Sport API 每次发送的持续时间 |
 | `align_stable_time` | 0.8 s | 居中多久才开始前进 |
 | `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值 |
 | `center_tolerance` | 0.08 | 居中容差 |
@@ -245,8 +242,7 @@ ros2 run g1_yolo_nav_py loco_forward --ros-args -p arrive_bbox_ratio:=0.6
 # 终端 1: 相机
 # 终端 2: ros2 run g1_yolo_nav_py yolo_detector
 # 终端 3: ros2 run g1_yolo_nav_py yaw_align
-# 终端 4: ros2 run g1_twist_bridge_py twist_bridge
-# 终端 5: ros2 run g1_yolo_nav_py loco_forward
+# 终端 4: ros2 run g1_yolo_nav_py loco_forward
 
 # 方式 B：launch 一键启动
 ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_approach:=true
@@ -280,7 +276,7 @@ IDLE → [搜索] → SEARCHING（旋转找目标）
                   ↓ 目标出现
                 ALIGNING（偏航对齐居中）
                   ↓ 居中稳定
-                APPROACHING（Sport API 前进）
+                APPROACHING（Loco API 前进）
                   ↓ 到达目标
                 GRABBING（执行 armup.py）
                   ↓ 抓取完成
@@ -297,14 +293,10 @@ ros2 run g1_yolo_nav_py yolo_detector
 
 # 终端 2：控制面板
 ros2 run g1_yolo_nav_py control_panel
-
-# 如果使用 cmd_vel 控制，还需 twist_bridge
-# 终端 3：twist_bridge
-ros2 run g1_twist_bridge_py twist_bridge
 ```
 
 > **注意**：控制面板不导入 `unitree_sdk2py`（避免 DDS 冲突），
-> 运动控制通过 `cmd_vel → twist_bridge → Sport API` 和 Sport API 直接发布完成。
+> 运动控制通过 `SportClient` 封装，使用 Loco API 直接发布到 `/api/sport/request`。
 
 **参数：**
 
@@ -342,10 +334,7 @@ ros2 launch realsense2_camera rs_launch.py \
 # 终端 2：YOLO 检测
 ros2 run g1_yolo_nav_py yolo_detector
 
-# 终端 3：twist_bridge
-ros2 run g1_twist_bridge_py twist_bridge
-
-# 终端 4：抓取任务（纯 Sport API 模式，无需 DDS）
+# 终端 3：抓取任务（Loco API 模式，无需 DDS）
 ros2 run g1_yolo_nav_py grasp_task
 ```
 
@@ -353,7 +342,7 @@ ros2 run g1_yolo_nav_py grasp_task
 
 ```
 ==================================================
-G1 抓取任务启动（纯 Sport API 模式）
+G1 抓取任务启动（Loco API 模式）
 目标类别: chair
 armup: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armup.py
 armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
@@ -432,21 +421,43 @@ ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
 
 ## 运动控制方式
 
-所有运动控制节点统一使用 **纯 Sport API**，通过 `SportClient` 封装发布到 `/api/sport/request`。
+所有运动控制节点统一使用 **Loco API（7xxx 系列）**，通过 `SportClient` 封装发布到 `/api/sport/request`。
 
 | API | ID | 用途 | 参数格式 |
 | --- | --- | --- | --- |
-| MOVE | 1008 | 运动控制 | `{"x": vx, "y": vy, "z": vyaw}` |
-| STOPMOVE | 1003 | 停止运动 | 无 |
-| DAMP | 101 | 阻尼模式 | 无 |
-| STANDUP | 1004 | 站立 | 无 |
-| BALANCESTAND | 1002 | 平衡站立 | 无 |
-| SIT | 1009 | 坐下 | 无 |
-| RISESIT | 1010 | 从坐姿恢复 | 无 |
-| CONTINUOUSGAIT | 1019 | 连续步态 | 无 |
+| SET_FSM_ID | 7101 | 状态机控制 | `{"data": fsm_id}` |
+| SET_VELOCITY | 7105 | 速度控制 | `{"velocity": [vx, vy, vyaw], "duration": t}` |
+| SET_BALANCE_MODE | 7102 | 平衡模式 | `{"data": mode}` |
+| SET_SPEED_MODE | 7107 | 速度模式 | `{"data": mode}` |
+| SET_STAND_HEIGHT | 7104 | 站立高度 | `{"data": height}` |
 
-> **注意**：不再使用 Loco API (SET_FSM_ID=7101, SET_VELOCITY=7105 等)。
-> 所有运动控制与 `g1_teleop_ctrl_keyboard` 使用完全相同的 API 体系。
+**FSM 状态机 ID：**
+
+| ID | 状态 | 说明 |
+| --- | --- | --- |
+| 0 | ZERO_TORQUE | 零力矩模式（初始坐姿） |
+| 1 | DAMP | 阻尼模式（准备站立） |
+| 3 | SIT | 坐下 |
+| 4 | STAND_UP | 锁定站立 |
+| 500 | START | 常规运控 |
+| 801 | WALK_RUN | 走跑运控 |
+
+**平衡模式：**
+
+| ID | 模式 | 说明 |
+| --- | --- | --- |
+| 0 | BALANCE_STAND | 平衡站立（速度为0时停止踏步） |
+| 1 | CONTINUOUS_GAIT | 连续步态（持续踏步） |
+
+**FSM 初始化流程：**
+
+```
+SET_FSM_ID(DAMP=1) → SET_FSM_ID(STAND_UP=4) → SET_FSM_ID(WALK_RUN=801) → SET_BALANCE_MODE(CONTINUOUS_GAIT=1)
+```
+
+WALK_RUN + CONTINUOUS_GAIT 模式下 `SET_VELOCITY(7105)` 才生效。
+
+> **注意**：运动控制方案参考 `ctrl_keyboard` 已验证可用的实现，与 `ctrl_keyboard` 使用完全相同的 API 体系。
 
 ---
 
