@@ -72,4 +72,4 @@ g1_grasp_task_node:
     search_yaw_speed: 0.6                     # 搜索旋转速度 rad/s
     turn_yaw_speed: 0.6                       # 右转放下时偏航速度 rad/s
     turn_duration: 2.6                        # 右转放下时持续时间 s（≈90°）
-    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STANDUP→BALANCESTAND→CONTINUOUSGAIT）
+    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STAND_UP→WALK_RUN→CONTINUOUS_GAIT）

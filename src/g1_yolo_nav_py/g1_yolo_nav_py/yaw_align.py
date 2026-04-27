@@ -206,7 +206,7 @@ class YawAlignNode(Node):
                 self._first_move_logged = True
             self._is_moving = True
         elif self._is_moving:
-            # 仅在运动→停止状态切换时发送 STOPMOVE
+            # 仅在运动→停止状态切换时发送零速度
             self._sport.stop()
             self._is_moving = False
 

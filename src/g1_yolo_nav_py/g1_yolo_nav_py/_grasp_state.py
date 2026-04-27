@@ -9,6 +9,11 @@
     - arm 脚本执行（_run_grab / _run_armdown）
     - 右转放下 _do_turn_and_put_down
 
+运动控制使用 Loco API（参考 ctrl_keyboard 已验证方案）：
+    - SET_VELOCITY(7105): {"velocity": [vx, vy, vyaw], "duration": t}
+    - SET_FSM_ID(7101): {"data": fsm_id}
+    - SET_BALANCE_MODE(7102): {"data": mode}
+
 子类需要实现：
     - _log_info(msg) — 信息日志（grasp_task 用 logger，control_panel 用 _append_log）
     - _log_error(msg) — 错误日志

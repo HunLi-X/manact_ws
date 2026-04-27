@@ -14,8 +14,8 @@ G1 抓取任务主控程序
 
 控制方式：
     所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API。
-    启动时自动执行 FSM 初始化（DAMP → STANDUP → BALANCESTAND → CONTINUOUSGAIT）。
+    使用 Loco API（SET_VELOCITY/SET_FSM_ID 等，参考 ctrl_keyboard 已验证方案）。
+    启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task
@@ -29,7 +29,7 @@ from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState
 
 
 class GraspTaskNode(Node, GraspStateMachineMixin):
-    """G1 抓取任务主控节点 — 通过 SportClient (纯 Sport API) 统一控制运动。"""
+    """G1 抓取任务主控节点 — 通过 SportClient (Loco API) 统一控制运动。"""
 
     def __init__(self) -> None:
         Node.__init__(self, "g1_grasp_task_node")
@@ -43,7 +43,7 @@ class GraspTaskNode(Node, GraspStateMachineMixin):
         self._timer = self.create_timer(0.1, self._tick)
 
         self.get_logger().info("=" * 50)
-        self.get_logger().info("G1 抓取任务启动（纯 Sport API 模式）")
+        self.get_logger().info("G1 抓取任务启动（Loco API 模式）")
         self.get_logger().info(f"目标类别: {self._gs_target_class}")
         self.get_logger().info(f"armup: {self._gs_armup_script}")
         self.get_logger().info(f"armdown: {self._gs_armdown_script}")

@@ -3,15 +3,11 @@
 提供统一的运动控制接口，所有需要控制 G1 机器人运动的节点
 都应使用本模块，避免重复定义 API 常量和 Request 发布逻辑。
 
-核心使用 Loco API（ctrl_keyboard 已验证可用）：
+全部使用 Loco API（ctrl_keyboard 已验证可用）：
     - 状态机控制: SET_FSM_ID(7101) — 参数 {"data": fsm_id}
     - 速度控制:   SET_VELOCITY(7105) — 参数 {"velocity": [vx, vy, vyaw], "duration": t}
     - 平衡模式:   SET_BALANCE_MODE(7102) — 参数 {"data": mode}
     - 速度模式:   SET_SPEED_MODE(7107) — 参数 {"data": mode}
-
-兼容保留 Sport API（部分功能 Loco API 无对应）：
-    - 姿态切换: SIT(1009), STANDUP(1004), STANDDOWN(1005), RISESIT(1010)
-    - 步态控制: CONTINUOUSGAIT(1019), SWITCHGAIT(1011)
 
 使用方式：
     from g1_yolo_nav_py.sport_client import SportClient
@@ -71,45 +67,6 @@ class BalanceMode:
     """平衡模式常量。"""
     BALANCE_STAND = 0     # 平衡站立（速度为0时停止踏步）
     CONTINUOUS_GAIT = 1   # 连续步态（持续踏步）
-
-
-# ==================================================================
-# Sport API 常量（保留用于 SIT/STANDUP 等无 Loco 对应的 API）
-# ==================================================================
-class SportAPI:
-    """Sport Mode API ID 常量（保留用于部分功能）。"""
-    DAMP = 101
-    BALANCESTAND = 1002
-    STOPMOVE = 1003
-    STANDUP = 1004
-    STANDDOWN = 1005
-    RECOVERYSTAND = 1006
-    EULER = 1007
-    MOVE = 1008
-    SIT = 1009
-    RISESIT = 1010
-    SWITCHGAIT = 1011
-    TRIGGER = 1012
-    BODYHEIGHT = 1013
-    FOOTRAISEHEIGHT = 1014
-    SPEEDLEVEL = 1015
-    HELLO = 1016
-    STRETCH = 1017
-    TRAJECTORYFOLLOW = 1018
-    CONTINUOUSGAIT = 1019
-    CONTENT = 1020
-    WALLOW = 1021
-    DANCE1 = 1022
-    DANCE2 = 1023
-    GETBODYHEIGHT = 1024
-    GETFOOTRAISEHEIGHT = 1025
-    GETSPEEDLEVEL = 1026
-    SWITCHJOYSTICK = 1027
-    POSE = 1028
-    SCRAPE = 1029
-    FRONTFLIP = 1030
-    FRONTJUMP = 1031
-    FRONTPOUNCE = 1032
 
 
 # ==================================================================
@@ -234,7 +191,7 @@ class SportClient:
                 time.sleep(1)
 
             self._ready = True
-            logger().info("[FSM] 初始化完成，就绪（Loco API 方式）")
+            logger().info("[FSM] 初始化完成，就绪")
 
             # 诊断：检查订阅者
             if not self.has_subscribers():
@@ -255,7 +212,7 @@ class SportClient:
     # ------------------------------------------------------------------
     def move(self, vx: float = 0.0, vy: float = 0.0,
              vyaw: float = 0.0, duration: Optional[float] = None) -> None:
-        """通过 Loco API SET_VELOCITY 控制机器人运动（参考 ctrl_keyboard）。
+        """通过 Loco API SET_VELOCITY 控制机器人运动。
 
         需要机器人已在 WALK_RUN 模式下。
 
@@ -296,40 +253,49 @@ class SportClient:
         """
         self._ready = True
 
+    # ------------------------------------------------------------------
+    #  FSM 状态切换（全部通过 SET_FSM_ID）
+    # ------------------------------------------------------------------
     def sit(self) -> None:
-        """发送 SIT 指令（Loco API: SET_FSM_ID SIT）。"""
+        """发送 SIT 指令（SET_FSM_ID SIT=3）。"""
         self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.SIT})
 
     def stand_up(self) -> None:
-        """发送 STAND_UP 指令（Loco API: SET_FSM_ID STAND_UP）。"""
+        """发送 STAND_UP 指令（SET_FSM_ID STAND_UP=4）。"""
         self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.STAND_UP})
 
     def stand_down(self) -> None:
-        """发送 SQUAT 指令（Loco API: SET_FSM_ID SQUAT）。"""
+        """发送 SQUAT 指令（SET_FSM_ID SQUAT=2）。"""
         self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.SQUAT})
 
-    def rise_sit(self) -> None:
-        """发送 RISESIT 指令（Sport API: 1010，Loco API 无对应）。"""
-        self.publish(SportAPI.RISESIT)
-
-    def continuous_gait(self) -> None:
-        """发送 CONTINUOUS_GAIT 指令（Loco API: SET_BALANCE_MODE）。"""
-        self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.CONTINUOUS_GAIT})
-
     def damp(self) -> None:
-        """发送 DAMP 指令（Loco API: SET_FSM_ID DAMP）。"""
+        """发送 DAMP 指令（SET_FSM_ID DAMP=1）。"""
         self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
 
-    def balance_stand(self) -> None:
-        """发送 BALANCE_STAND 指令（Loco API: SET_BALANCE_MODE）。"""
-        self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.BALANCE_STAND})
-
     def walk_run(self) -> None:
-        """发送 WALK_RUN 指令（Loco API: SET_FSM_ID WALK_RUN）。"""
+        """发送 WALK_RUN 指令（SET_FSM_ID WALK_RUN=801）。"""
         self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.WALK_RUN})
 
+    def start_mode(self) -> None:
+        """发送 START 指令（SET_FSM_ID START=500，常规运控）。"""
+        self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.START})
+
+    # ------------------------------------------------------------------
+    #  平衡模式切换（SET_BALANCE_MODE）
+    # ------------------------------------------------------------------
+    def continuous_gait(self) -> None:
+        """开启连续步态（SET_BALANCE_MODE CONTINUOUS_GAIT=1）。"""
+        self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.CONTINUOUS_GAIT})
+
+    def balance_stand(self) -> None:
+        """切换到平衡站立（SET_BALANCE_MODE BALANCE_STAND=0）。"""
+        self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.BALANCE_STAND})
+
+    # ------------------------------------------------------------------
+    #  其他参数设置
+    # ------------------------------------------------------------------
     def set_speed_mode(self, mode: int) -> None:
-        """设置速度模式（Loco API: SET_SPEED_MODE）。
+        """设置速度模式（SET_SPEED_MODE）。
 
         Args:
             mode: 速度模式 0=1.0m/s, 1=2.0m/s, 2=2.7m/s, 3=3.0m/s
@@ -337,7 +303,7 @@ class SportClient:
         self.publish(LocoAPI.SET_SPEED_MODE, {"data": mode})
 
     def set_stand_height(self, height: float) -> None:
-        """设置站立高度（Loco API: SET_STAND_HEIGHT）。
+        """设置站立高度（SET_STAND_HEIGHT）。
 
         Args:
             height: 站立高度（0.4~0.7m）

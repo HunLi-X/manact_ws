@@ -18,7 +18,7 @@ G1 NavGrasp 控制面板 (tkinter)
 
 控制方式：
     所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API。
+    使用 Loco API（SET_VELOCITY/SET_FSM_ID 等，参考 ctrl_keyboard 已验证方案）。
 
 运行：
     ros2 run g1_yolo_nav_py control_panel
@@ -59,7 +59,7 @@ from cv_bridge import CvBridge
 # 注意：control_panel 不导入 unitree_sdk2py！
 # unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
-# 所有运动控制通过 SportClient 统一封装（纯 Sport API），无需 LocoClient / DDS。
+# 所有运动控制通过 SportClient 统一封装（Loco API），无需 LocoClient / DDS。
 
 # ==================================================================
 # 3. 本项目导入
@@ -740,7 +740,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
     #  状态机 tick（转发到基类 + 手动控制）
     # ==================================================================
     def _tick(self) -> None:
-        # 手动控制持续发布（Sport API MOVE 需要持续发送速度指令）
+        # 手动控制持续发布（SET_VELOCITY duration=1.0 需要持续发送保持运动）
         if self._manual_active and self._gs_state in (GraspState.IDLE, GraspState.MENU):
             self._sport.move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vyaw)
 

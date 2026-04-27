@@ -4,11 +4,11 @@ Launch 文件：启动 YOLO 目标识别 + 偏航对齐 + 前进接近
 启动节点：
     1. g1_yolo_detector_node     - YOLO 目标检测
     2. g1_yaw_align_node         - 偏航对齐（机器人旋转，非腰部旋转）
-    3. g1_loco_forward_node      - Sport API 前进控制
+    3. g1_loco_forward_node      - Loco API 前进控制
     4. d455_camera_tf_publisher   - D455 相机静态 TF
 
 控制方式：
-    所有运动控制通过 Sport API（/api/sport/request）完成。
+    所有运动控制通过 Loco API（/api/sport/request）完成（参考 ctrl_keyboard 已验证方案）。
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
@@ -126,7 +126,7 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # 偏航对齐节点（通过 Sport API 旋转机器人）
+    # 偏航对齐节点（通过 Loco API SET_VELOCITY 旋转机器人）
     yaw_align_node = Node(
         package="g1_yolo_nav_py",
         executable="yaw_align",
@@ -135,7 +135,7 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[config_file],
     )
 
-    # 前进控制节点（Sport API MOVE）
+    # 前进控制节点（Loco API SET_VELOCITY）
     loco_forward_node = Node(
         package="g1_yolo_nav_py",
         executable="loco_forward",
