@@ -133,17 +133,6 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # 导航规划节点
-    nav_planner_node = Node(
-        package="g1_yolo_nav_py",
-        executable="nav_planner",
-        name="g1_nav_planner_node",
-        parameters=[
-            config_file,
-            {"use_nav2": LaunchConfiguration("use_nav2")},
-        ],
-    )
-
     # 偏航对齐节点（通过 Sport API 旋转机器人）
     yaw_align_node = Node(
         package="g1_yolo_nav_py",
@@ -178,7 +167,6 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         # 参数声明
         use_rviz,
-        use_nav2,
         model_path_arg,
         use_depth,
         target_class,
@@ -188,7 +176,6 @@ def generate_launch_description() -> LaunchDescription:
         # 功能节点
         yolo_detector_node,
         spatial_target_node,
-        nav_planner_node,
         yaw_align_node,
         loco_forward_node,
         rviz_node,
