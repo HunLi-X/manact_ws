@@ -4,8 +4,8 @@
     - State 枚举
     - 公共参数声明
     - 检测回调 _on_detection
-    - P 控制器 _compute_vyaw
-    - 状态机 tick / _tick_searching / _tick_aligning / _tick_approaching
+    - 步进式对齐 _tick_aligning（移动一小步 → 等待相机更新 → 再检测）
+    - 状态机 tick / _tick_searching / _tick_approaching
     - arm 脚本执行（_run_grab / _run_armdown）
     - 右转放下 _do_turn_and_put_down
 
@@ -97,9 +97,10 @@ class GraspStateMachineMixin:
         node.declare_parameter("detection_topic", "/g1/vision/detections")
         node.declare_parameter("target_class_id", "chair")
         node.declare_parameter("camera_fov_deg", 87.0)
-        node.declare_parameter("yaw_kp", 2.0)
-        node.declare_parameter("max_yaw_speed", 0.6)
         node.declare_parameter("center_tolerance", 0.08)
+        node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
+        node.declare_parameter("step_duration", 0.3)           # 步进式对齐：每步持续时间
+        node.declare_parameter("camera_settle_time", 5.0)      # 步进式对齐：等待相机更新
         node.declare_parameter("forward_speed", 0.2)
         node.declare_parameter("arrive_bbox_ratio", 0.45)
         node.declare_parameter("align_stable_time", 1.0)
@@ -114,9 +115,10 @@ class GraspStateMachineMixin:
         self._gs_det_topic = p("detection_topic")
         self._gs_target_class = p("target_class_id")
         self._gs_fov_rad = math.radians(float(p("camera_fov_deg")))
-        self._gs_kp = float(p("yaw_kp"))
-        self._gs_max_yaw = float(p("max_yaw_speed"))
         self._gs_center_tol = float(p("center_tolerance"))
+        self._gs_step_speed = float(p("step_yaw_speed"))
+        self._gs_step_dur = float(p("step_duration"))
+        self._gs_settle_time = float(p("camera_settle_time"))
         self._gs_fwd_speed = float(p("forward_speed"))
         self._gs_arrive_ratio = float(p("arrive_bbox_ratio"))
         self._gs_stable_time = float(p("align_stable_time"))
@@ -142,6 +144,8 @@ class GraspStateMachineMixin:
         self._gs_align_start: Optional[float] = None
         self._gs_last_forward_time: float = 0.0
         self._gs_state: GraspState = start_state
+        self._gs_settling: bool = False       # 步进式对齐：正在等待相机更新
+        self._gs_settle_start: float = 0.0    # 开始等待的时间
 
         # ---- ROS2 订阅 ----
         node.create_subscription(
@@ -207,20 +211,6 @@ class GraspStateMachineMixin:
             self._gs_target_u = None
 
     # ------------------------------------------------------------------
-    #  P 控制器
-    # ------------------------------------------------------------------
-    def _gs_compute_vyaw(self) -> float:
-        """P 控制计算偏航角速度。"""
-        if self._gs_target_u is None or (time.time() - self._gs_last_detect_time > self._gs_lost_timeout):
-            return 0.0
-        error = self._gs_target_u - 0.5
-        if abs(error) < self._gs_center_tol:
-            return 0.0
-        error_angle = error * self._gs_fov_rad
-        vyaw = -self._gs_kp * error_angle
-        return max(-self._gs_max_yaw, min(self._gs_max_yaw, vyaw))
-
-    # ------------------------------------------------------------------
     #  状态机 tick
     # ------------------------------------------------------------------
     def _gs_tick(self) -> None:
@@ -242,36 +232,68 @@ class GraspStateMachineMixin:
             self._sport.stop()
             self.gs_state = GraspState.ALIGNING
             self._gs_align_start = None
+            self._gs_settling = False
             self._log_info(f"[状态] SEARCHING → ALIGNING (u={self._gs_target_u:.3f})")
             return
         self._sport.move(vyaw=self._gs_search_speed)
 
+    # ------------------------------------------------------------------
+    #  步进式对齐
+    # ------------------------------------------------------------------
     def _gs_tick_aligning(self) -> None:
-        """对齐阶段：P 控制偏航让目标居中。"""
-        if self._gs_target_u is None or (time.time() - self._gs_last_detect_time > self._gs_lost_timeout):
+        """对齐阶段：步进式旋转（移动一小步 → 等待相机更新 → 再检测）。"""
+        now = time.time()
+
+        # ---- 目标丢失 ----
+        if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
             self._sport.stop()
+            self._gs_settling = False
             self.gs_state = GraspState.SEARCHING
             self._log_info("[状态] ALIGNING → SEARCHING (目标丢失)")
             return
 
-        vyaw = self._gs_compute_vyaw()
+        error = self._gs_target_u - 0.5
 
-        if abs(vyaw) < 1e-6:
+        # ---- 已居中 ----
+        if abs(error) < self._gs_center_tol:
+            if self._gs_settling:
+                self._gs_settling = False
+            # 居中稳定计时
             if self._gs_align_start is None:
-                self._gs_align_start = time.time()
-
-            aligned_dur = time.time() - self._gs_align_start
-            if aligned_dur >= self._gs_stable_time:
+                self._gs_align_start = now
+            if now - self._gs_align_start >= self._gs_stable_time:
                 self._sport.stop()
                 self.gs_state = GraspState.APPROACHING
                 self._gs_last_forward_time = 0.0
                 self._log_info("[状态] ALIGNING → APPROACHING (已对齐)")
                 return
-
             self._sport.stop()
-        else:
-            self._gs_align_start = None
-            self._sport.move(vyaw=vyaw)
+            return
+
+        # ---- 正在等待相机更新 ----
+        if self._gs_settling:
+            if now - self._gs_settle_start < self._gs_settle_time:
+                return  # 还在等待中
+            # 等待结束
+            self._gs_settling = False
+            self._log_info(
+                f"[对齐] 等待结束，重新检测: u={self._gs_target_u:.3f}"
+            )
+
+        # ---- 发送一步旋转 ----
+        vyaw = -self._gs_step_speed if error > 0 else self._gs_step_speed
+        self._sport.move(vyaw=vyaw, duration=self._gs_step_dur)
+
+        turn_deg = math.degrees(vyaw * self._gs_step_dur)
+        self._log_info(
+            f"[对齐] 一步: u={self._gs_target_u:.3f}, 误差={error:+.3f}, "
+            f"旋转≈{turn_deg:+.1f}°, 等待{self._gs_settle_time}s..."
+        )
+
+        # ---- 进入等待状态 ----
+        self._gs_settling = True
+        self._gs_settle_start = now
+        self._gs_align_start = None
 
     def _gs_tick_approaching(self) -> None:
         """接近阶段：前进到目标附近。"""
