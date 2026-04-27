@@ -107,6 +107,7 @@ class SportClient:
             Request, '/api/sport/request', 10
         )
         self._ready: bool = False
+        self._sub_warned: bool = False  # 是否已警告过无订阅者
 
     # ------------------------------------------------------------------
     #  属性
@@ -115,6 +116,22 @@ class SportClient:
     def ready(self) -> bool:
         """FSM 是否已初始化完成，可以接受运动指令。"""
         return self._ready
+
+    # ------------------------------------------------------------------
+    #  诊断
+    # ------------------------------------------------------------------
+    def check_subscribers(self) -> int:
+        """返回 /api/sport/request 话题的订阅者数量。"""
+        return self._pub.get_subscription_count() if hasattr(self._pub, 'get_subscription_count') else 0
+
+    def has_subscribers(self) -> bool:
+        """检查 /api/sport/request 是否有订阅者。"""
+        # ROS2 Foxy: publisher 没有 get_subscription_count，用 node.count_subscribers
+        try:
+            count = self._node.count_subscribers('/api/sport/request')
+            return count > 0
+        except Exception:
+            return True  # 无法判断时假设正常
 
     # ------------------------------------------------------------------
     #  核心：发布 Request
