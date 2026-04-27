@@ -27,10 +27,10 @@
 """
 
 # ==================================================================
-# Loco API 常量（ctrl_keyboard 已验证可用）
+# Loco API 常量
 # ==================================================================
 class LocoAPI:
-    """Loco Mode API ID 常量（7xxx 系列，ctrl_keyboard 已验证可用）。"""
+    """Loco Mode API ID 常量"""
     GET_FSM_ID = 7001
     GET_FSM_MODE = 7002
     GET_BALANCE_MODE = 7003
@@ -47,10 +47,10 @@ class LocoAPI:
 
 
 # ==================================================================
-# FSM 状态机 ID（ctrl_keyboard 已验证可用）
+# FSM 状态机 ID
 # ==================================================================
 class FSM_ID:
-    """状态机 ID 映射（ctrl_keyboard 已验证可用）。"""
+    """状态机 ID 映射"""
     ZERO_TORQUE = 0    # 零力矩模式（初始坐姿）
     DAMP = 1           # 阻尼控制模式（从坐姿准备站立的过渡）
     SQUAT = 2          # 蹲下
@@ -61,7 +61,7 @@ class FSM_ID:
 
 
 # ==================================================================
-# 平衡模式（ctrl_keyboard 已验证可用）
+# 平衡模式
 # ==================================================================
 class BalanceMode:
     """平衡模式常量。"""
@@ -145,6 +145,7 @@ class SportClient:
         """发布运动控制请求。
 
         每次调用都创建新的 Request 对象，避免 DDS 缓冲区复用导致的数据损坏。
+        发布后等待 0.1 秒，确保 DDS 消息被发出（与 ctrl_keyboard 一致）。
 
         Args:
             api_id: API ID（如 LocoAPI.SET_VELOCITY, LocoAPI.SET_FSM_ID）
@@ -155,6 +156,7 @@ class SportClient:
         if params is not None:
             req.parameter = json.dumps(params)
         self._pub.publish(req)
+        time.sleep(0.1)  # 与 ctrl_keyboard 一致：确保 DDS 消息被发出
 
     # ------------------------------------------------------------------
     #  FSM 状态机初始化（Loco API，参考 ctrl_keyboard 已验证方案）
@@ -173,9 +175,24 @@ class SportClient:
         def _init_thread():
             logger = self._node.get_logger
 
+            # 等待 /api/sport/request 出现订阅者（DDS 发现需要时间）
+            # auto_ctrl 之所以能用，是因为 rclpy.spin 先启动，publisher 已被发现
+            # 我们的 init_fsm 在节点 __init__ 中就启动了，此时可能还没有订阅者
+            logger().info("[FSM] 等待 /api/sport/request 订阅者...")
+            for i in range(30):  # 最多等 3 秒
+                if self.has_subscribers():
+                    logger().info("[FSM] 检测到订阅者，开始初始化")
+                    break
+                time.sleep(0.1)
+            else:
+                logger().warn(
+                    "[FSM] 等待 3 秒后仍无订阅者! "
+                    "FSM 指令可能丢失，请确认 unitree SDK bridge 已启动。"
+                )
+
             logger().info("[FSM] 切换到 DAMP 模式 (SET_FSM_ID=7101)...")
             self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
-            time.sleep(2)
+            time.sleep(2)  # publish 内已有 0.1s，此处额外等待机器人完成 DAMP 过渡
 
             logger().info("[FSM] 站立 (SET_FSM_ID STAND_UP=4)...")
             self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.STAND_UP})
@@ -192,14 +209,6 @@ class SportClient:
 
             self._ready = True
             logger().info("[FSM] 初始化完成，就绪")
-
-            # 诊断：检查订阅者
-            if not self.has_subscribers():
-                logger().warn(
-                    "[FSM] /api/sport/request 无订阅者! "
-                    "FSM 指令可能未生效，运动指令也不会被执行。"
-                    "请确认 unitree SDK bridge 已启动。"
-                )
 
             if callback is not None:
                 callback()
