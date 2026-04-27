@@ -176,34 +176,42 @@ class SportClient:
             logger = self._node.get_logger
 
             # 等待 /api/sport/request 出现订阅者（DDS 发现需要时间）
-            # auto_ctrl 之所以能用，是因为 rclpy.spin 先启动，publisher 已被发现
+            # ctrl_keyboard 之所以能用，是因为 rclpy.spin 先启动，publisher 已被发现
             # 我们的 init_fsm 在节点 __init__ 中就启动了，此时可能还没有订阅者
             logger().info("[FSM] 等待 /api/sport/request 订阅者...")
-            for i in range(30):  # 最多等 3 秒
+            for i in range(50):  # 最多等 5 秒
                 if self.has_subscribers():
                     logger().info("[FSM] 检测到订阅者，开始初始化")
                     break
                 time.sleep(0.1)
             else:
                 logger().warn(
-                    "[FSM] 等待 3 秒后仍无订阅者! "
+                    "[FSM] 等待 5 秒后仍无订阅者! "
                     "FSM 指令可能丢失，请确认 unitree SDK bridge 已启动。"
                 )
 
-            logger().info("[FSM] 切换到 DAMP 模式 (SET_FSM_ID=7101)...")
-            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
-            time.sleep(2)  # publish 内已有 0.1s，此处额外等待机器人完成 DAMP 过渡
+            # FSM 状态机流程（与 ctrl_keyboard 交互模式一致）：
+            # ZERO_TORQUE → DAMP → STAND_UP → START → WALK_RUN → CONTINUOUS_GAIT
+            # 每步必须等机器人物理完成过渡后才能发下一个状态切换指令
 
-            logger().info("[FSM] 站立 (SET_FSM_ID STAND_UP=4)...")
+            logger().info("[FSM] 步骤1: 切换到 DAMP 模式 (SET_FSM_ID=1)...")
+            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
+            time.sleep(3)  # DAMP 过渡需要时间
+
+            logger().info("[FSM] 步骤2: 站立 (SET_FSM_ID STAND_UP=4)...")
             self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.STAND_UP})
-            time.sleep(3)
+            time.sleep(5)  # 从 DAMP 站起需要较长时间，等物理动作完成
 
             if auto_balance_stand:
-                logger().info("[FSM] 进入走跑模式 (SET_FSM_ID WALK_RUN=801)...")
+                logger().info("[FSM] 步骤3: 进入常规运控 (SET_FSM_ID START=500)...")
+                self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.START})
+                time.sleep(2)  # START 模式过渡
+
+                logger().info("[FSM] 步骤4: 进入走跑模式 (SET_FSM_ID WALK_RUN=801)...")
                 self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.WALK_RUN})
                 time.sleep(1)
 
-                logger().info("[FSM] 开启连续步态 (SET_BALANCE_MODE CONTINUOUS_GAIT=1)...")
+                logger().info("[FSM] 步骤5: 开启连续步态 (SET_BALANCE_MODE CONTINUOUS_GAIT=1)...")
                 self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.CONTINUOUS_GAIT})
                 time.sleep(1)
 
