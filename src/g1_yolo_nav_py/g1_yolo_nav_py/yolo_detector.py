@@ -21,6 +21,7 @@ for _p in [
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+from typing import List  # 类型注解（Python 3.8 兼容）
 from sensor_msgs.msg import Image  # ROS2 图像消息
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D  # 检测结果消息
 from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
@@ -42,7 +43,7 @@ class YoloDetectorNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("model_path", "yolo_v11x_best.pt")
-        self.declare_parameter("confidence_threshold", 0.8)
+        self.declare_parameter("confidence_threshold", 0.5)
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
@@ -75,7 +76,7 @@ class YoloDetectorNode(Node):
         # ---- 解析目标类别：支持名称或数字 ID ----
         # model.names: {0: "chair", 1: "table", ...}
         self._name_to_id = {v: int(k) for k, v in self._model.names.items()}
-        self._target_class_ids: list[int] = []
+        self._target_class_ids: List[int] = []
         raw_targets = list(self.get_parameter("target_classes").value)
         for t in raw_targets:
             if isinstance(t, (int, float)):

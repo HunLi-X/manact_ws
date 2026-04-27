@@ -215,7 +215,7 @@ class ControlPanelNode(Node):
         self._new_frame = False  # ROS2 回调标记有新帧
         self._manual_vx = 0.0   # 手动控制速度（持续发布）
         self._manual_vy = 0.0
-        self._manual_vz = 0.0   # 偏航角速度，对应 SportClient.move(vyaw=...)
+        self._manual_vyaw = 0.0   # 偏航角速度，对应 SportClient.move(vyaw=...)
         self._manual_active = False
         self._last_forward_time = 0.0
 
@@ -659,7 +659,7 @@ class ControlPanelNode(Node):
             return
         self._manual_vx = vx
         self._manual_vy = vy
-        self._manual_vz = vyaw
+        self._manual_vyaw = vyaw
         self._manual_active = True
         self._append_log(f"[手动] 持续运动: vx={vx}, vyaw={vyaw}（按停止结束）")
 
@@ -670,7 +670,7 @@ class ControlPanelNode(Node):
         self._last_forward_time = 0.0
         self._manual_vx = 0.0
         self._manual_vy = 0.0
-        self._manual_vz = 0.0
+        self._manual_vyaw = 0.0
 
         prev = self._state
         self._state = State.IDLE
@@ -830,7 +830,7 @@ class ControlPanelNode(Node):
     def _tick(self) -> None:
         # 手动控制持续发布（Sport API MOVE 需要持续发送速度指令）
         if self._manual_active and self._state in (State.IDLE, State.MENU):
-            self._sport_move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vz)
+            self._sport_move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vyaw)
 
         if self._state == State.SEARCHING:
             self._tick_searching()
