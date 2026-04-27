@@ -41,6 +41,24 @@ g1_yaw_align_node:
     max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
     control_rate: 10.0                        # 控制频率 Hz
     lost_timeout: 5.0                         # 目标丢失超时 s
+    auto_stand: true                          # 是否自动初始化 FSM
+
+# ---- 抓取任务节点参数 ----
+g1_grasp_task_node:
+  ros__parameters:
+    detection_topic: "/g1/vision/detections"  # 检测结果输入
+    target_class_id: "chair"                  # 目标类别
+    camera_fov_deg: 87.0                      # D455 水平视场角
+    yaw_kp: 2.0                               # 偏航 P 增益
+    max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
+    center_tolerance: 0.08                    # 居中容差（归一化）
+    forward_speed: 0.2                        # 前进速度 m/s
+    arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
+    align_stable_time: 1.0                    # 对齐稳定时间 s
+    lost_timeout: 2.0                         # 目标丢失超时 s
+    search_yaw_speed: 0.6                     # 搜索旋转速度 rad/s
+    turn_yaw_speed: 0.6                       # 右转放下时偏航速度 rad/s
+    turn_duration: 2.6                        # 右转放下时持续时间 s（≈90°）
     auto_stand: true                          # 是否自动初始化 FSM（DAMP→STANDUP→BALANCESTAND→CONTINUOUSGAIT）
 
 # ---- 前进控制节点参数 ----
@@ -54,4 +72,40 @@ g1_loco_forward_node:
     arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
     lost_timeout: 1.0                         # 目标丢失超时 s
     check_rate: 10.0                          # 检查频率 Hz
+    auto_stand: true                          # 是否自动初始化 FSM
+
+# ---- 抓取任务节点参数 ----
+g1_grasp_task_node:
+  ros__parameters:
+    detection_topic: "/g1/vision/detections"  # 检测结果输入
+    target_class_id: "chair"                  # 目标类别
+    camera_fov_deg: 87.0                      # D455 水平视场角
+    yaw_kp: 2.0                               # 偏航 P 增益
+    max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
+    center_tolerance: 0.08                    # 居中容差（归一化）
+    forward_speed: 0.2                        # 前进速度 m/s
+    arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
+    align_stable_time: 1.0                    # 对齐稳定时间 s
+    lost_timeout: 2.0                         # 目标丢失超时 s
+    search_yaw_speed: 0.6                     # 搜索旋转速度 rad/s
+    turn_yaw_speed: 0.6                       # 右转放下时偏航速度 rad/s
+    turn_duration: 2.6                        # 右转放下时持续时间 s（≈90°）
+    auto_stand: true                          # 是否自动初始化 FSM
+
+# ---- 抓取任务节点参数 ----
+g1_grasp_task_node:
+  ros__parameters:
+    detection_topic: "/g1/vision/detections"  # 检测结果输入
+    target_class_id: "chair"                  # 目标类别
+    camera_fov_deg: 87.0                      # D455 水平视场角
+    yaw_kp: 2.0                               # 偏航 P 增益
+    max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
+    center_tolerance: 0.08                    # 居中容差（归一化）
+    forward_speed: 0.2                        # 前进速度 m/s
+    arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
+    align_stable_time: 1.0                    # 对齐稳定时间 s
+    lost_timeout: 2.0                         # 目标丢失超时 s
+    search_yaw_speed: 0.6                     # 搜索旋转速度 rad/s
+    turn_yaw_speed: 0.6                       # 右转放下时偏航速度 rad/s
+    turn_duration: 2.6                        # 右转放下时持续时间 s（≈90°）
     auto_stand: true                          # 是否自动初始化 FSM

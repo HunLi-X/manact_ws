@@ -6,6 +6,7 @@
 import os   # sys.path 修改
 import sys  # sys.path 修改
 import math  # 角度弧度转换
+from typing import Optional  # 类型注解
 
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
