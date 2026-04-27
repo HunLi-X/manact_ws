@@ -25,7 +25,6 @@ from typing import Optional  # 类型注解
 # ==================================================================
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 
 # ==================================================================
@@ -77,10 +76,8 @@ class LocoForwardNode(Node):
         self._last_forward_time: float = 0.0
 
         # ---- ROS2 订阅 ----
-        qos = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
-                         history=HistoryPolicy.KEEP_LAST, depth=5)
         self.create_subscription(Detection2DArray, self._det_topic,
-                                 self._on_detection, qos)
+                                 self._on_detection, 10)
 
         # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
