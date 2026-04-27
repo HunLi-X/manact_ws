@@ -162,7 +162,9 @@ class ControlPanelNode(Node):
         self.declare_parameter("align_stable_time", 1.0)
         self.declare_parameter("lost_timeout", 2.0)
         self.declare_parameter("search_yaw_speed", 0.3)
-        self.declare_parameter("network_interface", "")
+        self.declare_parameter("turn_yaw_speed", 0.6)
+        self.declare_parameter("turn_duration", 2.6)
+        self.declare_parameter("network_interface", "")  # 传递给 arm 脚本子进程
         self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
         self.declare_parameter("display_width", 400)
         self.declare_parameter("display_height", 300)
@@ -181,6 +183,8 @@ class ControlPanelNode(Node):
         self._stable_time = float(p("align_stable_time"))
         self._lost_timeout = float(p("lost_timeout"))
         self._search_speed = float(p("search_yaw_speed"))
+        self._turn_speed = float(p("turn_yaw_speed"))
+        self._turn_duration = float(p("turn_duration"))
         self._net_iface = p("network_interface")
         self._disp_w = int(p("display_width"))
         self._disp_h = int(p("display_height"))
@@ -737,8 +741,8 @@ class ControlPanelNode(Node):
         self._append_log("[右转] 开始右转 90° ...")
 
         def _worker():
-            self._sport_move(vyaw=-0.6)
-            time.sleep(2.6)
+            self._sport_move(vyaw=-self._turn_speed)
+            time.sleep(self._turn_duration)
             self._append_log("[右转] 右转完成")
             self._run_armdown()
 

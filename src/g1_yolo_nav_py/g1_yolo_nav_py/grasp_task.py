@@ -96,6 +96,8 @@ class GraspTaskNode(Node):
         self._stable_time = float(p("align_stable_time"))
         self._lost_timeout = float(p("lost_timeout"))
         self._search_speed = float(p("search_yaw_speed"))
+        self._turn_speed = float(p("turn_yaw_speed"))
+        self._turn_duration = float(p("turn_duration"))
         self._auto_stand = bool(p("auto_stand"))
 
         # arm 脚本路径
@@ -367,8 +369,8 @@ class GraspTaskNode(Node):
         """右转 90° 后放下目标物。"""
         self.get_logger().info("[右转] 开始右转 90° ...")
         # MOVE 的 z 参数控制偏航，负值为右转
-        self._sport.move(vyaw=-0.6)
-        time.sleep(2.6)
+        self._sport.move(vyaw=-self._turn_speed)
+        time.sleep(self._turn_duration)
         self._sport.stop()
         self.get_logger().info("[右转] 右转完成")
         self._do_put_down()
