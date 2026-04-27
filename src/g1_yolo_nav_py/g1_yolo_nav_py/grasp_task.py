@@ -79,6 +79,8 @@ class GraspTaskNode(Node):
         self.declare_parameter("align_stable_time", 1.0)
         self.declare_parameter("lost_timeout", 2.0)
         self.declare_parameter("search_yaw_speed", 0.6)
+        self.declare_parameter("turn_yaw_speed", 0.6)
+        self.declare_parameter("turn_duration", 2.6)
         self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
         self.declare_parameter("auto_stand", True)
 

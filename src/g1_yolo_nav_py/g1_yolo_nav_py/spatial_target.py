@@ -64,15 +64,15 @@ class SpatialTargetNode(Node):
         self._bridge = CvBridge()
 
         # ---- 相机内参 ----
-        self._camera_info: CameraInfo | None = None
-        self._depth_image: np.ndarray | None = None
+        self._camera_info: Optional[CameraInfo] = None
+        self._depth_image: Optional[np.ndarray] = None
         self._fx = 0.0
         self._fy = 0.0
         self._cx = 0.0
         self._cy = 0.0
 
         # ---- 最新检测结果缓存 ----
-        self._latest_detection: Detection2DArray | None = None
+        self._latest_detection: Optional[Detection2DArray] = None
 
         # ---- TF ----
         self._tf_buffer = tf2_ros.Buffer()
