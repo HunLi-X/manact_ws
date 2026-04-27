@@ -8,7 +8,8 @@ G1 NavGrasp 控制面板 (tkinter)
   - 右侧：YOLO 检测标注图像
   - 下方：状态信息 + 操作按钮 + 一键抓取任务
 
-状态机（参考 grasp_task.py）：
+状态机（共享自 _grasp_state.py）：
+    IDLE        → 空闲等待
     SEARCHING   → 旋转搜索目标
     ALIGNING    → 偏航对齐让目标居中
     APPROACHING → 前进到目标附近
@@ -17,7 +18,7 @@ G1 NavGrasp 控制面板 (tkinter)
 
 控制方式：
     所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API，不再依赖 cmd_vel / Twist / twist_bridge。
+    全部使用 Sport API（MOVE/STOPMOVE/SIT 等），不使用 Loco API。
 
 运行：
     ros2 run g1_yolo_nav_py control_panel
@@ -59,38 +60,25 @@ from cv_bridge import CvBridge
 # unitree_sdk2py 的模块级导入会加载 CycloneDDS 绑定，干扰 ROS2 的 CycloneDDS domain，
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
 # 所有运动控制通过 SportClient 统一封装（纯 Sport API），无需 LocoClient / DDS。
-# unitree_api 是纯 ROS2 消息包，导入安全，不涉及 DDS。
 
 # ==================================================================
 # 3. 本项目导入
 # ==================================================================
-from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
+from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState  # 共享状态机
 from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
 
 # ==================================================================
 # 4. 常量与配置
 # ==================================================================
 
-# arm 脚本默认目录
-_DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm")
-
-# 状态枚举
-class State(Enum):
-    IDLE = auto()
-    SEARCHING = auto()
-    ALIGNING = auto()
-    APPROACHING = auto()
-    GRABBING = auto()
-    MENU = auto()
-
 # 状态中文显示
 _STATE_LABELS = {
-    State.IDLE: "空闲",
-    State.SEARCHING: "搜索中",
-    State.ALIGNING: "对齐中",
-    State.APPROACHING: "接近中",
-    State.GRABBING: "抓取中",
-    State.MENU: "操作菜单",
+    GraspState.IDLE: "空闲",
+    GraspState.SEARCHING: "搜索中",
+    GraspState.ALIGNING: "对齐中",
+    GraspState.APPROACHING: "接近中",
+    GraspState.GRABBING: "抓取中",
+    GraspState.MENU: "操作菜单",
 }
 
 # ==================================================================
@@ -116,68 +104,42 @@ _TEXT_PRIMARY    = "#134E4A"   # 主文字 (Teal-900 对比 8.8:1)
 _TEXT_SECONDARY  = "#5F7A78"   # 次级文字
 _TEXT_MUTED      = "#94A3B8"   # 弱化文字 (Slate-400)
 
-# 状态对应颜色（更新为新设计系统）
+# 状态对应颜色
 _STATE_COLORS = {
-    State.IDLE:        _TEXT_SECONDARY,
-    State.SEARCHING:   _ACCENT_ORANGE,
-    State.ALIGNING:    _ACCENT_CYAN,
-    State.APPROACHING: _ACCENT_BLUE,
-    State.GRABBING:    _ACCENT_RED,
-    State.MENU:        _ACCENT_GREEN,
+    GraspState.IDLE:        _TEXT_SECONDARY,
+    GraspState.SEARCHING:   _ACCENT_ORANGE,
+    GraspState.ALIGNING:    _ACCENT_CYAN,
+    GraspState.APPROACHING: _ACCENT_BLUE,
+    GraspState.GRABBING:    _ACCENT_RED,
+    GraspState.MENU:        _ACCENT_GREEN,
 }
 
 
-class ControlPanelNode(Node):
+class ControlPanelNode(Node, GraspStateMachineMixin):
     """G1 控制面板节点 — tkinter GUI + ROS2 通信 + 抓取任务状态机。"""
 
     def __init__(self) -> None:
-        super().__init__("g1_control_panel_node")
+        Node.__init__(self, "g1_control_panel_node")
 
-        # ---- 参数（参考 grasp_task.py）----
+        # ---- 控制面板专用参数 ----
         self.declare_parameter("image_topic", "/D455_1/color/image_raw")
-        self.declare_parameter("detection_topic", "/g1/vision/detections")
-        self.declare_parameter("auto_stand", True)
-        self.declare_parameter("target_class_id", "chair")
-        self.declare_parameter("camera_fov_deg", 87.0)
-        self.declare_parameter("yaw_kp", 2.0)
-        self.declare_parameter("max_yaw_speed", 0.6)
-        self.declare_parameter("center_tolerance", 0.08)
-        self.declare_parameter("forward_speed", 0.2)
-        self.declare_parameter("arrive_bbox_ratio", 0.45)
-        self.declare_parameter("align_stable_time", 1.0)
-        self.declare_parameter("lost_timeout", 2.0)
-        self.declare_parameter("search_yaw_speed", 0.3)
-        self.declare_parameter("turn_yaw_speed", 0.6)
-        self.declare_parameter("turn_duration", 2.6)
         self.declare_parameter("network_interface", "")  # 传递给 arm 脚本子进程
-        self.declare_parameter("arm_script_dir", _DEFAULT_ARM_DIR)
         self.declare_parameter("display_width", 400)
         self.declare_parameter("display_height", 300)
 
         p = lambda n: self.get_parameter(n).value
         self._img_topic = p("image_topic")
-        self._det_topic = p("detection_topic")
-        self._auto_stand = bool(p("auto_stand"))
-        self._target_class = p("target_class_id")
-        self._fov_rad = math.radians(float(p("camera_fov_deg")))
-        self._kp = float(p("yaw_kp"))
-        self._max_yaw = float(p("max_yaw_speed"))
-        self._center_tol = float(p("center_tolerance"))
-        self._fwd_speed = float(p("forward_speed"))
-        self._arrive_ratio = float(p("arrive_bbox_ratio"))
-        self._stable_time = float(p("align_stable_time"))
-        self._lost_timeout = float(p("lost_timeout"))
-        self._search_speed = float(p("search_yaw_speed"))
-        self._turn_speed = float(p("turn_yaw_speed"))
-        self._turn_duration = float(p("turn_duration"))
         self._net_iface = p("network_interface")
         self._disp_w = int(p("display_width"))
         self._disp_h = int(p("display_height"))
 
-        # arm 脚本路径
-        arm_dir = p("arm_script_dir")
-        self._armup_script = Path(arm_dir) / "armup.py"
-        self._armdown_script = Path(arm_dir) / "armdown.py"
+        # ---- 初始化共享状态机 ----
+        self._init_grasp_state(
+            self,
+            include_idle=True,
+            start_state=GraspState.IDLE,
+            network_interface=self._net_iface,
+        )
 
         # ---- CV Bridge ----
         self._bridge = CvBridge()
@@ -188,16 +150,10 @@ class ControlPanelNode(Node):
             history=HistoryPolicy.KEEP_LAST, depth=5,
         )
 
-        # ---- ROS2 订阅 ----
+        # ---- ROS2 订阅（图像，检测已在基类中订阅）----
         self._img_sub = self.create_subscription(
             Image, self._img_topic, self._image_cb, sensor_qos
         )
-        self._det_sub = self.create_subscription(
-            Detection2DArray, self._det_topic, self._detection_cb, 10
-        )
-
-        # ---- 运动控制客户端（纯 Sport API）----
-        self._sport = SportClient(self)
 
         # ---- 延迟诊断（2秒后检查订阅状态，只执行一次）----
         self._diag_done = False
@@ -217,65 +173,54 @@ class ControlPanelNode(Node):
         self._manual_vy = 0.0
         self._manual_vyaw = 0.0   # 偏航角速度，对应 SportClient.move(vyaw=...)
         self._manual_active = False
-        self._last_forward_time = 0.0
-
-        # ---- 状态机（参考 grasp_task.py）----
-        self._target_u = None
-        self._bbox_size_x = 0.0
-        self._bbox_size_y = 0.0
-        self._last_detect_time = 0.0
-        self._align_start = None
-        self._state = State.IDLE
-        self._log_text = ""  # GUI 日志
 
         # ---- tkinter GUI ----
         self._build_gui()
-
-        # ---- 状态机 tick 合并到 GUI 主循环（tkinter 主线程），不再用 ROS2 定时器 ----
 
         # ---- GUI 刷新 ----
         self._update_loop()
 
         self.get_logger().info("=" * 50)
         self.get_logger().info("G1 NavGrasp 控制面板启动")
-        self.get_logger().info(f"目标类别: {self._target_class}")
-        self.get_logger().info(f"图像: {self._img_topic}, 检测: {self._det_topic}")
-        self.get_logger().info(f"armup: {self._armup_script}")
-        self.get_logger().info(f"armdown: {self._armdown_script}")
+        self.get_logger().info(f"目标类别: {self._gs_target_class}")
+        self.get_logger().info(f"图像: {self._img_topic}, 检测: {self._gs_det_topic}")
+        self.get_logger().info(f"armup: {self._gs_armup_script}")
+        self.get_logger().info(f"armdown: {self._gs_armdown_script}")
         self.get_logger().info("=" * 50)
 
     # ==================================================================
-    #  运动控制（通过 SportClient）
+    #  日志实现（GraspStateMachineMixin 抽象方法）
     # ==================================================================
-    def _sport_move(self, vx: float = 0.0, vy: float = 0.0,
-                            vyaw: float = 0.0) -> None:
-        """通过 SportClient MOVE 控制运动。"""
-        self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
+    def _log_info(self, msg: str) -> None:
+        self._append_log(msg)
 
-    def _sport_stop(self) -> None:
-        """停止运动。"""
-        self._sport.stop()
+    def _log_error(self, msg: str) -> None:
+        self._append_log(msg)
 
     # ==================================================================
-    # 诊断
+    #  状态变化回调（更新 GUI 显示）
+    # ==================================================================
+    def _on_state_changed(self, old_state: GraspState, new_state: GraspState) -> None:
+        """状态变化时更新 GUI。"""
+        self._update_state_display()
+
+    # ==================================================================
+    #  诊断
     # ==================================================================
     def _diag_check(self):
         """启动后延迟检查订阅状态，帮助定位无法接收图像的问题。"""
-        # 只执行一次
         if self._diag_done:
             return
         self._diag_done = True
         if hasattr(self, '_diag_timer') and self._diag_timer is not None:
             self._diag_timer.cancel()
         img_pub_count = self.count_publishers(self._img_topic)
-        det_pub_count = self.count_publishers(self._det_topic)
+        det_pub_count = self.count_publishers(self._gs_det_topic)
         self.get_logger().info(
-            f"[诊断] 图像话题 '{self._img_topic}': "
-            f"发布者数={img_pub_count}"
+            f"[诊断] 图像话题 '{self._img_topic}': 发布者数={img_pub_count}"
         )
         self.get_logger().info(
-            f"[诊断] 检测话题 '{self._det_topic}': "
-            f"发布者数={det_pub_count}"
+            f"[诊断] 检测话题 '{self._gs_det_topic}': 发布者数={det_pub_count}"
         )
         if img_pub_count == 0:
             self.get_logger().warn(
@@ -283,7 +228,6 @@ class ControlPanelNode(Node):
                 f"请检查: 1) 相机驱动是否启动 2) 话题名是否正确 "
                 f"(用 ros2 topic list 查看)"
             )
-            # 尝试列出可用图像话题
             try:
                 import subprocess
                 result = subprocess.run(
@@ -302,7 +246,7 @@ class ControlPanelNode(Node):
                 pass
 
     # ==================================================================
-    # GUI 构建
+    #  GUI 构建
     # ==================================================================
     def _build_gui(self):
         self.root = tk.Tk()
@@ -317,13 +261,11 @@ class ControlPanelNode(Node):
         title_frame.pack(fill=tk.X, padx=0, pady=0)
         title_frame.pack_propagate(False)
 
-        # 标题图标 + 文字
         tk.Label(
             title_frame, text="  G1 NavGrasp",
             font=("Consolas", 14, "bold"), fg="white", bg=_BG_SECONDARY
         ).pack(side=tk.LEFT, padx=(12, 0), pady=8)
 
-        # 状态指示器（圆点 + 文字）
         state_container = tk.Frame(title_frame, bg=_BG_SECONDARY)
         state_container.pack(side=tk.LEFT, padx=(16, 0), pady=8)
 
@@ -340,7 +282,6 @@ class ControlPanelNode(Node):
         )
         self._state_label.pack(side=tk.LEFT)
 
-        # FPS 显示
         self._fps_label = tk.Label(
             title_frame, text="FPS --", font=("Consolas", 10),
             fg="#CCEDF5", bg=_BG_SECONDARY
@@ -351,7 +292,6 @@ class ControlPanelNode(Node):
         img_frame = tk.Frame(self.root, bg=_BG_DEEP)
         img_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(6, 4))
 
-        # 左侧：原始图像（卡片风格）
         left_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         left_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
 
@@ -369,7 +309,6 @@ class ControlPanelNode(Node):
         )
         self._raw_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
-        # 右侧：检测图像（卡片风格）
         right_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         right_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
 
@@ -407,11 +346,9 @@ class ControlPanelNode(Node):
         btn_frame = tk.Frame(self.root, bg=_BG_DEEP)
         btn_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
 
-        # 通用按钮风格
         btn_common = {"font": ("Consolas", 10), "width": 8, "height": 1, "bd": 0, "relief": "flat",
                       "cursor": "hand2"}
 
-        # 方向控制（蓝色系）
         self._btn_forward = tk.Button(
             btn_frame, text="  前进", bg=_ACCENT_BLUE, fg="white",
             activebackground="#2563EB", command=lambda: self._manual_cmd(0.2, 0.0, 0.0),
@@ -440,7 +377,6 @@ class ControlPanelNode(Node):
         )
         self._btn_right.pack(side=tk.LEFT, padx=2)
 
-        # 停止按钮（红色突出）
         self._btn_stop = tk.Button(
             btn_frame, text="  停止", bg=_ACCENT_RED, fg="white",
             activebackground="#DC2626", command=self._do_stop,
@@ -448,12 +384,10 @@ class ControlPanelNode(Node):
         )
         self._btn_stop.pack(side=tk.LEFT, padx=2)
 
-        # 分隔线
         tk.Frame(btn_frame, width=2, bg=_BORDER_COLOR).pack(
             side=tk.LEFT, fill=tk.Y, padx=8, pady=4
         )
 
-        # 任务按钮
         self._btn_search = tk.Button(
             btn_frame, text="  搜索", bg=_ACCENT_ORANGE, fg="white",
             activebackground="#D97706", command=self._do_start_search,
@@ -482,7 +416,6 @@ class ControlPanelNode(Node):
         )
         self._btn_turn_putdown.pack(side=tk.LEFT, padx=2)
 
-        # 速度控制
         speed_frame = tk.Frame(btn_frame, bg=_BG_DEEP)
         speed_frame.pack(side=tk.RIGHT, padx=6)
         tk.Label(speed_frame, text="速度", font=("Consolas", 9),
@@ -529,7 +462,7 @@ class ControlPanelNode(Node):
         self._log_textbox.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
     # ==================================================================
-    # GUI 日志
+    #  GUI 日志
     # ==================================================================
     def _append_log(self, text: str):
         """向日志栏追加一行文本。"""
@@ -537,7 +470,6 @@ class ControlPanelNode(Node):
             self._log_textbox.config(state=tk.NORMAL)
             self._log_textbox.insert(tk.END, text + "\n")
             self._log_textbox.see(tk.END)
-            # 保留最近 200 行
             lines = int(self._log_textbox.index("end-1c").split(".")[0])
             if lines > 200:
                 self._log_textbox.delete("1.0", f"{lines - 200}.0")
@@ -550,14 +482,13 @@ class ControlPanelNode(Node):
 
     def _update_state_display(self):
         """更新顶部状态显示。"""
-        label = _STATE_LABELS.get(self._state, "未知")
-        color = _STATE_COLORS.get(self._state, _TEXT_SECONDARY)
+        label = _STATE_LABELS.get(self._gs_state, "未知")
+        color = _STATE_COLORS.get(self._gs_state, _TEXT_SECONDARY)
         self._state_label.config(text=label, fg=color)
-        # 更新状态指示圆点颜色
         self._state_dot.itemconfigure(self._state_dot_dot, fill=color)
 
     # ==================================================================
-    # ROS2 回调
+    #  ROS2 回调
     # ==================================================================
     def _image_cb(self, msg: Image):
         try:
@@ -574,30 +505,14 @@ class ControlPanelNode(Node):
             self.get_logger().warn(f"[图像] 转换失败: {e}")
 
     def _detection_cb(self, msg: Detection2DArray):
+        """检测回调 — 更新 GUI 显示 + 转发给基类。"""
         self._detections = msg
         self._det_count = len(msg.detections)
-
-        # 过滤目标类别（参考 grasp_task.py _on_detection）
-        best_det = None
-        best_score = 0.0
-        for det in msg.detections:
-            if det.results and det.results[0].id == self._target_class:
-                if det.results[0].score > best_score:
-                    best_score = det.results[0].score
-                    best_det = det
-
-        now = time.time()
-        if best_det is not None:
-            bbox = best_det.bbox
-            self._target_u = bbox.center.x
-            self._bbox_size_x = bbox.size_x
-            self._bbox_size_y = bbox.size_y
-            self._last_detect_time = now
-        else:
-            self._target_u = None
+        # 转发给基类的检测处理（更新 target_u / bbox 等）
+        self._gs_on_detection(msg)
 
     # ==================================================================
-    # 图像绘制
+    #  图像绘制
     # ==================================================================
     def _draw_detections(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
@@ -626,8 +541,8 @@ class ControlPanelNode(Node):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
         # 绘制十字准心
-        if self._target_u is not None and self._state in (State.ALIGNING, State.APPROACHING):
-            cx = int(self._target_u * w)
+        if self._gs_target_u is not None and self._gs_state in (GraspState.ALIGNING, GraspState.APPROACHING):
+            cx = int(self._gs_target_u * w)
             cy = h // 2
             cv2.line(out, (cx - 15, cy), (cx + 15, cy), (0, 255, 255), 1)
             cv2.line(out, (cx, cy - 15), (cx, cy + 15), (0, 255, 255), 1)
@@ -641,20 +556,18 @@ class ControlPanelNode(Node):
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
 
-        # 优先使用 INTER_LINEAR（比 INTER_AREA 快），小尺寸差异时效果一致
         resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
-        # BGR→RGB + 确保内存连续
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         rgb = np.ascontiguousarray(rgb)
         pil_img = PILImage.fromarray(rgb)
         return ImageTk.PhotoImage(image=pil_img)
 
     # ==================================================================
-    # 手动控制
+    #  手动控制
     # ==================================================================
     def _manual_cmd(self, vx: float, vy: float, vyaw: float):
         """手动方向控制（持续发布模式，点击后持续运动直到按停止）。"""
-        if self._state not in (State.IDLE, State.MENU):
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 任务执行中，请先停止")
             return
         self._manual_vx = vx
@@ -665,17 +578,16 @@ class ControlPanelNode(Node):
 
     def _do_stop(self):
         """停止所有运动并回到 IDLE。"""
-        # 清除手动控制
         self._manual_active = False
-        self._last_forward_time = 0.0
+        self._gs_last_forward_time = 0.0
         self._manual_vx = 0.0
         self._manual_vy = 0.0
         self._manual_vyaw = 0.0
 
-        prev = self._state
-        self._state = State.IDLE
-        self._sport_stop()
-        self._align_start = None
+        prev = self._gs_state
+        self._gs_state = GraspState.IDLE
+        self._sport.stop()
+        self._gs_align_start = None
         self._append_log(f"[状态] {prev.name} → IDLE: 手动停止")
         self._update_state_display()
 
@@ -688,63 +600,63 @@ class ControlPanelNode(Node):
         self._sport.init_fsm()
 
     # ==================================================================
-    # 任务操作（参考 grasp_task.py）
+    #  任务操作
     # ==================================================================
     def _do_start_search(self):
         """开始搜索目标。"""
-        if self._state not in (State.IDLE, State.MENU):
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._state = State.SEARCHING
-        self._align_start = None
-        self._append_log(f"[状态] → SEARCHING: 开始搜索 '{self._target_class}'")
+        self._gs_state = GraspState.SEARCHING
+        self._gs_align_start = None
+        self._append_log(f"[状态] → SEARCHING: 开始搜索 '{self._gs_target_class}'")
         self._update_state_display()
 
     def _do_grab(self):
         """手动触发抓取（执行 armup.py）。"""
-        self._append_log(f"[调试] 抓取按钮: state={self._state.name}, armup={self._armup_script}")
-        if self._state not in (State.IDLE, State.MENU):
+        self._append_log(f"[调试] 抓取按钮: state={self._gs_state.name}, armup={self._gs_armup_script}")
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._state = State.GRABBING
-        self._sport_stop()
-        self._run_grab()
+        self._gs_state = GraspState.GRABBING
+        self._sport.stop()
+        self._gs_run_grab()
         self._update_state_display()
 
     def _do_put_down(self):
         """放下目标物（执行 armdown.py）。"""
-        self._append_log(f"[调试] 放下按钮: state={self._state.name}, armdown={self._armdown_script}")
-        if self._state not in (State.IDLE, State.MENU):
+        self._append_log(f"[调试] 放下按钮: state={self._gs_state.name}, armdown={self._gs_armdown_script}")
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._run_armdown()
+        self._gs_run_armdown()
 
     def _do_turn_and_put_down(self):
         """右转 90° 后放下目标物。"""
-        self._append_log(f"[调试] 右转放下按钮: state={self._state.name}")
-        if self._state not in (State.IDLE, State.MENU):
+        self._append_log(f"[调试] 右转放下按钮: state={self._gs_state.name}")
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
         self._append_log("[右转] 开始右转 90° ...")
 
         def _worker():
-            self._sport_move(vyaw=-self._turn_speed)
-            time.sleep(self._turn_duration)
+            self._sport.move(vyaw=-self._gs_turn_speed)
+            time.sleep(self._gs_turn_duration)
             self._append_log("[右转] 右转完成")
-            self._run_armdown()
+            self._gs_run_armdown()
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()
 
     # ==================================================================
-    # armup / armdown 子进程（参考 grasp_task.py）
+    #  覆盖基类的抓取/放下 — 添加 GUI 状态更新
     # ==================================================================
-    def _run_grab(self) -> None:
-        """执行 armup.py 抓取目标物。"""
-        script = str(self._armup_script)
+    def _gs_run_grab(self) -> None:
+        """执行 armup.py — 覆盖基类以添加 GUI 更新。"""
+        script = str(self._gs_armup_script)
         if not Path(script).exists():
             self._append_log(f"[错误] armup.py 不存在: {script}")
-            self._state = State.IDLE
+            self._gs_state = GraspState.IDLE
             self._update_state_display()
             return
 
@@ -775,7 +687,7 @@ class ControlPanelNode(Node):
             except Exception as e:
                 self._append_log(f"[错误] armup.py 异常: {e}")
             finally:
-                self._state = State.MENU
+                self._gs_state = GraspState.MENU
                 self._append_log("[状态] → MENU: 抓取完成，可选择放下")
                 self.root.after(0, self._update_state_display)
 
@@ -783,9 +695,9 @@ class ControlPanelNode(Node):
         t.start()
         self._append_log(f"[抓取] 子线程已启动 tid={t.ident}")
 
-    def _run_armdown(self) -> None:
-        """执行 armdown.py 放下目标物。"""
-        script = str(self._armdown_script)
+    def _gs_run_armdown(self) -> None:
+        """执行 armdown.py — 覆盖基类以添加 GUI 更新。"""
+        script = str(self._gs_armdown_script)
         if not Path(script).exists():
             self._append_log(f"[错误] armdown.py 不存在: {script}")
             return
@@ -816,7 +728,7 @@ class ControlPanelNode(Node):
             except Exception as e:
                 self._append_log(f"[错误] armdown.py 异常: {e}")
             finally:
-                self._state = State.IDLE
+                self._gs_state = GraspState.IDLE
                 self._append_log("[状态] → IDLE: 放下完成")
                 self.root.after(0, self._update_state_display)
 
@@ -825,107 +737,17 @@ class ControlPanelNode(Node):
         self._append_log(f"[放下] 子线程已启动 tid={t.ident}")
 
     # ==================================================================
-    # 状态机 — 主循环（参考 grasp_task.py）
+    #  状态机 tick（转发到基类 + 手动控制）
     # ==================================================================
     def _tick(self) -> None:
         # 手动控制持续发布（Sport API MOVE 需要持续发送速度指令）
-        if self._manual_active and self._state in (State.IDLE, State.MENU):
-            self._sport_move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vyaw)
+        if self._manual_active and self._gs_state in (GraspState.IDLE, GraspState.MENU):
+            self._sport.move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vyaw)
 
-        if self._state == State.SEARCHING:
-            self._tick_searching()
-        elif self._state == State.ALIGNING:
-            self._tick_aligning()
-        elif self._state == State.APPROACHING:
-            self._tick_approaching()
-        # IDLE / GRABBING / MENU 不在 tick 中驱动
-
-    def _tick_searching(self) -> None:
-        """旋转搜索目标。"""
-        if self._target_u is not None and (time.time() - self._last_detect_time < self._lost_timeout):
-            self._state = State.ALIGNING
-            self._align_start = None
-            self._sport_stop()
-            self._append_log("[状态] SEARCHING → ALIGNING: 目标已找到")
-            self._update_state_display()
-            return
-        self._sport_move(vyaw=self._search_speed)
-
-    def _tick_aligning(self) -> None:
-        """偏航对齐让目标居中。"""
-        now = time.time()
-
-        # 目标丢失 → 回搜索
-        if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            self._state = State.SEARCHING
-            self._sport_stop()
-            self._align_start = None
-            self._append_log("[状态] ALIGNING → SEARCHING: 目标丢失")
-            self._update_state_display()
-            return
-
-        error = self._target_u - 0.5
-
-        # 居中 → 切换到前进
-        if abs(error) < self._center_tol:
-            if self._align_start is None:
-                self._align_start = now
-            if now - self._align_start >= self._stable_time:
-                self._state = State.APPROACHING
-                self._sport_stop()
-                self._append_log("[状态] ALIGNING → APPROACHING: 目标已居中")
-                self._update_state_display()
-                return
-        else:
-            self._align_start = None
-
-        # P 控制偏航（负号确保方向正确）
-        vyaw = -self._kp * error * self._fov_rad
-        vyaw = max(-self._max_yaw, min(self._max_yaw, vyaw))
-        self._sport_move(vyaw=vyaw)
-
-    def _tick_approaching(self) -> None:
-        """前进到目标附近（Sport API MOVE）。"""
-        now = time.time()
-
-        # 目标丢失 → 回搜索
-        if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            self._state = State.SEARCHING
-            self._sport_stop()
-            self._append_log("[状态] APPROACHING → SEARCHING: 目标丢失")
-            self._update_state_display()
-            return
-
-        # 偏离中心 → 回对齐
-        if abs(self._target_u - 0.5) > self._center_tol * 2:
-            self._state = State.ALIGNING
-            self._sport_stop()
-            self._align_start = None
-            self._append_log("[状态] APPROACHING → ALIGNING: 目标偏离中心")
-            self._update_state_display()
-            return
-
-        # 到达判断
-        bbox_max = max(self._bbox_size_x, self._bbox_size_y)
-        if bbox_max >= self._arrive_ratio:
-            self._sport_stop()
-            self._state = State.GRABBING
-            self._append_log(
-                f"[状态] APPROACHING → GRABBING: 到达目标! bbox={bbox_max:.2f}"
-            )
-            self._run_grab()
-            self._update_state_display()
-            return
-
-        # 前进（Sport API，每秒发送一次）
-        if now - self._last_forward_time >= 1.0:
-            self._sport_move(
-                vx=self._fwd_speed
-            )
-            self._last_forward_time = now
+        self._gs_tick()
 
     # ==================================================================
-    # GUI 主循环
+    #  GUI 主循环
     # ==================================================================
     def _update_loop(self):
         """定时刷新 GUI + 状态机 tick（约 60Hz+）。"""
@@ -943,20 +765,16 @@ class ControlPanelNode(Node):
 
             self._do_update()
         except tk.TclError:
-            # 窗口已销毁，停止刷新
             self._running = False
             return
         except Exception as e:
-            # 其他异常不要打断 after 链，否则 GUI 卡死
             self.get_logger().warn(f"[GUI] 刷新异常: {e}")
 
-        # 下一帧（~16ms ≈ 60Hz）
         if self._running:
             self.root.after(16, self._update_loop)
 
     def _do_update(self):
-        """实际刷新逻辑（可被 _update_loop 安全捕获异常）。"""
-        # FPS 计算
+        """实际刷新逻辑。"""
         now = time.time()
         elapsed = now - self._fps_time
         if elapsed >= 1.0:
@@ -965,32 +783,26 @@ class ControlPanelNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
-        # 状态文字始终更新
         self._update_status_text()
 
-        # 只在有新帧时刷新图像（ROS2 回调驱动，不人为限速）
         if not self._new_frame:
             return
         self._new_frame = False
 
-        # 更新图像
         if self._raw_image is not None:
             frame_copy = self._raw_image.copy()
 
-            # 原始图像
             self._raw_photo = self._cv2_to_tk(frame_copy, self._raw_canvas)
             if self._raw_photo:
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
-            # 检测标注图像
             det_frame = self._draw_detections(frame_copy)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
                 self._det_canvas.delete("all")
                 self._det_canvas.create_image(0, 0, anchor=tk.NW, image=self._det_photo)
 
-            # 检测信息
             if self._detections and self._det_count > 0:
                 best = max(
                     self._detections.detections,
@@ -999,7 +811,7 @@ class ControlPanelNode(Node):
                 if best.results:
                     name = best.results[0].id
                     score = best.results[0].score
-                    bbox_info = f"bbox={max(self._bbox_size_x, self._bbox_size_y):.2f}" if self._target_u is not None else ""
+                    bbox_info = f"bbox={max(self._gs_bbox_size_x, self._gs_bbox_size_y):.2f}" if self._gs_target_u is not None else ""
                     self._det_info_label.config(
                         text=f"检测: {name} ({score:.0%}) x{self._det_count} {bbox_info}"
                     )
@@ -1009,35 +821,35 @@ class ControlPanelNode(Node):
             self._status_label.config(text="状态: 等待图像...", fg="#aaaaaa")
 
     def _update_status_text(self):
-        """更新底部状态栏文字（轻量操作，可高频调用）。"""
+        """更新底部状态栏文字。"""
         if self._raw_image is None:
             self._status_label.config(text="  等待图像...", fg=_TEXT_MUTED)
             return
-        if self._state == State.IDLE:
+        if self._gs_state == GraspState.IDLE:
             self._status_label.config(text="  空闲", fg=_TEXT_MUTED)
-        elif self._state == State.SEARCHING:
+        elif self._gs_state == GraspState.SEARCHING:
             self._status_label.config(text="  搜索目标中...", fg=_ACCENT_ORANGE)
-        elif self._state == State.ALIGNING:
-            err = abs(self._target_u - 0.5) if self._target_u else 0
+        elif self._gs_state == GraspState.ALIGNING:
+            err = abs(self._gs_target_u - 0.5) if self._gs_target_u else 0
             self._status_label.config(
                 text=f"  对齐中 err={err:.3f}", fg=_ACCENT_CYAN
             )
-        elif self._state == State.APPROACHING:
-            bbox_max = max(self._bbox_size_x, self._bbox_size_y)
+        elif self._gs_state == GraspState.APPROACHING:
+            bbox_max = max(self._gs_bbox_size_x, self._gs_bbox_size_y)
             self._status_label.config(
-                text=f"  前进中 bbox={bbox_max:.2f}/{self._arrive_ratio:.2f}",
+                text=f"  前进中 bbox={bbox_max:.2f}/{self._gs_arrive_ratio:.2f}",
                 fg=_ACCENT_BLUE
             )
-        elif self._state == State.GRABBING:
+        elif self._gs_state == GraspState.GRABBING:
             self._status_label.config(text="  抓取中...", fg=_ACCENT_RED)
-        elif self._state == State.MENU:
+        elif self._gs_state == GraspState.MENU:
             self._status_label.config(text="  抓取完成，可放下", fg=_ACCENT_GREEN)
 
     def _on_close(self):
         self._running = False
-        self._state = State.IDLE
+        self._gs_state = GraspState.IDLE
         try:
-            self._sport_stop()
+            self._sport.stop()
         except Exception:
             pass
         try:
@@ -1049,8 +861,7 @@ class ControlPanelNode(Node):
         self.root.mainloop()
 
     def destroy_node(self) -> None:
-        self._sport.stop()
-        self.get_logger().info("[清理] 控制面板节点已停止")
+        self._gs_destroy()
         super().destroy_node()
 
 
@@ -1069,12 +880,11 @@ def main(args=None):
     rclpy.init(args=args)
     node = ControlPanelNode()
 
-    # ROS2 spin 在后台线程
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
 
     try:
-        node.run()  # tkinter 主循环（阻塞）
+        node.run()
     finally:
         node._running = False
         node.destroy_node()

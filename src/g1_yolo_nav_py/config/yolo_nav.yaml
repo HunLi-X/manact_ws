@@ -54,6 +54,7 @@ g1_loco_forward_node:
     lost_timeout: 1.0                         # 目标丢失超时 s
     check_rate: 10.0                          # 检查频率 Hz
     auto_stand: true                          # 是否自动初始化 FSM
+    sit_on_exit: true                         # 退出时是否自动坐下
 
 # ---- 抓取任务节点参数 ----
 g1_grasp_task_node:
