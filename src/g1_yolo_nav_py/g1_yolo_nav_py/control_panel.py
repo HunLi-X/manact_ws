@@ -842,7 +842,7 @@ class ControlPanelNode(Node):
 
     def _tick_searching(self) -> None:
         """旋转搜索目标。"""
-        if self._target_u is not None:
+        if self._target_u is not None and (time.time() - self._last_detect_time < self._lost_timeout):
             self._state = State.ALIGNING
             self._align_start = None
             self._sport_stop()

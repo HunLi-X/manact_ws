@@ -3,6 +3,8 @@
 control_panel.py 和 detection_visualizer.py 共用的可视化常量。
 """
 
+from typing import Tuple  # 类型注解
+
 # 预定义颜色表 (BGR) — 与设计系统功能色对应
 COLORS = [
     (178, 145, 8),     # Teal-600 BGR
@@ -14,7 +16,7 @@ COLORS = [
 ]
 
 
-def get_color(class_id: str) -> tuple:
+def get_color(class_id: str) -> Tuple[int, int, int]:
     """根据类别 ID 获取稳定颜色（相同 ID 始终返回相同颜色）。"""
     idx = hash(class_id) % len(COLORS)
     return COLORS[idx]

@@ -221,10 +221,11 @@ class DetectionVisualizerNode(Node):
     # 图像绘制
     # ==================================================================
     def _draw_on_frame(self, frame: np.ndarray) -> np.ndarray:
-        """在图像上绘制检测框。"""
+        """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
+        out = frame.copy()
         if self._detections is None:
-            return frame
-        h, w = frame.shape[:2]
+            return out
+        h, w = out.shape[:2]
         det_count = 0
         for det in self._detections.detections:
             if not det.results:
@@ -240,16 +241,16 @@ class DetectionVisualizerNode(Node):
             x1, y1 = int(cx - bw / 2), int(cy - bh / 2)
             x2, y2 = int(cx + bw / 2), int(cy + bh / 2)
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
             label = f"{class_id} {score:.0%}"
             font = cv2.FONT_HERSHEY_SIMPLEX
             (tw, th), _ = cv2.getTextSize(label, font, 0.6, 1)
-            cv2.rectangle(frame, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
-            cv2.putText(frame, label, (x1, y1 - 4),
+            cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
+            cv2.putText(out, label, (x1, y1 - 4),
                         font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
             det_count += 1
-        return frame
+        return out
 
     def _cv2_to_tk(self, frame: np.ndarray, canvas: tk.Canvas) -> Optional[ImageTk.PhotoImage]:
         """将 OpenCV 图像转为 tkinter 可显示格式并缩放适配画布。"""

@@ -48,13 +48,7 @@ from sensor_msgs.msg import Image  # ROS2 图像消息
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
 from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
 
-
-# 预定义颜色表（BGR）
-_COLORS = [
-    (0, 255, 0), (255, 0, 0), (0, 0, 255),
-    (255, 255, 0), (0, 255, 255), (255, 0, 255),
-    (128, 255, 0), (0, 128, 255), (255, 128, 0),
-]
+from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
 
 
 class RGBDCaptureNode(Node):
@@ -147,7 +141,7 @@ class RGBDCaptureNode(Node):
                 continue
             class_id = det.results[0].id
             score = det.results[0].score
-            color = _COLORS[hash(class_id) % len(_COLORS)]
+            color = _get_color(class_id)
 
             cx = det.bbox.center.x * w
             cy = det.bbox.center.y * h

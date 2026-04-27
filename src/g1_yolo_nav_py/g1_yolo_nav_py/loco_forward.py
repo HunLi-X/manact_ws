@@ -54,6 +54,7 @@ class LocoForwardNode(Node):
         self.declare_parameter("lost_timeout", 1.0)
         self.declare_parameter("check_rate", 10.0)
         self.declare_parameter("auto_stand", True)
+        self.declare_parameter("sit_on_exit", True)  # 退出时是否自动坐下
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -65,6 +66,7 @@ class LocoForwardNode(Node):
         self._lost_timeout = float(p("lost_timeout"))
         self._rate = float(p("check_rate"))
         self._auto_stand = bool(p("auto_stand"))
+        self._sit_on_exit = bool(p("sit_on_exit"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
@@ -189,8 +191,12 @@ class LocoForwardNode(Node):
 
     def destroy_node(self) -> None:
         self._sport.stop()
-        time.sleep(0.2)
-        self._sport.sit()
+        if self._sit_on_exit:
+            self.get_logger().info("退出: 自动坐下 (sit_on_exit=true)")
+            time.sleep(0.2)
+            self._sport.sit()
+        else:
+            self.get_logger().info("退出: 仅停止运动 (sit_on_exit=false)")
         super().destroy_node()
 
 
