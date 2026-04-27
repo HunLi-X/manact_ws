@@ -94,6 +94,10 @@ class LocoForwardNode(Node):
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
 
+        # ---- 延迟诊断（3秒后检查关键话题，只执行一次）----
+        self._diag_done = False
+        self._diag_timer = self.create_timer(3.0, self._diag_check)
+
         self.get_logger().info(
             f"前进节点就绪（Sport API）: 速度={self._speed}m/s, "
             f"到达条件={self._arrive_ratio}, auto_stand={self._auto_stand}"
