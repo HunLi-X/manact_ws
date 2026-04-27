@@ -1,8 +1,8 @@
 """
-偏航对齐节点 — 通过 Sport API MOVE 控制机器人旋转使目标居中。
+偏航对齐节点 — 通过 Loco API SET_VELOCITY 控制机器人旋转使目标居中。
 
-运动控制通过 SportClient 统一封装，使用 MOVE(1008)。
-启动时自动执行 FSM 初始化（DAMP → STANDUP → BALANCESTAND → CONTINUOUSGAIT）。
+运动控制通过 SportClient 统一封装（Loco API 方式，参考 ctrl_keyboard 已验证方案）。
+启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
 
 控制逻辑：
     1. 从检测结果提取目标 u 坐标（归一化 0~1，0.5 = 画面中央）
