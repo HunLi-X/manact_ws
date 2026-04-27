@@ -25,7 +25,6 @@ from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
 from sensor_msgs.msg import Image  # ROS2 图像消息
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D  # 检测结果消息
-from std_msgs.msg import Header  # ROS2 消息头
 from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
 from ament_index_python.packages import get_package_share_directory  # 获取 ROS2 包共享目录
 
@@ -159,7 +158,7 @@ class YoloDetectorNode(Node):
                 det.results.append(hyp)
                 det_array.detections.append(det)
 
-                self.get_logger().info(
+                self.get_logger().debug(
                     f'检测到目标: {hyp.id} (置信度={hyp.score:.0%}), '
                     f'中心=({bbox.center.x:.2f},{bbox.center.y:.2f})'
                 )

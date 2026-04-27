@@ -12,7 +12,7 @@ Launch 文件：启动 YOLO 目标识别 + 偏航对齐 + 前进接近
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
-    ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_nav2:=true use_depth_sensor:=true
+    ros2 launch g1_yolo_nav_py yolo_nav.launch.py use_depth_sensor:=true
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py target_class:=person model_path:=yolov8n.pt
 
 TF 树结构：

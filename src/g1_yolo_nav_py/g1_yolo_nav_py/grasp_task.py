@@ -373,7 +373,7 @@ class GraspTaskNode(Node):
     def _do_custom_control(self) -> None:
         """自定义控制：输入 x y z 控制机器人行动。"""
         print("\n  自定义控制模式")
-        print("  输入 x y z（m/s, m/s, rad/s），例如: 0.2 0.0 0.3")
+        print("  输入 x y vyaw（m/s, m/s, rad/s），例如: 0.2 0.0 0.3")
         print("  输入 q 返回菜单")
         print("-" * 40)
 
@@ -390,13 +390,13 @@ class GraspTaskNode(Node):
 
             parts = line.split()
             if len(parts) != 3:
-                print("  格式错误，请输入: x y z（三个数值）")
+                print("  格式错误，请输入: x y vyaw（三个数值）")
                 continue
 
             try:
                 vx = float(parts[0])
                 vy = float(parts[1])
-                vz = float(parts[2])
+                vyaw = float(parts[2])
             except ValueError:
                 print("  格式错误，请输入数字")
                 continue
@@ -404,10 +404,10 @@ class GraspTaskNode(Node):
             # 安全限幅
             vx = max(-1.0, min(1.0, vx))
             vy = max(-0.5, min(0.5, vy))
-            vz = max(-1.0, min(1.0, vz))
+            vyaw = max(-1.0, min(1.0, vyaw))
 
-            self.get_logger().info(f"[自定义] cmd: vx={vx}, vy={vy}, vz={vz}")
-            self._sport.move(vx=vx, vy=vy, vyaw=vz)
+            self.get_logger().info(f"[自定义] cmd: vx={vx}, vy={vy}, vyaw={vyaw}")
+            self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
 
     def destroy_node(self) -> None:
         self._sport.stop()
