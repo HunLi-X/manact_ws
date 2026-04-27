@@ -65,20 +65,11 @@ from cv_bridge import CvBridge
 # 3. 本项目导入
 # ==================================================================
 from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
+from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
 
 # ==================================================================
 # 3. 常量
 # ==================================================================
-
-# 预定义颜色表 (BGR) — 与设计系统功能色对应
-_COLORS = [
-    (178, 145, 8),     # _ACCENT_CYAN  Teal-600 BGR
-    (246, 130, 59),    # _ACCENT_BLUE  Blue-500 BGR
-    (68, 68, 239),     # _ACCENT_RED   Red-500 BGR
-    (11, 158, 245),    # _ACCENT_ORANGE Amber-500 BGR
-    (129, 182, 16),    # _ACCENT_GREEN Emerald-500 BGR
-    (246, 92, 139),    # _ACCENT_PURPLE Violet-500 BGR
-]
 
 # arm 脚本默认目录
 _DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm")
@@ -137,9 +128,6 @@ _STATE_COLORS = {
 }
 
 
-def _get_color(class_id: str) -> tuple:
-    idx = hash(class_id) % len(_COLORS)
-    return _COLORS[idx]
 
 
 class ControlPanelNode(Node):
@@ -149,7 +137,7 @@ class ControlPanelNode(Node):
         super().__init__("g1_control_panel_node")
 
         # ---- 参数（参考 grasp_task.py）----
-        self.declare_parameter("image_topic", "/D455_1/color/image_raw")
+        self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("auto_stand", True)
         self.declare_parameter("target_class_id", "chair")

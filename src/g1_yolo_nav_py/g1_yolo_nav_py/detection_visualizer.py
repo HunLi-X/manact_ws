@@ -39,19 +39,8 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
+from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
 
-# 预定义颜色表（BGR）
-_COLORS = [
-    (178, 145, 8),     # Teal-600 BGR
-    (246, 130, 59),    # Blue-500 BGR
-    (68, 68, 239),     # Red-500 BGR
-    (11, 158, 245),    # Amber-500 BGR
-    (129, 182, 16),    # Emerald-500 BGR
-    (246, 92, 139),    # Violet-500 BGR
-    (60, 146, 251),    # Orange-400 BGR
-    (248, 189, 56),    # Sky-400 BGR
-    (249, 121, 232),   # Fuchsia-400 BGR
-]
 
 
 # ==================================================================
@@ -72,11 +61,6 @@ _TEXT_SECONDARY  = "#5F7A78"
 _TEXT_MUTED      = "#94A3B8"
 
 
-def _get_color(class_id: str) -> tuple:
-    idx = hash(class_id) % len(_COLORS)
-    return _COLORS[idx]
-
-
 class DetectionVisualizerNode(Node):
     """订阅图像和检测结果，叠加检测框后 tkinter 显示 + 话题发布。"""
 
@@ -84,7 +68,7 @@ class DetectionVisualizerNode(Node):
         super().__init__("g1_detection_visualizer_node")
 
         # ---- 参数 ----
-        self.declare_parameter("image_topic", "/D455_1/color/image_raw")
+        self.declare_parameter("image_topic", "/robot1/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("annotated_topic", "/g1/vision/annotated_image")
         self.declare_parameter("display_width", 400)

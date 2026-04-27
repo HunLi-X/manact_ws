@@ -1,6 +1,11 @@
 """
 DDS 兼容层 — 解决 unitree_sdk2py (CycloneDDS) 与 ROS2 (CycloneDDS) 同进程 domain 冲突。
 
+⚠️ 注意：本模块仅供 arm 脚本（armup.py / armdown.py）等独立子进程使用。
+    主控制节点（grasp_task / yaw_align / loco_forward / control_panel）已全部
+    迁移到纯 Sport API（unitree_api/msg/Request），不再需要 DDS 兼容层。
+    不要在主控制节点中导入本模块，否则会修改 ROS_DOMAIN_ID 导致收不到相机数据。
+
 问题：
     unitree_sdk2py 的 ChannelFactoryInitialize 和 ROS2 的 rclpy.init()
     都基于 CycloneDDS，同一进程中后创建的实例会报 "create domain error"。
