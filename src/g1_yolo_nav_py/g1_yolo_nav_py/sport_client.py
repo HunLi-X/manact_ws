@@ -187,6 +187,14 @@ class SportClient:
             self._ready = True
             logger().info("[FSM] 初始化完成，就绪")
 
+            # 诊断：检查订阅者
+            if not self.has_subscribers():
+                logger().warn(
+                    "[FSM] ⚠ /api/sport/request 无订阅者! "
+                    "FSM 指令可能未生效，运动指令也不会被执行。"
+                    "请确认 unitree SDK bridge 已启动。"
+                )
+
             if callback is not None:
                 callback()
 
@@ -207,6 +215,15 @@ class SportClient:
             vy: 侧移速度 (m/s)，正=左，负=右
             vyaw: 偏航角速度 (rad/s)，正=左转，负=右转
         """
+        # 诊断：检查是否有订阅者接收运动指令
+        if not self._sub_warned and not self.has_subscribers():
+            self._sub_warned = True
+            self._node.get_logger().warn(
+                "[SportClient] /api/sport/request 无订阅者! "
+                "运动指令不会被机器人执行。"
+                "请确认 unitree SDK bridge 已启动 "
+                "(检查: ros2 topic info /api/sport/request)"
+            )
         self.publish(SportAPI.MOVE, {"x": vx, "y": vy, "z": vyaw})
 
     def stop(self) -> None:

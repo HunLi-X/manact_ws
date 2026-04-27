@@ -87,6 +87,10 @@ class YawAlignNode(Node):
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._ctrl_rate, self._tick)
 
+        # ---- 延迟诊断（3秒后检查关键话题的订阅者/发布者，只执行一次）----
+        self._diag_done = False
+        self._diag_timer = self.create_timer(3.0, self._diag_check)
+
         self._first_move_logged = False
 
         self.get_logger().info(
@@ -118,7 +122,11 @@ class YawAlignNode(Node):
                 )
         else:
             self._target_u = None
-            self._first_move_logged = False  # 目标丢失时重置，方便下次调试
+            # ---- 延迟诊断（3秒后检查关键话题的订阅者/发布者，只执行一次）----
+        self._diag_done = False
+        self._diag_timer = self.create_timer(3.0, self._diag_check)
+
+        self._first_move_logged = False  # 目标丢失时重置，方便下次调试
 
     # ==================================================================
     #  P 控制器
