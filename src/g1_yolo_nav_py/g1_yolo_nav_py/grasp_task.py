@@ -126,7 +126,7 @@ class GraspTaskNode(Node):
         if self._auto_stand:
             self._sport.init_fsm()
         else:
-            self._sport._ready = True
+            self._sport.skip_init()
             self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
 
         # ---- 定时器（10Hz）----

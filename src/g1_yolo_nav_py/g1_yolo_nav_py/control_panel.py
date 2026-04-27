@@ -257,15 +257,7 @@ class ControlPanelNode(Node):
     # ==================================================================
     #  运动控制（通过 SportClient）
     # ==================================================================
-    def _publish_cmd(self, vx=0.0, vy=0.0, vz=0.0) -> None:
-        """通过 SportClient 发送速度指令。"""
-        self._sport.move(vx=vx, vy=vy, vyaw=vz)
-
-    def _publish_stop(self) -> None:
-        """停止运动。"""
-        self._sport.stop()
-
-    def _sport_move(self, vx: float, vy: float = 0.0,
+    def _sport_move(self, vx: float = 0.0, vy: float = 0.0,
                             vyaw: float = 0.0) -> None:
         """通过 SportClient MOVE 控制运动。"""
         self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
@@ -691,7 +683,7 @@ class ControlPanelNode(Node):
 
         prev = self._state
         self._state = State.IDLE
-        self._publish_stop()
+        self._sport_stop()
         self._align_start = None
         self._append_log(f"[状态] {prev.name} → IDLE: 手动停止")
         self._update_state_display()
@@ -724,7 +716,7 @@ class ControlPanelNode(Node):
             self._append_log("[提示] 请先停止当前任务")
             return
         self._state = State.GRABBING
-        self._publish_stop()
+        self._sport_stop()
         self._run_grab()
         self._update_state_display()
 
@@ -845,9 +837,9 @@ class ControlPanelNode(Node):
     # 状态机 — 主循环（参考 grasp_task.py）
     # ==================================================================
     def _tick(self) -> None:
-        # 手动控制持续发布（twist_bridge 需要持续收到速度指令）
+        # 手动控制持续发布（Sport API MOVE 需要持续发送速度指令）
         if self._manual_active and self._state in (State.IDLE, State.MENU):
-            self._publish_cmd(vx=self._manual_vx, vy=self._manual_vy, vz=self._manual_vz)
+            self._sport_move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vz)
 
         if self._state == State.SEARCHING:
             self._tick_searching()
@@ -862,11 +854,11 @@ class ControlPanelNode(Node):
         if self._target_u is not None:
             self._state = State.ALIGNING
             self._align_start = None
-            self._publish_stop()
+            self._sport_stop()
             self._append_log("[状态] SEARCHING → ALIGNING: 目标已找到")
             self._update_state_display()
             return
-        self._publish_cmd(vz=self._search_speed)
+        self._sport_move(vyaw=self._search_speed)
 
     def _tick_aligning(self) -> None:
         """偏航对齐让目标居中。"""
@@ -875,7 +867,7 @@ class ControlPanelNode(Node):
         # 目标丢失 → 回搜索
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self._state = State.SEARCHING
-            self._publish_stop()
+            self._sport_stop()
             self._align_start = None
             self._append_log("[状态] ALIGNING → SEARCHING: 目标丢失")
             self._update_state_display()
@@ -889,7 +881,7 @@ class ControlPanelNode(Node):
                 self._align_start = now
             if now - self._align_start >= self._stable_time:
                 self._state = State.APPROACHING
-                self._publish_stop()
+                self._sport_stop()
                 self._append_log("[状态] ALIGNING → APPROACHING: 目标已居中")
                 self._update_state_display()
                 return
@@ -899,7 +891,7 @@ class ControlPanelNode(Node):
         # P 控制偏航（负号确保方向正确）
         vyaw = -self._kp * error * self._fov_rad
         vyaw = max(-self._max_yaw, min(self._max_yaw, vyaw))
-        self._publish_cmd(vz=vyaw)
+        self._sport_move(vyaw=vyaw)
 
     def _tick_approaching(self) -> None:
         """前进到目标附近（Sport API MOVE）。"""
@@ -1054,7 +1046,7 @@ class ControlPanelNode(Node):
         self._running = False
         self._state = State.IDLE
         try:
-            self._publish_stop()
+            self._sport_stop()
         except Exception:
             pass
         try:

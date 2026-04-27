@@ -11,8 +11,6 @@
     - 步态控制: CONTINUOUSGAIT(1019), SWITCHGAIT(1011)
     - 速度等级: SPEEDLEVEL(1015)
 
-不再使用任何 Loco API (7xxx 系列)。
-
 使用方式：
     from g1_yolo_nav_py.sport_client import SportClient, SportAPI
 
@@ -198,13 +196,13 @@ class SportClient:
         """发送 STOPMOVE 指令停止运动。"""
         self.publish(SportAPI.STOPMOVE)
 
-    def balance_stand(self) -> None:
-        """发送 BALANCESTAND 指令。"""
-        self.publish(SportAPI.BALANCESTAND)
+    def skip_init(self) -> None:
+        """跳过 FSM 初始化，手动标记为就绪状态。
 
-    def stop_move(self) -> None:
-        """发送 STOPMOVE 指令。"""
-        self.publish(SportAPI.STOPMOVE)
+        用于机器人已处于 BALANCESTAND + CONTINUOUSGAIT 模式时，
+        避免重复执行 DAMP → STANDUP → BALANCESTAND 流程。
+        """
+        self._ready = True
 
     def sit(self) -> None:
         """发送 SIT 指令。"""
