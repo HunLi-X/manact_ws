@@ -64,9 +64,10 @@ g1_grasp_task_node:
     detection_topic: "/g1/vision/detections"  # 检测结果输入
     target_class_id: "chair"                  # 目标类别
     camera_fov_deg: 87.0                      # D455 水平视场角
-    yaw_kp: 2.0                               # 偏航 P 增益
-    max_yaw_speed: 0.6                        # 最大偏航速度 rad/s
     center_tolerance: 0.08                    # 居中容差（归一化）
+    step_yaw_speed: 0.3                       # 步进式对齐：每步旋转速度 rad/s
+    step_duration: 0.3                        # 步进式对齐：每步持续时间 s
+    camera_settle_time: 5.0                   # 步进式对齐：等待相机更新 s
     forward_speed: 0.2                        # 前进速度 m/s
     arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
     align_stable_time: 1.0                    # 对齐稳定时间 s
@@ -74,4 +75,4 @@ g1_grasp_task_node:
     search_yaw_speed: 0.6                     # 搜索旋转速度 rad/s
     turn_yaw_speed: 0.6                       # 右转放下时偏航速度 rad/s
     turn_duration: 2.6                        # 右转放下时持续时间 s（≈90°）
-    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STAND_UP→WALK_RUN→CONTINUOUS_GAIT）
+    auto_stand: true                          # 是否自动初始化 FSM（DAMP→STAND_UP→START→WALK_RUN→CONTINUOUS_GAIT）
