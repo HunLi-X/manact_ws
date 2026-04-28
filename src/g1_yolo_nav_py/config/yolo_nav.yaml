@@ -48,7 +48,11 @@ g1_yaw_align_node:
 g1_loco_forward_node:
   ros__parameters:
     detection_topic: "/g1/vision/detections"  # 检测结果输入
+    depth_topic: "/D455_1/depth/image_rect_raw"  # D455 深度图话题
     target_class_id: "chair"                  # 目标类别
+    use_depth_distance: true                  # 使用深度距离判断停止
+    stop_distance: 0.5                        # 停止距离 m
+    depth_sample_radius: 5                    # 深度采样半径 px
     forward_speed: 0.3                        # 前进速度 m/s
     center_tolerance: 0.08                    # 居中容差
     align_stable_time: 0.8                    # 对齐稳定时间 s
@@ -62,7 +66,11 @@ g1_loco_forward_node:
 g1_grasp_task_node:
   ros__parameters:
     detection_topic: "/g1/vision/detections"  # 检测结果输入
+    depth_topic: "/D455_1/depth/image_rect_raw"  # D455 深度图话题
     target_class_id: "chair"                  # 目标类别
+    use_depth_distance: true                  # 使用深度距离判断停止并抓取
+    stop_distance: 0.5                        # 抓取停止距离 m
+    depth_sample_radius: 5                    # 深度采样半径 px
     camera_fov_deg: 87.0                      # D455 水平视场角
     center_tolerance: 0.08                    # 居中容差（归一化）
     step_yaw_speed: 0.3                       # 步进式对齐：每步旋转速度 rad/s

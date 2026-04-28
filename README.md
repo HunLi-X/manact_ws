@@ -171,23 +171,25 @@ ros2 run g1_yolo_nav_py detection_visualizer
 **对齐参数调优：**
 
 ```bash
-# 追踪太慢 — 增大 kp
-ros2 run g1_yolo_nav_py yaw_align --ros-args -p yaw_kp:=3.0
-
-# 抖动太厉害 — 减小 kp + 放宽容差
+# 每步旋转更大 — 增大步进速度或持续时间
 ros2 run g1_yolo_nav_py yaw_align --ros-args \
-  -p yaw_kp:=1.0 -p center_tolerance:=0.12
+  -p step_yaw_speed:=0.5 -p step_duration:=0.4
 
-# 限制最大旋转速度
-ros2 run g1_yolo_nav_py yaw_align --ros-args -p max_yaw_speed:=0.3
+# 相机更新太慢 — 增加等待时间
+ros2 run g1_yolo_nav_py yaw_align --ros-args -p camera_settle_time:=8.0
+
+# 对齐精度不够 — 缩小居中容差
+ros2 run g1_yolo_nav_py yaw_align --ros-args -p center_tolerance:=0.05
 ```
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `yaw_kp` | 2.0 | P 增益，太慢→增大，抖动→减小 |
+| `step_yaw_speed` | 0.3 rad/s | 每步旋转速度 |
+| `step_duration` | 0.3 s | 每步旋转持续时间 |
+| `camera_settle_time` | 5.0 s | 旋转后等待相机更新 |
+| `max_consecutive_steps` | 10 | 单次最大连续步数 |
 | `center_tolerance` | 0.08 | 居中容差（归一化），越小越严格 |
-| `max_yaw_speed` | 0.6 rad/s | 最大旋转速度 |
-| `lost_timeout` | 1.0 s | 目标丢失超时 |
+| `lost_timeout` | 10.0 s | 目标丢失超时 |
 
 **调试通过标志**：目标移动时机器人能平滑旋转跟踪，目标居中时稳定不抖。
 
@@ -208,7 +210,8 @@ ros2 run g1_yolo_nav_py loco_forward
 
 - 目标在画面中心且持续 >0.8s 后，日志显示 `开始前进`
 - 机器人以设定的速度向前走
-- 检测框变大到占画面 45% 以上时，日志显示 `到达目标!` 并停止
+- **深度距离 ≤ 0.5m 时**，日志显示 `到达目标! 深度距离=0.xxm <= 0.50m` 并停止
+- 深度不可用时回退到检测框占比判断（bbox ≥ 45% 停止）
 - 目标丢失或偏离中心时自动停止前进
 
 **前进参数调优：**
@@ -217,15 +220,22 @@ ros2 run g1_yolo_nav_py loco_forward
 # 首次调试用低速度确保安全
 ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
 
-# 想让机器人离目标更近才停下
-ros2 run g1_yolo_nav_py loco_forward --ros-args -p arrive_bbox_ratio:=0.6
+# 调整停止距离（离目标更近才停下）
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p stop_distance:=0.3
+
+# 关闭深度距离判断，只用 bbox 占比
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p use_depth_distance:=false
 ```
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `forward_speed` | 0.3 m/s | 前进速度（首次建议 0.15） |
+| `use_depth_distance` | true | 是否使用深度距离判断停止 |
+| `stop_distance` | 0.5 m | 深度距离停止阈值 |
+| `depth_topic` | `/D455_1/depth/image_rect_raw` | 深度图话题 |
+| `depth_sample_radius` | 5 px | 深度采样半径 |
 | `align_stable_time` | 0.8 s | 居中多久才开始前进 |
-| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值 |
+| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值（深度 fallback） |
 | `center_tolerance` | 0.08 | 居中容差 |
 | `lost_timeout` | 1.0 s | 目标丢失超时 |
 
@@ -274,10 +284,10 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_approach:=true
 ```
 IDLE → [搜索] → SEARCHING（旋转找目标）
                   ↓ 目标出现
-                ALIGNING（偏航对齐居中）
+                ALIGNING（步进式偏航对齐）
                   ↓ 居中稳定
                 APPROACHING（Loco API 前进）
-                  ↓ 到达目标
+                  ↓ 深度距离 ≤ 0.5m（或 bbox 占比 ≥ 0.45）
                 GRABBING（执行 armup.py）
                   ↓ 抓取完成
                 MENU（可放下/右转放下）
@@ -307,8 +317,12 @@ ros2 run g1_yolo_nav_py control_panel
 | `target_class_id` | `chair` | 目标类别 |
 | `forward_speed` | `0.2` | 前进速度 m/s |
 | `search_yaw_speed` | `0.3` | 搜索旋转速度 rad/s |
-| `yaw_kp` | `2.0` | 偏航对齐 P 增益 |
-| `arrive_bbox_ratio` | `0.45` | 到达判断阈值 |
+| `step_yaw_speed` | `0.3` | 步进式对齐旋转速度 rad/s |
+| `step_duration` | `0.3` | 步进式对齐持续时间 s |
+| `camera_settle_time` | `5.0` | 等待相机更新 s |
+| `use_depth_distance` | `true` | 深度距离判断停止 |
+| `stop_distance` | `0.5` | 停止距离 m |
+| `arrive_bbox_ratio` | `0.45` | 到达判断阈值（深度 fallback） |
 | `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录 |
 
 **依赖：** `pip install pillow`
@@ -350,8 +364,10 @@ armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
 [SEARCHING]  旋转搜索目标...
 [检测] 识别到目标: chair, 置信度=95%, u=0.32
 [状态] SEARCHING → ALIGNING: 目标已找到
+[对齐] 一步: u=0.320, 误差=-0.180, 旋转≈+5.2°, 等待5.0s...
+[对齐] 等待结束，重新检测: u=0.480
 [状态] ALIGNING → APPROACHING: 目标已居中
-[状态] APPROACHING → GRABBING: 到达目标! bbox=0.46 >= 0.45
+[状态] APPROACHING → GRABBING: 深度距离=0.48m <= 0.50m
 [抓取] 执行 armup.py ...
 [抓取] armup.py 执行完成
 ```
@@ -394,9 +410,15 @@ ros2 run g1_yolo_nav_py grasp_task --ros-args \
 | --- | --- | --- |
 | `target_class_id` | chair | YOLO 检测目标类别 |
 | `forward_speed` | 0.2 m/s | 接近速度（首次建议 0.15） |
-| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值 |
+| `use_depth_distance` | true | 使用深度距离判断停止并抓取 |
+| `stop_distance` | 0.5 m | 深度距离停止阈值 |
+| `depth_topic` | `/D455_1/depth/image_rect_raw` | 深度图话题 |
+| `depth_sample_radius` | 5 px | 深度采样半径 |
+| `arrive_bbox_ratio` | 0.45 | 检测框占比到达阈值（深度 fallback） |
 | `search_yaw_speed` | 0.3 rad/s | 搜索旋转速度 |
-| `yaw_kp` | 2.0 | 偏航对齐 P 增益 |
+| `step_yaw_speed` | 0.3 rad/s | 步进式对齐旋转速度 |
+| `step_duration` | 0.3 s | 步进式对齐持续时间 |
+| `camera_settle_time` | 5.0 s | 等待相机更新 |
 | `lost_timeout` | 2.0 s | 目标丢失超时 |
 | `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | arm 脚本目录 |
 
@@ -452,12 +474,83 @@ ros2 run g1_yolo_nav_py rgbd_capture --ros-args \
 **FSM 初始化流程：**
 
 ```
-SET_FSM_ID(DAMP=1) → SET_FSM_ID(STAND_UP=4) → SET_FSM_ID(WALK_RUN=801) → SET_BALANCE_MODE(CONTINUOUS_GAIT=1)
+SET_FSM_ID(DAMP=1) → SET_FSM_ID(STAND_UP=4) → SET_FSM_ID(START=500) → SET_FSM_ID(WALK_RUN=801) → SET_BALANCE_MODE(CONTINUOUS_GAIT=1)
 ```
 
 WALK_RUN + CONTINUOUS_GAIT 模式下 `SET_VELOCITY(7105)` 才生效。
 
 > **注意**：运动控制方案参考 `ctrl_keyboard` 已验证可用的实现，与 `ctrl_keyboard` 使用完全相同的 API 体系。
+
+---
+
+## 调试指南
+
+### 1. 检查话题连通性
+
+```bash
+# 检查相机是否发布图像
+ros2 topic hz /D455_1/color/image_raw
+
+# 检查深度图是否发布
+ros2 topic hz /D455_1/depth/image_rect_raw
+
+# 检查 YOLO 检测结果
+ros2 topic echo /g1/vision/detections --once
+
+# 检查运动控制话题订阅者
+ros2 topic info /api/sport/request
+```
+
+### 2. 相机启动（含深度）
+
+```bash
+# 必须启用深度对齐
+ros2 launch realsense2_camera rs_launch.py \
+    camera_namespace:=robot1 camera_name:=D455_1 align_depth.enable:=true
+```
+
+> **关键**：深度距离判断依赖深度图话题，启动相机时必须加 `align_depth.enable:=true`。
+
+### 3. 验证深度距离
+
+```bash
+# 单独测试深度图是否正常（应输出 16UC1 或 32FC1 编码）
+ros2 topic echo /D455_1/depth/image_rect_raw --once | head -5
+
+# 用 loco_forward 观察距离日志
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.0
+# forward_speed:=0.0 使机器人不移动，仅观察深度距离日志
+```
+
+### 4. 关闭深度距离（仅用 bbox）
+
+```bash
+# 如果深度相机不可用，可关闭深度距离判断
+ros2 run g1_yolo_nav_py grasp_task --ros-args -p use_depth_distance:=false
+```
+
+### 5. 常见问题
+
+| 现象 | 原因 | 解决 |
+| --- | --- | --- |
+| 深度距离始终为 None | 深度图话题无数据 | 检查 `align_depth.enable:=true` |
+| 距离值异常大（>10m） | 16UC1 编码未正确转换 | 检查深度图 encoding 是否为 `16UC1` |
+| 到达后不执行 arm | armup.py 路径错误 | 检查 `arm_script_dir` 参数 |
+| 机器人不运动 | FSM 未进入 WALK_RUN | 检查日志 `[FSM]` 行，确认 START(500) 步骤 |
+| 目标丢失频繁 | `lost_timeout` 太短 | 增大 `lost_timeout`，如 `2.0` |
+| 对齐过冲 | `camera_settle_time` 太短 | 增大到 `8.0` 等待相机更新 |
+
+### 6. 分步调试流程
+
+```
+Step 1: 相机 → 确认 /D455_1/color/image_raw 有数据
+Step 2: YOLO → 确认 /g1/vision/detections 有检测结果
+Step 3: 深度图 → 确认 /D455_1/depth/image_rect_raw 有数据
+Step 4: yaw_align → 确认步进式对齐正常（观察日志）
+Step 5: loco_forward → forward_speed:=0.0 观察深度距离
+Step 6: loco_forward → 正常速度前进，确认到达停止
+Step 7: grasp_task → 完整流程测试
+```
 
 ---
 

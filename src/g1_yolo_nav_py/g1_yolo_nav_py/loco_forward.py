@@ -17,15 +17,20 @@
 # ==================================================================
 # 1. 标准库导入
 # ==================================================================
+import math
 import time  # 计时
 from typing import Optional  # 类型注解
 
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
 # ==================================================================
+import numpy as np
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
+from cv_bridge import CvBridge
 
 # ==================================================================
 # 3. 本项目导入
@@ -46,7 +51,11 @@ class LocoForwardNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
+        self.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         self.declare_parameter("target_class_id", "chair")
+        self.declare_parameter("use_depth_distance", True)
+        self.declare_parameter("stop_distance", 0.5)
+        self.declare_parameter("depth_sample_radius", 5)
         self.declare_parameter("forward_speed", 0.3)
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("align_stable_time", 0.8)
@@ -58,7 +67,11 @@ class LocoForwardNode(Node):
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
+        self._depth_topic = p("depth_topic")
         self._target_class = p("target_class_id")
+        self._use_depth = bool(p("use_depth_distance"))
+        self._stop_distance = float(p("stop_distance"))
+        self._depth_radius = max(1, int(p("depth_sample_radius")))
         self._speed = float(p("forward_speed"))
         self._center_tol = float(p("center_tolerance"))
         self._stable_time = float(p("align_stable_time"))
@@ -70,6 +83,10 @@ class LocoForwardNode(Node):
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
+        self._target_v: Optional[float] = None
+        self._target_distance: Optional[float] = None
+        self._depth_image: Optional[np.ndarray] = None
+        self._depth_encoding: str = ""
         self._bbox_size_x: float = 0.0
         self._bbox_size_y: float = 0.0
         self._last_detect_time: float = 0.0
@@ -77,9 +94,21 @@ class LocoForwardNode(Node):
         self._align_start: Optional[float] = None
         self._last_forward_time: float = 0.0
 
+        # ---- CV Bridge ----
+        self._bridge = CvBridge()
+
         # ---- ROS2 订阅 ----
+        sensor_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5,
+        )
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, 10)
+        if self._use_depth:
+            self.create_subscription(
+                Image, self._depth_topic, self._on_depth, sensor_qos
+            )
 
         # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
@@ -100,7 +129,8 @@ class LocoForwardNode(Node):
 
         self.get_logger().info(
             f"前进节点就绪（Loco API）: 速度={self._speed}m/s, "
-            f"到达条件={self._arrive_ratio}, auto_stand={self._auto_stand}"
+            f"深度距离={self._use_depth}(停止≤{self._stop_distance}m), "
+            f"bbox到达={self._arrive_ratio}, auto_stand={self._auto_stand}"
         )
 
     # ==================================================================
@@ -150,11 +180,59 @@ class LocoForwardNode(Node):
         if best_det is not None:
             bbox = best_det.bbox
             self._target_u = bbox.center.x
+            self._target_v = bbox.center.y
             self._bbox_size_x = bbox.size_x
             self._bbox_size_y = bbox.size_y
             self._last_detect_time = time.time()
+            self._update_target_distance()
         else:
             self._target_u = None
+            self._target_v = None
+            self._target_distance = None
+
+    # ==================================================================
+    #  深度图回调
+    # ==================================================================
+    def _on_depth(self, msg: Image) -> None:
+        """缓存最新深度图，支持 16UC1(mm) 和 32FC1(m)。"""
+        try:
+            self._depth_image = self._bridge.imgmsg_to_cv2(
+                msg, desired_encoding="passthrough"
+            )
+            self._depth_encoding = msg.encoding
+        except Exception as e:
+            self.get_logger().warn(f"深度图转换失败: {e}")
+
+    def _depth_to_meters(self, value: float) -> float:
+        """按深度图编码将原始深度值转换为米。"""
+        if self._depth_encoding in ("16UC1", "mono16"):
+            return value / 1000.0
+        return value
+
+    def _update_target_distance(self) -> None:
+        """按检测框中心区域计算目标距离。"""
+        self._target_distance = None
+        if not self._use_depth or self._depth_image is None:
+            return
+        if self._target_u is None or self._target_v is None:
+            return
+
+        h, w = self._depth_image.shape[:2]
+        px = int(max(0.0, min(1.0, self._target_u)) * (w - 1))
+        py = int(max(0.0, min(1.0, self._target_v)) * (h - 1))
+        r = self._depth_radius
+        x0 = max(0, px - r)
+        x1 = min(w, px + r + 1)
+        y0 = max(0, py - r)
+        y1 = min(h, py + r + 1)
+        region = np.asarray(self._depth_image[y0:y1, x0:x1], dtype=np.float32)
+        valid = region[np.isfinite(region) & (region > 0.0)]
+        if valid.size == 0:
+            return
+
+        distance = self._depth_to_meters(float(np.median(valid)))
+        if math.isfinite(distance) and distance > 0.0:
+            self._target_distance = distance
 
     # ==================================================================
     #  状态机
@@ -210,7 +288,16 @@ class LocoForwardNode(Node):
 
         aligned_dur = now - self._align_start
 
-        # ---- 4. 到达判断 ----
+        # ---- 4. 到达判断（深度距离优先，bbox 作为 fallback） ----
+        if self._use_depth and self._target_distance is not None:
+            if self._target_distance <= self._stop_distance:
+                self._stop_move()
+                self.get_logger().info(
+                    f"到达目标! 深度距离={self._target_distance:.2f}m "
+                    f"<= {self._stop_distance:.2f}m"
+                )
+                return
+
         bbox_max = max(self._bbox_size_x, self._bbox_size_y)
         if bbox_max >= self._arrive_ratio:
             self._stop_move()

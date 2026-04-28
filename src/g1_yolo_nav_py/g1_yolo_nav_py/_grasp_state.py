@@ -30,9 +30,13 @@ from pathlib import Path
 from enum import Enum, auto
 from typing import Optional
 
+import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
+from cv_bridge import CvBridge
 
 from g1_yolo_nav_py.sport_client import SportClient
 
@@ -95,7 +99,11 @@ class GraspStateMachineMixin:
 
         # ---- 声明公共参数 ----
         node.declare_parameter("detection_topic", "/g1/vision/detections")
+        node.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         node.declare_parameter("target_class_id", "chair")
+        node.declare_parameter("use_depth_distance", True)
+        node.declare_parameter("stop_distance", 0.5)
+        node.declare_parameter("depth_sample_radius", 5)
         node.declare_parameter("camera_fov_deg", 87.0)
         node.declare_parameter("center_tolerance", 0.08)
         node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
@@ -113,7 +121,11 @@ class GraspStateMachineMixin:
 
         p = lambda n: node.get_parameter(n).value
         self._gs_det_topic = p("detection_topic")
+        self._gs_depth_topic = p("depth_topic")
         self._gs_target_class = p("target_class_id")
+        self._gs_use_depth = bool(p("use_depth_distance"))
+        self._gs_stop_distance = float(p("stop_distance"))
+        self._gs_depth_radius = max(1, int(p("depth_sample_radius")))
         self._gs_fov_rad = math.radians(float(p("camera_fov_deg")))
         self._gs_center_tol = float(p("center_tolerance"))
         self._gs_step_speed = float(p("step_yaw_speed"))
@@ -138,6 +150,10 @@ class GraspStateMachineMixin:
 
         # ---- 内部状态 ----
         self._gs_target_u: Optional[float] = None
+        self._gs_target_v: Optional[float] = None
+        self._gs_target_distance: Optional[float] = None
+        self._gs_depth_image: Optional[np.ndarray] = None
+        self._gs_depth_encoding: str = ""
         self._gs_bbox_size_x: float = 0.0
         self._gs_bbox_size_y: float = 0.0
         self._gs_last_detect_time: float = 0.0
@@ -148,9 +164,19 @@ class GraspStateMachineMixin:
         self._gs_settle_start: float = 0.0    # 开始等待的时间
 
         # ---- ROS2 订阅 ----
+        sensor_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5,
+        )
+        self._gs_bridge = CvBridge()
         node.create_subscription(
             Detection2DArray, self._gs_det_topic, self._gs_on_detection, 10
         )
+        if self._gs_use_depth:
+            node.create_subscription(
+                Image, self._gs_depth_topic, self._gs_on_depth, sensor_qos
+            )
 
         # ---- FSM 初始化 ----
         if self._gs_auto_stand:
@@ -204,11 +230,56 @@ class GraspStateMachineMixin:
         if best_det is not None:
             bbox = best_det.bbox
             self._gs_target_u = bbox.center.x
+            self._gs_target_v = bbox.center.y
             self._gs_bbox_size_x = bbox.size_x
             self._gs_bbox_size_y = bbox.size_y
             self._gs_last_detect_time = time.time()
+            self._gs_update_target_distance()
         else:
             self._gs_target_u = None
+            self._gs_target_v = None
+            self._gs_target_distance = None
+
+    def _gs_on_depth(self, msg: Image) -> None:
+        """缓存最新深度图，支持 16UC1(mm) 和 32FC1(m)。"""
+        try:
+            self._gs_depth_image = self._gs_bridge.imgmsg_to_cv2(
+                msg, desired_encoding="passthrough"
+            )
+            self._gs_depth_encoding = msg.encoding
+        except Exception as e:
+            self._log_error(f"[深度] 深度图转换失败: {e}")
+
+    def _gs_depth_to_meters(self, value: float) -> float:
+        """按深度图编码将原始深度值转换为米。"""
+        if self._gs_depth_encoding in ("16UC1", "mono16"):
+            return value / 1000.0
+        return value
+
+    def _gs_update_target_distance(self) -> None:
+        """按检测框中心区域计算目标距离。"""
+        self._gs_target_distance = None
+        if not self._gs_use_depth or self._gs_depth_image is None:
+            return
+        if self._gs_target_u is None or self._gs_target_v is None:
+            return
+
+        h, w = self._gs_depth_image.shape[:2]
+        px = int(max(0.0, min(1.0, self._gs_target_u)) * (w - 1))
+        py = int(max(0.0, min(1.0, self._gs_target_v)) * (h - 1))
+        r = self._gs_depth_radius
+        x0 = max(0, px - r)
+        x1 = min(w, px + r + 1)
+        y0 = max(0, py - r)
+        y1 = min(h, py + r + 1)
+        region = np.asarray(self._gs_depth_image[y0:y1, x0:x1], dtype=np.float32)
+        valid = region[np.isfinite(region) & (region > 0.0)]
+        if valid.size == 0:
+            return
+
+        distance = self._gs_depth_to_meters(float(np.median(valid)))
+        if math.isfinite(distance) and distance > 0.0:
+            self._gs_target_distance = distance
 
     # ------------------------------------------------------------------
     #  状态机 tick
@@ -303,6 +374,19 @@ class GraspStateMachineMixin:
             self._log_info("[状态] APPROACHING → SEARCHING (目标丢失)")
             return
 
+        # ---- 深度距离到达判断（优先于 bbox） ----
+        if self._gs_use_depth and self._gs_target_distance is not None:
+            if self._gs_target_distance <= self._gs_stop_distance:
+                self._sport.stop()
+                self.gs_state = GraspState.GRABBING
+                self._log_info(
+                    f"[状态] APPROACHING → GRABBING "
+                    f"(深度距离={self._gs_target_distance:.2f}m <= {self._gs_stop_distance:.2f}m)"
+                )
+                self._gs_run_grab()
+                return
+
+        # ---- bbox 占比到达判断（深度不可用时的 fallback） ----
         bbox_max = max(self._gs_bbox_size_x, self._gs_bbox_size_y)
         if bbox_max >= self._gs_arrive_ratio:
             self._sport.stop()

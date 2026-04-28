@@ -174,23 +174,25 @@ ros2 run g1_yolo_nav_py detection_visualizer
 **Parameter Tuning:**
 
 ```bash
-# Tracking too slow — increase kp
-ros2 run g1_yolo_nav_py yaw_align --ros-args -p yaw_kp:=3.0
-
-# Oscillating — decrease kp + widen tolerance
+# Larger step rotation — increase speed or duration
 ros2 run g1_yolo_nav_py yaw_align --ros-args \
-  -p yaw_kp:=1.0 -p center_tolerance:=0.12
+  -p step_yaw_speed:=0.5 -p step_duration:=0.4
 
-# Limit max rotation speed
-ros2 run g1_yolo_nav_py yaw_align --ros-args -p max_yaw_speed:=0.3
+# Camera updates slowly — increase settle time
+ros2 run g1_yolo_nav_py yaw_align --ros-args -p camera_settle_time:=8.0
+
+# Tighter centering — reduce tolerance
+ros2 run g1_yolo_nav_py yaw_align --ros-args -p center_tolerance:=0.05
 ```
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `yaw_kp` | 2.0 | P gain: increase if slow, decrease if oscillating |
+| `step_yaw_speed` | 0.3 rad/s | Rotation speed per step |
+| `step_duration` | 0.3 s | Rotation duration per step |
+| `camera_settle_time` | 5.0 s | Wait for camera update after rotation |
+| `max_consecutive_steps` | 10 | Max consecutive steps |
 | `center_tolerance` | 0.08 | Centering tolerance (normalized), smaller = stricter |
-| `max_yaw_speed` | 0.6 rad/s | Maximum rotation speed |
-| `lost_timeout` | 1.0 s | Target lost timeout |
+| `lost_timeout` | 10.0 s | Target lost timeout |
 
 **Pass criteria**: Robot smoothly tracks target when it moves; stable when centered.
 
@@ -211,7 +213,8 @@ ros2 run g1_yolo_nav_py loco_forward
 
 - When target is centered for >0.8s, log shows `开始前进`
 - Robot moves forward at set speed
-- When bbox exceeds 45% of frame, log shows `到达目标!` and stops
+- **When depth distance ≤ 0.5m**, log shows `到达目标! 深度距离=0.xxm <= 0.50m` and stops
+- Falls back to bbox ratio when depth is unavailable (bbox ≥ 45% stops)
 - Auto-stops when target is lost or off-center
 
 **Parameter Tuning:**
@@ -220,15 +223,22 @@ ros2 run g1_yolo_nav_py loco_forward
 # Use low speed for first test
 ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
 
-# Get closer before stopping
-ros2 run g1_yolo_nav_py loco_forward --ros-args -p arrive_bbox_ratio:=0.6
+# Adjust stop distance (closer to target)
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p stop_distance:=0.3
+
+# Disable depth distance, use bbox ratio only
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p use_depth_distance:=false
 ```
 
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `forward_speed` | 0.3 m/s | Forward speed (0.15 recommended for first test) |
+| `use_depth_distance` | true | Use depth distance for stop判断 |
+| `stop_distance` | 0.5 m | Depth distance stop threshold |
+| `depth_topic` | `/D455_1/depth/image_rect_raw` | Depth image topic |
+| `depth_sample_radius` | 5 px | Depth sampling radius |
 | `align_stable_time` | 0.8 s | How long centered before moving forward |
-| `arrive_bbox_ratio` | 0.45 | Bbox ratio threshold for arrival |
+| `arrive_bbox_ratio` | 0.45 | Bbox ratio threshold (depth fallback) |
 | `center_tolerance` | 0.08 | Centering tolerance |
 | `lost_timeout` | 1.0 s | Target lost timeout |
 
@@ -277,10 +287,10 @@ tkinter-based GUI integrating detection visualization + manual teleop + one-clic
 ```
 IDLE → [Search] → SEARCHING (rotate to find target)
                      ↓ Target detected
-                   ALIGNING (yaw alignment to center)
+                   ALIGNING (step-by-step yaw alignment)
                      ↓ Centered & stable
                    APPROACHING (Loco API forward)
-                     ↓ Arrived at target
+                     ↓ Depth distance ≤ 0.5m (or bbox ratio ≥ 0.45)
                    GRABBING (execute armup.py)
                      ↓ Grasp complete
                    MENU (put down / turn & put down)
@@ -310,8 +320,12 @@ ros2 run g1_yolo_nav_py control_panel
 | `target_class_id` | `chair` | Target class |
 | `forward_speed` | `0.2` | Forward speed m/s |
 | `search_yaw_speed` | `0.3` | Search rotation speed rad/s |
-| `yaw_kp` | `2.0` | Yaw alignment P gain |
-| `arrive_bbox_ratio` | `0.45` | Arrival detection threshold |
+| `step_yaw_speed` | `0.3` | Step-by-step alignment rotation speed rad/s |
+| `step_duration` | `0.3` | Step-by-step alignment duration s |
+| `camera_settle_time` | `5.0` | Wait for camera update s |
+| `use_depth_distance` | `true` | Depth distance for stop |
+| `stop_distance` | `0.5` | Stop distance m |
+| `arrive_bbox_ratio` | `0.45` | Arrival threshold (depth fallback) |
 | `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | Arm script directory |
 
 **Dependency:** `pip install pillow`
