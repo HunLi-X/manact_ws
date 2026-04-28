@@ -477,12 +477,82 @@ All motion control nodes use the **Loco API (7xxx series)**, wrapped via `SportC
 **FSM Initialization Sequence:**
 
 ```
-SET_FSM_ID(DAMP=1) → SET_FSM_ID(STAND_UP=4) → SET_FSM_ID(WALK_RUN=801) → SET_BALANCE_MODE(CONTINUOUS_GAIT=1)
+SET_FSM_ID(DAMP=1) → SET_FSM_ID(STAND_UP=4) → SET_FSM_ID(START=500) → SET_FSM_ID(WALK_RUN=801) → SET_BALANCE_MODE(CONTINUOUS_GAIT=1)
 ```
 
 `SET_VELOCITY(7105)` only takes effect under WALK_RUN + CONTINUOUS_GAIT mode.
 
 > **Note**: The motion control implementation references the verified `ctrl_keyboard` package, using the same API system.
+
+---
+
+## Debugging Guide
+
+### 1. Check Topic Connectivity
+
+```bash
+# Check camera image
+ros2 topic hz /D455_1/color/image_raw
+
+# Check depth image
+ros2 topic hz /D455_1/depth/image_rect_raw
+
+# Check YOLO detection results
+ros2 topic echo /g1/vision/detections --once
+
+# Check motion control subscribers
+ros2 topic info /api/sport/request
+```
+
+### 2. Camera Launch (with Depth)
+
+```bash
+# Depth alignment must be enabled
+ros2 launch realsense2_camera rs_launch.py \
+    camera_namespace:=robot1 camera_name:=D455_1 align_depth.enable:=true
+```
+
+> **Key**: Depth distance requires the depth image topic. Always add `align_depth.enable:=true`.
+
+### 3. Verify Depth Distance
+
+```bash
+# Test depth image (should show 16UC1 or 32FC1 encoding)
+ros2 topic echo /D455_1/depth/image_rect_raw --once | head -5
+
+# Observe distance logs without moving
+ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.0
+```
+
+### 4. Disable Depth Distance (bbox Only)
+
+```bash
+# If depth camera unavailable, disable depth distance
+ros2 run g1_yolo_nav_py grasp_task --ros-args -p use_depth_distance:=false
+```
+
+### 5. Common Issues
+
+| Symptom | Cause | Solution |
+| --- | --- | --- |
+| Depth always None | No depth topic data | Check `align_depth.enable:=true` |
+| Distance abnormally large (>10m) | 16UC1 encoding not converted | Check depth encoding is `16UC1` |
+| Arm not executed after arrival | armup.py path wrong | Check `arm_script_dir` parameter |
+| Robot doesn't move | FSM not in WALK_RUN | Check `[FSM]` logs, confirm START(500) step |
+| Frequent target loss | `lost_timeout` too short | Increase to `2.0` |
+| Alignment overshoot | `camera_settle_time` too short | Increase to `8.0` |
+
+### 6. Step-by-Step Debug Flow
+
+```
+Step 1: Camera → confirm /D455_1/color/image_raw has data
+Step 2: YOLO → confirm /g1/vision/detections has results
+Step 3: Depth → confirm /D455_1/depth/image_rect_raw has data
+Step 4: yaw_align → confirm step-by-step alignment works (check logs)
+Step 5: loco_forward → forward_speed:=0.0 observe depth distance
+Step 6: loco_forward → normal speed, confirm arrival stop
+Step 7: grasp_task → full pipeline test
+```
 
 ---
 
