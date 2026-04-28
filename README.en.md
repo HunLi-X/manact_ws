@@ -367,8 +367,10 @@ armdown: ~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm/armdown.py
 [SEARCHING]  Rotating to search for target...
 [Detect] Target found: chair, confidence=95%, u=0.32
 [State] SEARCHING → ALIGNING: Target found
+[Align] Step: u=0.320, error=-0.180, rotation≈+5.2°, waiting 5.0s...
+[Align] Settle done, re-detect: u=0.480
 [State] ALIGNING → APPROACHING: Target centered
-[State] APPROACHING → GRABBING: Arrived at target! bbox=0.46 >= 0.45
+[State] APPROACHING → GRABBING: Depth distance=0.48m <= 0.50m
 [Grasp] Executing armup.py ...
 [Grasp] armup.py completed
 ```
@@ -411,9 +413,15 @@ ros2 run g1_yolo_nav_py grasp_task --ros-args \
 | --- | --- | --- |
 | `target_class_id` | chair | YOLO detection target class |
 | `forward_speed` | 0.2 m/s | Approach speed (0.15 recommended for first run) |
-| `arrive_bbox_ratio` | 0.45 | Bbox ratio arrival threshold |
+| `use_depth_distance` | true | Use depth distance for stop & grasp |
+| `stop_distance` | 0.5 m | Depth distance stop threshold |
+| `depth_topic` | `/D455_1/depth/image_rect_raw` | Depth image topic |
+| `depth_sample_radius` | 5 px | Depth sampling radius |
+| `arrive_bbox_ratio` | 0.45 | Bbox ratio arrival threshold (depth fallback) |
 | `search_yaw_speed` | 0.3 rad/s | Search rotation speed |
-| `yaw_kp` | 2.0 | Yaw alignment P gain |
+| `step_yaw_speed` | 0.3 rad/s | Step-by-step alignment rotation speed |
+| `step_duration` | 0.3 s | Step-by-step alignment duration |
+| `camera_settle_time` | 5.0 s | Wait for camera update |
 | `lost_timeout` | 2.0 s | Target lost timeout |
 | `arm_script_dir` | `~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm` | Arm script directory |
 
