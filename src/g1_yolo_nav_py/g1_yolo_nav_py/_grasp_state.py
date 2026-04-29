@@ -184,7 +184,7 @@ class GraspStateMachineMixin:
 
         # ---- FSM 初始化 ----
         if self._gs_auto_stand:
-            self._sport.init_fsm()
+            self._sport.auto_init_if_needed()
         else:
             self._sport.skip_init()
             node.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")

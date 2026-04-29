@@ -16,7 +16,7 @@
         def __init__(self):
             ...
             self._sport = SportClient(self)
-            self._sport.init_fsm()
+            self._sport.auto_init_if_needed()  # 智能检测：已在走跑模式则跳过
 
         def move_forward(self):
             if self._sport.ready:
@@ -114,6 +114,12 @@ class SportClient:
         self._move_duration: float = 1.0
         # 停止时的 duration
         self._stop_duration: float = 0.5
+        # GET_FSM_ID 查询用：订阅响应话题，缓存最新 FSM ID
+        self._current_fsm_id: Optional[int] = None
+        self._fsm_id_event = threading.Event()
+        node.create_subscription(
+            Request, '/api/sport/response', self._on_sport_response, 10
+        )
 
     # ------------------------------------------------------------------
     #  属性
@@ -122,6 +128,124 @@ class SportClient:
     def ready(self) -> bool:
         """FSM 是否已初始化完成，可以接受运动指令。"""
         return self._ready
+
+    # ------------------------------------------------------------------
+    #  响应处理 & FSM 状态查询
+    # ------------------------------------------------------------------
+    def _on_sport_response(self, msg: Request) -> None:
+        """处理 /api/sport/response 话题的响应消息。"""
+        try:
+            api_id = msg.header.identity.api_id
+            if api_id == LocoAPI.GET_FSM_ID and msg.parameter:
+                data = json.loads(msg.parameter)
+                fsm_id = data.get("data")
+                if fsm_id is not None:
+                    self._current_fsm_id = int(fsm_id)
+                    self._fsm_id_event.set()
+        except Exception:
+            pass
+
+    def get_fsm_id(self, timeout: float = 2.0) -> Optional[int]:
+        """查询机器人当前 FSM 状态 ID。
+
+        通过 GET_FSM_ID(7001) 请求查询，等待 /api/sport/response 响应。
+
+        Args:
+            timeout: 等待响应的超时时间（秒）
+
+        Returns:
+            当前 FSM ID（如 801=WALK_RUN），查询失败返回 None
+        """
+        self._fsm_id_event.clear()
+        self._current_fsm_id = None
+        self.publish(LocoAPI.GET_FSM_ID)
+        self._fsm_id_event.wait(timeout=timeout)
+        return self._current_fsm_id
+
+    def is_walk_run_mode(self, timeout: float = 2.0) -> bool:
+        """检测机器人当前是否已处于走跑模式（WALK_RUN=801）。
+
+        Args:
+            timeout: 查询超时时间（秒）
+
+        Returns:
+            True 表示已处于 WALK_RUN 模式
+        """
+        fsm_id = self.get_fsm_id(timeout=timeout)
+        if fsm_id == FSM_ID.WALK_RUN:
+            return True
+        return False
+
+    def auto_init_if_needed(self, auto_balance_stand: bool = True,
+                            callback: Optional[Callable[[], None]] = None) -> None:
+        """智能初始化：检测当前模式，已处于走跑模式则跳过，否则执行完整初始化。
+
+        Args:
+            auto_balance_stand: 初始化时是否自动切换到走跑模式并开启连续步态
+            callback: FSM 初始化完成后的回调
+        """
+        def _check_and_init():
+            logger = self._node.get_logger
+            # 先等待订阅者就绪
+            logger().info("[FSM] 等待 /api/sport/request 订阅者...")
+            for _ in range(50):
+                if self.has_subscribers():
+                    logger().info("[FSM] 检测到订阅者")
+                    break
+                time.sleep(0.1)
+            else:
+                logger().warn("[FSM] 等待 5 秒后仍无订阅者!")
+
+            # 查询当前 FSM 状态
+            logger().info("[FSM] 查询当前 FSM 状态...")
+            fsm_id = self.get_fsm_id(timeout=3.0)
+
+            if fsm_id == FSM_ID.WALK_RUN:
+                logger().info(
+                    f"[FSM] 当前已处于走跑模式 (FSM_ID={fsm_id})，跳过初始化"
+                )
+                self._ready = True
+            else:
+                detected = f"FSM_ID={fsm_id}" if fsm_id is not None else "查询超时"
+                logger().info(
+                    f"[FSM] 当前不在走跑模式 ({detected})，执行完整初始化..."
+                )
+                # 复用 init_fsm 的逻辑（不启动新线程，因为已在后台线程中）
+                self._do_full_init(auto_balance_stand)
+
+            if callback is not None:
+                callback()
+
+        t = threading.Thread(target=_check_and_init, daemon=True)
+        t.start()
+
+    def _do_full_init(self, auto_balance_stand: bool = True) -> None:
+        """执行完整的 FSM 初始化流程（在当前线程中同步执行）。"""
+        logger = self._node.get_logger
+
+        logger().info("[FSM] 步骤1: 切换到 DAMP 模式 (SET_FSM_ID=1)...")
+        self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
+        time.sleep(3)
+
+        logger().info("[FSM] 步骤2: 站立 (SET_FSM_ID STAND_UP=4)...")
+        self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.STAND_UP})
+        time.sleep(5)
+
+        if auto_balance_stand:
+            logger().info("[FSM] 步骤3: 进入常规运控 (SET_FSM_ID START=500)...")
+            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.START})
+            time.sleep(2)
+
+            logger().info("[FSM] 步骤4: 进入走跑模式 (SET_FSM_ID WALK_RUN=801)...")
+            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.WALK_RUN})
+            time.sleep(1)
+
+            logger().info("[FSM] 步骤5: 开启连续步态 (SET_BALANCE_MODE CONTINUOUS_GAIT=1)...")
+            self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.CONTINUOUS_GAIT})
+            time.sleep(1)
+
+        self._ready = True
+        logger().info("[FSM] 初始化完成，就绪")
 
     # ------------------------------------------------------------------
     #  诊断
@@ -175,11 +299,8 @@ class SportClient:
         def _init_thread():
             logger = self._node.get_logger
 
-            # 等待 /api/sport/request 出现订阅者（DDS 发现需要时间）
-            # ctrl_keyboard 之所以能用，是因为 rclpy.spin 先启动，publisher 已被发现
-            # 我们的 init_fsm 在节点 __init__ 中就启动了，此时可能还没有订阅者
             logger().info("[FSM] 等待 /api/sport/request 订阅者...")
-            for i in range(50):  # 最多等 5 秒
+            for i in range(50):
                 if self.has_subscribers():
                     logger().info("[FSM] 检测到订阅者，开始初始化")
                     break
@@ -190,33 +311,7 @@ class SportClient:
                     "FSM 指令可能丢失，请确认 unitree SDK bridge 已启动。"
                 )
 
-            # FSM 状态机流程（与 ctrl_keyboard 交互模式一致）：
-            # ZERO_TORQUE → DAMP → STAND_UP → START → WALK_RUN → CONTINUOUS_GAIT
-            # 每步必须等机器人物理完成过渡后才能发下一个状态切换指令
-
-            logger().info("[FSM] 步骤1: 切换到 DAMP 模式 (SET_FSM_ID=1)...")
-            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.DAMP})
-            time.sleep(3)  # DAMP 过渡需要时间
-
-            logger().info("[FSM] 步骤2: 站立 (SET_FSM_ID STAND_UP=4)...")
-            self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.STAND_UP})
-            time.sleep(5)  # 从 DAMP 站起需要较长时间，等物理动作完成
-
-            if auto_balance_stand:
-                logger().info("[FSM] 步骤3: 进入常规运控 (SET_FSM_ID START=500)...")
-                self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.START})
-                time.sleep(2)  # START 模式过渡
-
-                logger().info("[FSM] 步骤4: 进入走跑模式 (SET_FSM_ID WALK_RUN=801)...")
-                self.publish(LocoAPI.SET_FSM_ID, {"data": FSM_ID.WALK_RUN})
-                time.sleep(1)
-
-                logger().info("[FSM] 步骤5: 开启连续步态 (SET_BALANCE_MODE CONTINUOUS_GAIT=1)...")
-                self.publish(LocoAPI.SET_BALANCE_MODE, {"data": BalanceMode.CONTINUOUS_GAIT})
-                time.sleep(1)
-
-            self._ready = True
-            logger().info("[FSM] 初始化完成，就绪")
+            self._do_full_init(auto_balance_stand)
 
             if callback is not None:
                 callback()
