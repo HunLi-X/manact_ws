@@ -39,6 +39,7 @@ from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
 from g1_yolo_nav_py.sport_client import SportClient
+from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
 
 
 # ==================================================================
@@ -223,13 +224,7 @@ class GraspStateMachineMixin:
     # ------------------------------------------------------------------
     def _gs_on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标和 bbox 尺寸。"""
-        best_det = None
-        best_score = 0.0
-        for det in msg.detections:
-            if det.results and det.results[0].id == self._gs_target_class:
-                if det.results[0].score > best_score:
-                    best_score = det.results[0].score
-                    best_det = det
+        best_det, best_score = find_best_detection(msg.detections, self._gs_target_class)
         if best_det is not None:
             bbox = best_det.bbox
             self._gs_target_u = bbox.center.x
@@ -253,12 +248,6 @@ class GraspStateMachineMixin:
         except Exception as e:
             self._log_error(f"[深度] 深度图转换失败: {e}")
 
-    def _gs_depth_to_meters(self, value: float) -> float:
-        """按深度图编码将原始深度值转换为米。"""
-        if self._gs_depth_encoding in ("16UC1", "mono16"):
-            return value / 1000.0
-        return value
-
     def _gs_update_target_distance(self) -> None:
         """按检测框中心区域计算目标距离。"""
         self._gs_target_distance = None
@@ -267,20 +256,10 @@ class GraspStateMachineMixin:
         if self._gs_target_u is None or self._gs_target_v is None:
             return
 
-        h, w = self._gs_depth_image.shape[:2]
-        px = int(max(0.0, min(1.0, self._gs_target_u)) * (w - 1))
-        py = int(max(0.0, min(1.0, self._gs_target_v)) * (h - 1))
-        r = self._gs_depth_radius
-        x0 = max(0, px - r)
-        x1 = min(w, px + r + 1)
-        y0 = max(0, py - r)
-        y1 = min(h, py + r + 1)
-        region = np.asarray(self._gs_depth_image[y0:y1, x0:x1], dtype=np.float32)
-        valid = region[np.isfinite(region) & (region > 0.0)]
-        if valid.size == 0:
+        raw = sample_depth_at_pixel(self._gs_depth_image, self._gs_target_u, self._gs_target_v, self._gs_depth_radius)
+        if raw is None:
             return
-
-        distance = self._gs_depth_to_meters(float(np.median(valid)))
+        distance = depth_to_meters(raw, self._gs_depth_encoding)
         if math.isfinite(distance) and distance > 0.0:
             self._gs_target_distance = distance
 

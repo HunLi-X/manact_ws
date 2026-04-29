@@ -39,7 +39,7 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
-from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
+from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共享绘制和转换
 
 
 
@@ -222,35 +222,9 @@ class DetectionVisualizerNode(Node):
     # ==================================================================
     def _draw_on_frame(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
-        out = frame.copy()
         if self._detections is None:
-            return out
-        h, w = out.shape[:2]
-        det_count = 0
-        for det in self._detections.detections:
-            if not det.results:
-                continue
-            class_id = det.results[0].id
-            score = det.results[0].score
-            color = _get_color(class_id)
-
-            cx = det.bbox.center.x * w
-            cy = det.bbox.center.y * h
-            bw = det.bbox.size_x * w
-            bh = det.bbox.size_y * h
-            x1, y1 = int(cx - bw / 2), int(cy - bh / 2)
-            x2, y2 = int(cx + bw / 2), int(cy + bh / 2)
-
-            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
-
-            label = f"{class_id} {score:.0%}"
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            (tw, th), _ = cv2.getTextSize(label, font, 0.6, 1)
-            cv2.rectangle(out, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
-            cv2.putText(out, label, (x1, y1 - 4),
-                        font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-            det_count += 1
-        return out
+            return frame.copy()
+        return draw_detections_on_frame(frame, self._detections)
 
     def _cv2_to_tk(self, frame: np.ndarray, canvas: tk.Canvas) -> Optional[ImageTk.PhotoImage]:
         """将 OpenCV 图像转为 tkinter 可显示格式并缩放适配画布。"""
@@ -258,12 +232,7 @@ class DetectionVisualizerNode(Node):
         ch = canvas.winfo_height() or self._disp_h
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
-
-        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        rgb = np.ascontiguousarray(rgb)
-        pil_img = PILImage.fromarray(rgb)
-        return ImageTk.PhotoImage(image=pil_img)
+        return cv2_to_tk(frame, cw, ch)
 
     # ==================================================================
     # 标注图像发布（在主线程中执行，避免阻塞 ROS2 回调）

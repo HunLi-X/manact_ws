@@ -3,7 +3,7 @@
 """
 G1 人形机器人手臂多姿态演示
 ===========================
-在 arm.py 基础上扩展，支持定义多个目标姿态，手臂在姿态之间平滑循环切换。
+在 arm_common.py 基础上，支持定义多个目标姿态，手臂在姿态之间平滑循环切换。
 
 预设姿态：
   1. 双臂抬起（T-pose 变体）
@@ -12,8 +12,8 @@ G1 人形机器人手臂多姿态演示
   4. 双臂下垂归零
 
 运行方式：
-    python3 src/arm_multi_pose_demo.py              # 自动检测网络接口
-    python3 src/arm_multi_pose_demo.py eth0         # 指定网络接口
+    python3 arm_multi_pose_demo.py              # 自动检测网络接口
+    python3 arm_multi_pose_demo.py eth0         # 指定网络接口
 
 依赖：
     pip install unitree_sdk2py numpy
@@ -21,337 +21,82 @@ G1 人形机器人手臂多姿态演示
 
 import time
 import sys
-import threading  # 保护 low_state 在 DDS 回调与控制线程间的并发访问
 
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
-from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-from unitree_sdk2py.utils.crc import CRC
-from unitree_sdk2py.utils.thread import RecurrentThread
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from arm_common import BaseArmController, build_timeline
 
-import numpy as np
-
-kPi = 3.141592654
-kPi_2 = 1.57079632
-k3_4_pi = kPi * 0.75
-
-class G1JointIndex:
-    """G1 机器人关节索引常量（0-29）。"""
-    # 左腿 (0-5)
-    LeftHipPitch = 0;  LeftHipRoll = 1;  LeftHipYaw = 2
-    LeftKnee = 3;  LeftAnklePitch = 4;  LeftAnkleRoll = 5
-    # 右腿 (6-11)
-    RightHipPitch = 6;  RightHipRoll = 7;  RightHipYaw = 8
-    RightKnee = 9;  RightAnklePitch = 10;  RightAnkleRoll = 11
-    # 腰部 (12-14)
-    WaistYaw = 12;  WaistRoll = 13;  WaistPitch = 14
-    # 左臂 (15-21)
-    LeftShoulderPitch = 15;  LeftShoulderRoll = 16;  LeftShoulderYaw = 17
-    LeftElbow = 18;  LeftWristRoll = 19;  LeftWristPitch = 20;  LeftWristYaw = 21
-    # 右臂 (22-28)
-    RightShoulderPitch = 22;  RightShoulderRoll = 23;  RightShoulderYaw = 24
-    RightElbow = 25;  RightWristRoll = 26;  RightWristPitch = 27;  RightWristYaw = 28
-    # 特殊索引
-    kNotUsedJoint = 29  # arm_sdk 使能控制：q=1 启用, q=0 释放
-
-
-# ======================================================================
-# 关节索引顺序（与目标角度数组一一对应）
-# ======================================================================
-ARM_JOINTS = [
-    G1JointIndex.LeftShoulderPitch,  G1JointIndex.LeftShoulderRoll,
-    G1JointIndex.LeftShoulderYaw,    G1JointIndex.LeftElbow,
-    G1JointIndex.LeftWristRoll,
-    G1JointIndex.RightShoulderPitch, G1JointIndex.RightShoulderRoll,
-    G1JointIndex.RightShoulderYaw,   G1JointIndex.RightElbow,
-    G1JointIndex.RightWristRoll,
-    G1JointIndex.WaistYaw,
-    G1JointIndex.WaistRoll,
-    G1JointIndex.WaistPitch,
-]
 
 # ======================================================================
 # 预设姿态定义
 # ======================================================================
-# 每个姿态是 13 个弧度值的列表，顺序同 ARM_JOINTS
-# 布局：[左臂5, 右臂5, 腰部3]
-
 def _pose_zeros():
     """零位：所有受控关节归零。"""
     return [0.0] * 13
 
-
 def _pose_arms_up():
-    """姿态 1：预备姿势"1"
-    """
+    """姿态 1：预备姿势"1" """
     return [
-            -1.0,      0.7,  0.0,    0.6,  -0.8,
-            -1.0,     -0.7,  0.0,    0.6,  0.8,
-            0.0,      0.0,    0.0
+        -1.0,   0.7,  0.0,  0.6, -0.8,
+        -1.0,  -0.7,  0.0,  0.6,  0.8,
+         0.0,   0.0,  0.0,
     ]
-
 
 def _pose_pray():
-    """姿态 2：抓取"2"
-    """
-    
+    """姿态 2：抓取"2" """
     return [
-           -1.15,      0.5,  -0.3,   0.3,  -1.8,
-           -1.15,     -0.5,   0.3,   0.3,   1.8,
-            0.0,      0.0,    0.0
+        -1.15,  0.5, -0.3,  0.3, -1.8,
+        -1.15, -0.5,  0.3,  0.3,  1.8,
+         0.0,   0.0,  0.0,
     ]
-
 
 def _pose_wave():
-    """姿态 3:保持"3"
-    """
+    """姿态 3：保持"3" """
     return [
-        -1.1,   0.55,   -0.45,    0.2,  -1.8,
-        -1.1,   -0.55,   0.45,    0.2,   1.8, 
-         0.0,   0.0,     0.0,
+        -1.1,   0.55, -0.45,  0.2, -1.8,
+        -1.1,  -0.55,  0.45,  0.2,  1.8,
+         0.0,   0.0,   0.0,
     ]
 
-
 def _pose_reach_forward():
-    """姿态 4：放下"4"
-    """
+    """姿态 4：放下"4" """
     return [
-           -0.8,      0.5,   -0.4,   0.15,  -1.8,
-           -0.8,     -0.5,    0.4,   0.15,   1.8,
-            0.0,      0.0,    0.0
-            ]
-def _pose_wave_body():            
-    """姿态 5 :松手"5"
-    """
+        -0.8,   0.5, -0.4,  0.15, -1.8,
+        -0.8,  -0.5,  0.4,  0.15,  1.8,
+         0.0,   0.0,  0.0,
+    ]
+
+def _pose_wave_body():
+    """姿态 5：松手"5" """
     return [
-            -0.7,      0.7,    0.0,    0.6,  -0.8,
-            -0.7,     -0.7,    0.0,    0.6,  0.8,
-             0.0,      0.0,    0.0
+        -0.7,   0.7,  0.0,  0.6, -0.8,
+        -0.7,  -0.7,  0.0,  0.6,  0.8,
+         0.0,   0.0,  0.0,
     ]
 
 
 # 姿态列表：名称 + 角度数组 + 保持时间(秒)
 POSE_SEQUENCE = [
-    ("1",      _pose_arms_up(),         2.0),
-    ("2",      _pose_pray(),            2.0),
-    ("3",      _pose_reach_forward(),   3.0),
-    ("4",      _pose_wave(),            3.0),
-    ("5",      _pose_wave_body(),       3.0),
+    ("1",  _pose_arms_up(),         2.0),
+    ("2",  _pose_pray(),            2.0),
+    ("3",  _pose_reach_forward(),   3.0),
+    ("4",  _pose_wave(),            3.0),
+    ("5",  _pose_wave_body(),       3.0),
 ]
 
 
-# ======================================================================
-# 多姿态控制器
-# ======================================================================
-class MultiPoseController:
+class MultiPoseController(BaseArmController):
     """G1 手臂多姿态循环控制器。
 
-    控制流程：
-    1. 初始化：归零并启用手臂 SDK
-    2. 循环：依次切换到每个预设姿态 → 保持 → 切换下一个
-    3. 结束：所有姿态演示完毕后归零并释放 arm_sdk
-
-    每个姿态之间通过线性插值平滑过渡，过渡时间由 transition_time 控制。
+    完成所有姿态后归零并释放 arm_sdk。
     """
 
-    def __init__(self, poses, transition_time=2.0, kp=60.0, kd=1.5):
-        """
-        Args:
-            poses: 姿态列表，每项为 (名称, 角度数组, 保持时间)
-            transition_time: 姿态之间过渡时间（秒）
-            kp: 位置控制比例增益
-            kd: 位置控制阻尼增益
-        """
-        self.poses = poses
-        self.transition_time = transition_time
-        self.kp = kp
-        self.kd = kd
-        self.control_dt = 0.02   # 50Hz
-
-        # 运行时状态
-        self.time = 0.0
-        self.phase = 0           # 当前执行阶段索引
-        self.done = False
-        self.first_low_state = False
-
-        # DDS 对象
-        self._state_lock = threading.Lock()
-        self.low_cmd = unitree_hg_msg_dds__LowCmd_()
-        self.low_state = None
-        self.crc = CRC()
-
-        # 计算阶段时间表
-        # 阶段 0: 初始归零 (transition_time)
-        # 阶段 1+2i-1: 过渡到第i个姿态 (transition_time)
-        # 阶段 1+2i: 保持第i个姿态 (hold_time)
-        # 最后: 归零 + 释放
-        self._build_timeline()
-
     def _build_timeline(self):
-        """构建阶段时间表：每阶段 (起始时间, 结束时间, 阶段类型, 数据)。"""
-        self.timeline = []
-        t = 0.0
-
-        # 阶段 0: 初始归零
-        t_end = t + self.transition_time
-        self.timeline.append((t, t_end, "init_zero", None))
-        t = t_end
-
-        # 逐个姿态：过渡 + 保持
-        for name, angles, hold_time in self.poses:
-            # 过渡到目标姿态
-            t_end = t + self.transition_time
-            self.timeline.append((t, t_end, "transition", (name, angles)))
-            t = t_end
-            # 保持目标姿态
-            t_end = t + hold_time
-            self.timeline.append((t, t_end, "hold", (name, angles)))
-            t = t_end
-
-        # 最后归零
-        t_end = t + self.transition_time
-        self.timeline.append((t, t_end, "final_zero", None))
-        t = t_end
-
-        # 释放 arm_sdk
-        t_end = t + self.transition_time
-        self.timeline.append((t, t_end, "release", None))
-        t = t_end
-
-        self.total_time = t
-
-    def Init(self):
-        """初始化 DDS 通信通道。"""
-        self.pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
-        self.pub.Init()
-        self.sub = ChannelSubscriber("rt/lowstate", LowState_)
-        self.sub.Init(self._state_handler, 10)
-
-    def Start(self):
-        """等待关节状态就绪后启动控制线程。"""
-        self.thread = RecurrentThread(
-            interval=self.control_dt, target=self._control_loop, name="multi_pose"
+        self.timeline, self.total_time = build_timeline(
+            self.poses, self.transition_time,
+            include_init_zero=True, include_final_zero=True, include_release=True,
         )
-        _t0 = time.time()
-        while not self.first_low_state:
-            if time.time() - _t0 > 10.0:
-                raise TimeoutError("未收到关节状态消息，请检查 DDS 通信和网络接口")
-            time.sleep(0.1)
-        self.thread.Start()
 
-    def _state_handler(self, msg):
-        """关节状态回调。"""
-        with self._state_lock:
-            self.low_state = msg
-        if not self.first_low_state:
-            self.first_low_state = True
-
-    def _get_current_joint_angles(self):
-        """从 lowstate 读取当前手臂关节角度。"""
-        with self._state_lock:
-            state = self.low_state
-        if state is None:
-            return [0.0] * len(ARM_JOINTS)
-        return [float(state.motor_state[j].q) for j in ARM_JOINTS]
-
-    # 关节角度安全限位（弧度），防止超限指令损坏电机
-    JOINT_LIMITS = {
-        G1JointIndex.LeftShoulderPitch:  (-2.5, 2.5),
-        G1JointIndex.LeftShoulderRoll:   (-1.5, 2.0),
-        G1JointIndex.LeftShoulderYaw:    (-1.5, 1.5),
-        G1JointIndex.LeftElbow:          (-1.5, 2.0),
-        G1JointIndex.LeftWristRoll:      (-1.5, 1.5),
-        G1JointIndex.RightShoulderPitch: (-2.5, 2.5),
-        G1JointIndex.RightShoulderRoll:  (-2.0, 1.5),
-        G1JointIndex.RightShoulderYaw:   (-1.5, 1.5),
-        G1JointIndex.RightElbow:         (-1.5, 2.0),
-        G1JointIndex.RightWristRoll:     (-1.5, 1.5),
-        G1JointIndex.WaistYaw:           (-1.5, 1.5),
-        G1JointIndex.WaistRoll:          (-0.5, 0.5),
-        G1JointIndex.WaistPitch:         (-0.5, 0.5),
-    }
-
-    def _send_joint_cmd(self, target_angles):
-        """向所有受控关节发送 PD 位置控制指令。"""
-        self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1  # 启用 arm_sdk
-        for i, joint in enumerate(ARM_JOINTS):
-            lo, hi = self.JOINT_LIMITS.get(joint, (-3.14, 3.14))
-            self.low_cmd.motor_cmd[joint].q = float(np.clip(target_angles[i], lo, hi))
-            self.low_cmd.motor_cmd[joint].dq = 0.0
-            self.low_cmd.motor_cmd[joint].tau = 0.0
-            self.low_cmd.motor_cmd[joint].kp = self.kp
-            self.low_cmd.motor_cmd[joint].kd = self.kd
-
-    def _control_loop(self):
-        """50Hz 控制回调 — 根据时间表执行当前阶段。"""
-        with self._state_lock:
-            if self.low_state is None:
-                return  # 等待 DDS 状态就绪，跳过本帧
-
-        self.time += self.control_dt
-
-        if self.time >= self.total_time:
-            self.done = True
-            self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 0
-            self.low_cmd.crc = self.crc.Crc(self.low_cmd)
-            self.pub.Write(self.low_cmd)
-            return
-
-        # 查找当前阶段
-        phase_name = ""
-        for t_start, t_end, ptype, pdata in self.timeline:
-            if t_start <= self.time < t_end:
-                phase_name = ptype
-                ratio = np.clip((self.time - t_start) / (t_end - t_start), 0.0, 1.0)
-                current = self._get_current_joint_angles()
-
-                if ptype == "init_zero":
-                    # 从当前位置归零
-                    target = [(1.0 - ratio) * c for c in current]
-                    self._send_joint_cmd(target)
-
-                elif ptype == "transition":
-                    # 从当前位置过渡到目标姿态
-                    name, target_angles = pdata
-                    target = [
-                        ratio * t + (1.0 - ratio) * c
-                        for t, c in zip(target_angles, current)
-                    ]
-                    self._send_joint_cmd(target)
-                    # 首次进入该阶段时打印
-                    if abs(self.time - t_start) < self.control_dt * 1.5:
-                        self._log_pose(name, target_angles)
-
-                elif ptype == "hold":
-                    # 保持目标姿态不变
-                    _, target_angles = pdata
-                    self._send_joint_cmd(target_angles)
-
-                elif ptype == "final_zero":
-                    # 最终归零
-                    target = [(1.0 - ratio) * c for c in current]
-                    self._send_joint_cmd(target)
-                    if abs(self.time - t_start) < self.control_dt * 1.5:
-                        print("\n  [归零]")
-
-                elif ptype == "release":
-                    # 释放 arm_sdk 控制权
-                    enable = 1.0 - ratio
-                    self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = enable
-                    self._send_joint_cmd(current)
-                    if abs(self.time - t_start) < self.control_dt * 1.5:
-                        print("\n  [释放 arm_sdk]")
-
-                break
-
-        # CRC 校验 + 发送
-        self.low_cmd.crc = self.crc.Crc(self.low_cmd)
-        self.pub.Write(self.low_cmd)
-
-    def _log_pose(self, name, _angles):
-        """打印姿态切换信息。"""
+    def _log_pose(self, name):
         print(f"\n  >>> {name}")
 
 
@@ -359,16 +104,13 @@ class MultiPoseController:
 # 主入口
 # ======================================================================
 if __name__ == '__main__':
-
     input("Press Enter to continue...")
 
-    # 初始化 DDS
     if len(sys.argv) > 1:
         ChannelFactoryInitialize(0, sys.argv[1])
     else:
         ChannelFactoryInitialize(0)
 
-    # 创建控制器并启动
     ctrl = MultiPoseController(POSE_SEQUENCE)
     ctrl.Init()
     ctrl.Start()

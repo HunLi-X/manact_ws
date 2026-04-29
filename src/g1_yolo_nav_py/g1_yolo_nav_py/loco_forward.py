@@ -27,6 +27,7 @@ from typing import Optional  # 类型注解
 import numpy as np
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
+from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
@@ -170,13 +171,7 @@ class LocoForwardNode(Node):
     #  检测回调
     # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
-        best_det = None
-        best_score = 0.0
-        for det in msg.detections:
-            if det.results and det.results[0].id == self._target_class:
-                if det.results[0].score > best_score:
-                    best_score = det.results[0].score
-                    best_det = det
+        best_det, best_score = find_best_detection(msg.detections, self._target_class)
         if best_det is not None:
             bbox = best_det.bbox
             self._target_u = bbox.center.x
@@ -203,12 +198,6 @@ class LocoForwardNode(Node):
         except Exception as e:
             self.get_logger().warn(f"深度图转换失败: {e}")
 
-    def _depth_to_meters(self, value: float) -> float:
-        """按深度图编码将原始深度值转换为米。"""
-        if self._depth_encoding in ("16UC1", "mono16"):
-            return value / 1000.0
-        return value
-
     def _update_target_distance(self) -> None:
         """按检测框中心区域计算目标距离。"""
         self._target_distance = None
@@ -217,20 +206,10 @@ class LocoForwardNode(Node):
         if self._target_u is None or self._target_v is None:
             return
 
-        h, w = self._depth_image.shape[:2]
-        px = int(max(0.0, min(1.0, self._target_u)) * (w - 1))
-        py = int(max(0.0, min(1.0, self._target_v)) * (h - 1))
-        r = self._depth_radius
-        x0 = max(0, px - r)
-        x1 = min(w, px + r + 1)
-        y0 = max(0, py - r)
-        y1 = min(h, py + r + 1)
-        region = np.asarray(self._depth_image[y0:y1, x0:x1], dtype=np.float32)
-        valid = region[np.isfinite(region) & (region > 0.0)]
-        if valid.size == 0:
+        raw = sample_depth_at_pixel(self._depth_image, self._target_u, self._target_v, self._depth_radius)
+        if raw is None:
             return
-
-        distance = self._depth_to_meters(float(np.median(valid)))
+        distance = depth_to_meters(raw, self._depth_encoding)
         if math.isfinite(distance) and distance > 0.0:
             self._target_distance = distance
 

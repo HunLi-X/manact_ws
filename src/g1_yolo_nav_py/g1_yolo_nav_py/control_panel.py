@@ -65,7 +65,7 @@ from cv_bridge import CvBridge
 # 3. 本项目导入
 # ==================================================================
 from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState  # 共享状态机
-from g1_yolo_nav_py._vis_utils import get_color as _get_color  # 共享颜色表
+from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共享绘制和转换
 
 # ==================================================================
 # 4. 常量与配置
@@ -516,29 +516,10 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
     # ==================================================================
     def _draw_detections(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
-        out = frame.copy()
         if self._detections is None:
-            return out
+            return frame.copy()
+        out = draw_detections_on_frame(frame, self._detections)
         h, w = out.shape[:2]
-        for det in self._detections.detections:
-            if not det.results:
-                continue
-            class_id = det.results[0].id
-            score = det.results[0].score
-            color = _get_color(class_id)
-
-            cx = det.bbox.center.x * w
-            cy = det.bbox.center.y * h
-            bw = det.bbox.size_x * w
-            bh = det.bbox.size_y * h
-            x1, y1 = int(cx - bw / 2), int(cy - bh / 2)
-            x2, y2 = int(cx + bw / 2), int(cy + bh / 2)
-
-            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
-            label = f"{class_id} {score:.0%}"
-            cv2.rectangle(out, (x1, y1 - 22), (x1 + len(label) * 10, y1), color, -1)
-            cv2.putText(out, label, (x1 + 3, y1 - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
         # 绘制十字准心
         if self._gs_target_u is not None and self._gs_state in (GraspState.ALIGNING, GraspState.APPROACHING):
@@ -555,12 +536,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         ch = canvas.winfo_height() or self._disp_h
         if cw < 2 or ch < 2:
             cw, ch = self._disp_w, self._disp_h
-
-        resized = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        rgb = np.ascontiguousarray(rgb)
-        pil_img = PILImage.fromarray(rgb)
-        return ImageTk.PhotoImage(image=pil_img)
+        return cv2_to_tk(frame, cw, ch)
 
     # ==================================================================
     #  手动控制

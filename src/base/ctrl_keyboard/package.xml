@@ -3,9 +3,9 @@
 <package format="3">
   <name>ctrl_keyboard</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="unitree@todo.todo">unitree</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Unitree G1 机器人键盘控制功能包</description>
+  <maintainer email="developer@example.com">developer</maintainer>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>unitree_api</depend>

@@ -29,6 +29,7 @@ from typing import Optional
 import rclpy
 from rclpy.node import Node
 from vision_msgs.msg import Detection2DArray
+from g1_yolo_nav_py._detection_utils import find_best_detection
 
 # ==================================================================
 # 3. 本项目导入
@@ -113,13 +114,7 @@ class YawAlignNode(Node):
     # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标。"""
-        best_det = None
-        best_score = 0.0
-        for det in msg.detections:
-            if det.results and det.results[0].id == self._target_class:
-                if det.results[0].score > best_score:
-                    best_score = det.results[0].score
-                    best_det = det
+        best_det, best_score = find_best_detection(msg.detections, self._target_class)
         if best_det is not None:
             prev_u = self._target_u
             self._target_u = best_det.bbox.center.x
