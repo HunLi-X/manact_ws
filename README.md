@@ -31,25 +31,37 @@
 ### 项目结构
 
 ```
-manact_ws/
+g1act_ws/
+├── README.md                     # 项目说明文档（中文）
+├── README.en.md                 # 项目说明文档（英文）
+├── CODEBUDDY.md                # AI 编程助手指引文档
+├── requirements.txt             # Python 依赖列表
 ├── src/
-│   ├── g1_yolo_nav_py/         # ROS2 Python 包，包含检测、对齐、前进、控制面板等节点
-│   │   ├── arm/                    # 抓取任务用的 armup.py 和 armdown.py 脚本
-│   │   ├── launch/                  # ROS2 启动文件
-│   │   ├── yolo_detector.py         # YOLO 目标检测节点
-│   │   ├── yaw_align.py             # 步进式偏航对齐节点
-│   │   ├── loco_forward.py          # 前进控制节点
-│   │   ├── grasp_task.py            # 一键抓取任务节点
-│   │   ├── control_panel.py         # 图形化控制面板节点
-│   │   ├── rgbd_capture.py          # RGBD 数据采集节点
-│   │   └── ...                      # 其他功能节点
-│   └── ...                          # 其他 ROS2 包
-├── models/
-│   └── yolo_v11x_best.pt           # YOLOv11x 自定义训练模型权重文件
-├── requirements.txt                # Python 依赖列表
-├── setup.py                        # ROS2 Python 包设置文件
-├── package.xml                     # ROS2 包描述文件
-└── README.md                       # 项目说明文档
+│   ├── D455.md                 # D455 相机说明文档
+│   ├── g1_yolo_nav_py/        # 主 ROS2 Python 包
+│   │   ├── setup.py                # 包设置（entry_points 定义）
+│   │   ├── package.xml            # ROS2 包描述
+│   │   ├── setup.cfg              # 包配置
+│   │   ├── yolo_v11x_best.pt     # YOLOv11x 自定义训练模型
+│   │   ├── config/                # 参数配置文件
+│   │   │   └── yolo_nav.yaml
+│   │   ├── launch/                # ROS2 启动文件
+│   │   │   ├── grasp_task.launch.py
+│   │   │   └── yolo_nav.launch.py
+│   │   ├── arm/                   # 手臂控制脚本（unitree_sdk2py，独立进程）
+│   │   │   ├── arm_common.py        # 手臂公共模块
+│   │   │   ├── arm.py              # 手臂控制演示
+│   │   │   ├── armup.py            # 抓取动作：伸手→抬起→夹紧保持
+│   │   │   └── armdown.py          # 放下动作：伸展→下垂→归零释放
+│   │   └── g1_yolo_nav_py/       # Python 模块代码
+│   │       ├── __init__.py
+│   │       ├── _dds_compat.py      # DDS 兼容层
+│   │       ├── _detection_utils.py  # 检测工具函数
+│   │       ├── _grasp_state.py     # 抓取状态机Mixin
+│   │       └── 其他功能节点
+│   └── base/                   # 参考包（不直接调用）
+│       ├── ctrl_keyboard/        # Loco API 参考实现
+│       └── g1_description/      # URDF 模型（12/23/29 dof）
 ```
 #### 更新代码命令
 ```更新代码命令
