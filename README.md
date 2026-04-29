@@ -31,38 +31,25 @@
 ### 项目结构
 
 ```
-g1act_ws/
+manact_ws/
 ├── src/
-│   ├── g1_yolo_nav_py/                      # YOLO 目标识别与导航功能包
-│   │   ├── g1_yolo_nav_py/
-│   │   │   ├── sport_client.py              # 统一运动控制模块（Loco API）
-│   │   │   ├── yolo_detector.py             # YOLO 检测节点
-│   │   │   ├── spatial_target.py            # 3D 空间投影节点
-│   │   │   ├── detection_visualizer.py      # 检测可视化节点（tkinter）
-│   │   │   ├── control_panel.py             # 控制面板节点（tkinter GUI）
-│   │   │   ├── grasp_task.py                # 抓取任务主控节点
-│   │   │   ├── yaw_align.py                 # 偏航对齐节点（机器人旋转）
-│   │   │   ├── loco_forward.py              # 前进控制节点（Loco API）
-│   │   │   ├── rgbd_capture.py              # RGBD 数据采集节点
-│   │   │   └── distence.py                  # 距离估算工具
-│   │   ├── arm/                             # 手臂控制脚本（unitree_sdk2py，非 ROS2 节点）
-│   │   │   ├── armup.py                     # 手臂抓取（完成后自动退出）
-│   │   │   ├── armdown.py                   # 手臂放下（完成后自动退出）
-│   │   │   └── arm.py                       # 手臂 SDK 基础控制
-│   │   ├── launch/
-│   │   │   └── yolo_nav.launch.py           # 导航管线启动文件
-│   │   ├── config/
-│   │   │   └── yolo_nav.yaml                # 参数配置
-│   │   └── yolo_v11x_best.pt                # YOLOv11 自定义训练模型权重
-│   └── base/                                # G1 机器人基础包
-│       ├── g1_description/                  # URDF/MJCF 模型（12/23/29dof 变体）
-│       ├── g1_driver_py/                    # ROS2 驱动：odom, TF, joint_states
-│       ├── g1_teleop_ctrl_keyboard/         # 键盘遥控（Sport API）
-│       ├── g1_twist_bridge_py/              # Twist → Sport API 桥接
-│       ├── ctrl_keyboard/                   # 键盘+语音控制（Loco API + 手臂动作）
-│       └── h1_description/                  # H1 机器人描述
-├── requirements.txt
-└── README.md
+│   ├── g1_yolo_nav_py/         # ROS2 Python 包，包含检测、对齐、前进、控制面板等节点
+│   │   ├── arm/                    # 抓取任务用的 armup.py 和 armdown.py 脚本
+│   │   ├── launch/                  # ROS2 启动文件
+│   │   ├── yolo_detector.py         # YOLO 目标检测节点
+│   │   ├── yaw_align.py             # 步进式偏航对齐节点
+│   │   ├── loco_forward.py          # 前进控制节点
+│   │   ├── grasp_task.py            # 一键抓取任务节点
+│   │   ├── control_panel.py         # 图形化控制面板节点
+│   │   ├── rgbd_capture.py          # RGBD 数据采集节点
+│   │   └── ...                      # 其他功能节点
+│   └── ...                          # 其他 ROS2 包
+├── models/
+│   └── yolo_v11x_best.pt           # YOLOv11x 自定义训练模型权重文件
+├── requirements.txt                # Python 依赖列表
+├── setup.py                        # ROS2 Python 包设置文件
+├── package.xml                     # ROS2 包描述文件
+└── README.md                       # 项目说明文档
 ```
 #### 更新代码命令
 ```更新代码命令
