@@ -64,12 +64,13 @@ g1act_ws/
 ├── requirements.txt
 └── README.md
 ```
+#### 更新代码命令
 ```更新代码命令
 cd ~/g1act_ws/manact_ws
 git pull
-colcon build --packages-skip h1_description
+colcon build
 ```
-
+#### 每次启动激活虚拟环境命令
 ```每次启动激活虚拟环境命令
 cd ~/g1act_ws/manact_ws
 source ~/g1act_venv/bin/activate
