@@ -687,7 +687,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             except Exception as e:
                 self._append_log(f"[错误] armup.py 异常: {e}")
             finally:
-                self._gs_state = GraspState.MENU
+                self.gs_state = GraspState.MENU
                 self._append_log("[状态] → MENU: 抓取完成，可选择放下")
                 self.root.after(0, self._update_state_display)
 
@@ -728,7 +728,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             except Exception as e:
                 self._append_log(f"[错误] armdown.py 异常: {e}")
             finally:
-                self._gs_state = GraspState.IDLE
+                self.gs_state = GraspState.IDLE
                 self._append_log("[状态] → IDLE: 放下完成")
                 self.root.after(0, self._update_state_display)
 

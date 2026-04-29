@@ -23,6 +23,7 @@ G1 手臂抓取控制 (armup)
 # ==================================================================
 import time  # 控制循环计时与等待
 import sys   # 命令行参数读取（网络接口名）
+import threading  # 保护 low_state 在 DDS 回调与控制线程间的并发访问
 
 # ==================================================================
 # 2. 第三方库导入
@@ -121,6 +122,7 @@ class GrabController:
         self.done = False
         self.first_low_state = False
 
+        self._state_lock = threading.Lock()
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()
         self.low_state = None
         self.crc = CRC()
@@ -159,28 +161,58 @@ class GrabController:
         self.thread = RecurrentThread(
             interval=self.control_dt, target=self._control_loop, name="grab"
         )
+        _t0 = time.time()
         while not self.first_low_state:
+            if time.time() - _t0 > 10.0:
+                raise TimeoutError("未收到关节状态消息，请检查 DDS 通信和网络接口")
             time.sleep(0.1)
         self.thread.Start()
 
     def _state_handler(self, msg):
-        self.low_state = msg
+        with self._state_lock:
+            self.low_state = msg
         if not self.first_low_state:
             self.first_low_state = True
 
     def _get_current_joint_angles(self):
-        return [float(self.low_state.motor_state[j].q) for j in ARM_JOINTS]
+        with self._state_lock:
+            state = self.low_state
+        if state is None:
+            return [0.0] * len(ARM_JOINTS)
+        return [float(state.motor_state[j].q) for j in ARM_JOINTS]
+
+    # 关节角度安全限位（弧度），防止超限指令损坏电机
+    JOINT_LIMITS = {
+        G1JointIndex.LeftShoulderPitch:  (-2.5, 2.5),
+        G1JointIndex.LeftShoulderRoll:   (-1.5, 2.0),
+        G1JointIndex.LeftShoulderYaw:    (-1.5, 1.5),
+        G1JointIndex.LeftElbow:          (-1.5, 2.0),
+        G1JointIndex.LeftWristRoll:      (-1.5, 1.5),
+        G1JointIndex.RightShoulderPitch: (-2.5, 2.5),
+        G1JointIndex.RightShoulderRoll:  (-2.0, 1.5),
+        G1JointIndex.RightShoulderYaw:   (-1.5, 1.5),
+        G1JointIndex.RightElbow:         (-1.5, 2.0),
+        G1JointIndex.RightWristRoll:     (-1.5, 1.5),
+        G1JointIndex.WaistYaw:           (-1.5, 1.5),
+        G1JointIndex.WaistRoll:          (-0.5, 0.5),
+        G1JointIndex.WaistPitch:         (-0.5, 0.5),
+    }
 
     def _send_joint_cmd(self, target_angles):
         self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1
         for i, joint in enumerate(ARM_JOINTS):
-            self.low_cmd.motor_cmd[joint].q = target_angles[i]
+            lo, hi = self.JOINT_LIMITS.get(joint, (-3.14, 3.14))
+            self.low_cmd.motor_cmd[joint].q = float(np.clip(target_angles[i], lo, hi))
             self.low_cmd.motor_cmd[joint].dq = 0.0
             self.low_cmd.motor_cmd[joint].tau = 0.0
             self.low_cmd.motor_cmd[joint].kp = self.kp
             self.low_cmd.motor_cmd[joint].kd = self.kd
 
     def _control_loop(self):
+        with self._state_lock:
+            if self.low_state is None:
+                return  # 等待 DDS 状态就绪，跳过本帧
+
         self.time += self.control_dt
 
         # 序列执行完成后，保持最后的夹紧姿态

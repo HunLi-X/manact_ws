@@ -315,9 +315,13 @@ def _yaw_to_quaternion(yaw: float) -> tuple:
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = SpatialTargetNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == "__main__":

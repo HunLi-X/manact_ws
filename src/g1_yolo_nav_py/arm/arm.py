@@ -21,6 +21,7 @@ G1 人形机器人手臂控制脚本
 # ==================================================================
 import time  # 控制循环计时与等待
 import sys   # 命令行参数读取（网络接口名）
+import threading  # 保护 low_state 在 DDS 回调与控制线程间的并发访问
 
 # ==================================================================
 # 2. 第三方库导入
@@ -130,6 +131,7 @@ class Custom:
         self.mode_machine_ = 0     # 当前运动模式（保留字段）
 
         # ---- DDS 通信对象 ----
+        self._state_lock = threading.Lock()                # 保护 low_state 的并发访问
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()   # 低层指令消息实例
         self.low_state = None                              # 最新低层状态（由回调填充）
 
@@ -191,8 +193,11 @@ class Custom:
             interval=self.control_dt_, target=self.LowCmdWrite, name="control"
         )
         # 阻塞等待，直到收到第一条 lowstate 消息
+        _t0 = time.time()
         while self.first_update_low_state == False:
-            time.sleep(1)
+            if time.time() - _t0 > 10.0:
+                raise TimeoutError("未收到关节状态消息，请检查 DDS 通信和网络接口")
+            time.sleep(0.1)
 
         if self.first_update_low_state == True:
             self.lowCmdWriteThreadPtr.Start()
@@ -203,12 +208,35 @@ class Custom:
         Args:
             msg: 包含所有关节当前状态（q=角度, dq=速度, tau=力矩）
         """
-        self.low_state = msg
+        with self._state_lock:
+            self.low_state = msg
 
         # 标记已收到状态，解除 Start() 中的阻塞等待
         if self.first_update_low_state == False:
             self.first_update_low_state = True
         
+    # 关节角度安全限位（弧度），防止超限指令损坏电机
+    JOINT_LIMITS = {
+        G1JointIndex.LeftShoulderPitch:  (-2.5, 2.5),
+        G1JointIndex.LeftShoulderRoll:   (-1.5, 2.0),
+        G1JointIndex.LeftShoulderYaw:    (-1.5, 1.5),
+        G1JointIndex.LeftElbow:          (-1.5, 2.0),
+        G1JointIndex.LeftWristRoll:      (-1.5, 1.5),
+        G1JointIndex.RightShoulderPitch: (-2.5, 2.5),
+        G1JointIndex.RightShoulderRoll:  (-2.0, 1.5),
+        G1JointIndex.RightShoulderYaw:   (-1.5, 1.5),
+        G1JointIndex.RightElbow:         (-1.5, 2.0),
+        G1JointIndex.RightWristRoll:     (-1.5, 1.5),
+        G1JointIndex.WaistYaw:           (-1.5, 1.5),
+        G1JointIndex.WaistRoll:          (-0.5, 0.5),
+        G1JointIndex.WaistPitch:         (-0.5, 0.5),
+    }
+
+    def _clip_joint(self, joint, value):
+        """将关节角度限制在安全范围内。"""
+        lo, hi = self.JOINT_LIMITS.get(joint, (-3.14, 3.14))
+        return float(np.clip(value, lo, hi))
+
     def LowCmdWrite(self):
         """50Hz 控制回调 — 根据当前阶段计算关节指令并发送。
 
@@ -221,6 +249,10 @@ class Custom:
 
         每帧末尾计算 CRC 并通过 DDS 发送指令。
         """
+        with self._state_lock:
+            if self.low_state is None:
+                return  # 等待 DDS 状态就绪，跳过本帧
+
         self.time_ += self.control_dt_
 
         if self.time_ < self.duration_ :
@@ -232,9 +264,11 @@ class Custom:
             ratio = np.clip(self.time_ / self.duration_, 0.0, 1.0)
             self.low_cmd.motor_cmd[joint].tau = 0.   # 无前馈力矩
             # 目标角度 = (1-ratio) × 当前角度 + ratio × 0（归零）
-            self.low_cmd.motor_cmd[joint].q = (1.0 - ratio) * self.low_state.motor_state[joint].q 
+            with self._state_lock:
+                cur_q = self.low_state.motor_state[joint].q
+            self.low_cmd.motor_cmd[joint].q = self._clip_joint(joint, (1.0 - ratio) * cur_q)
             self.low_cmd.motor_cmd[joint].dq = 0.    # 目标速度为 0
-            self.low_cmd.motor_cmd[joint].kp = self.kp 
+            self.low_cmd.motor_cmd[joint].kp = self.kp
             self.low_cmd.motor_cmd[joint].kd = self.kd
 
         elif self.time_ < self.duration_ * 3 :
@@ -242,11 +276,13 @@ class Custom:
           # 持续时间为 duration_ × 2 = 6 秒，动作更缓慢安全
           for i,joint in enumerate(self.arm_joints):
               ratio = np.clip((self.time_ - self.duration_) / (self.duration_ * 2), 0.0, 1.0)
-              self.low_cmd.motor_cmd[joint].tau = 0.   
+              self.low_cmd.motor_cmd[joint].tau = 0.
               # 目标角度 = ratio × target_pos[i] + (1-ratio) × 当前角度
-              self.low_cmd.motor_cmd[joint].q = ratio * self.target_pos[i] + (1.0 - ratio) * self.low_state.motor_state[joint].q 
-              self.low_cmd.motor_cmd[joint].dq = 0.   
-              self.low_cmd.motor_cmd[joint].kp = self.kp 
+              with self._state_lock:
+                  cur_q = self.low_state.motor_state[joint].q
+              self.low_cmd.motor_cmd[joint].q = self._clip_joint(joint, ratio * self.target_pos[i] + (1.0 - ratio) * cur_q)
+              self.low_cmd.motor_cmd[joint].dq = 0.
+              self.low_cmd.motor_cmd[joint].kp = self.kp
               self.low_cmd.motor_cmd[joint].kd = self.kd
 
         elif self.time_ < self.duration_ * 6 :
@@ -254,11 +290,13 @@ class Custom:
           # 持续时间为 duration_ × 3 = 9 秒，缓慢放下确保安全
           for i,joint in enumerate(self.arm_joints):
               ratio = np.clip((self.time_ - self.duration_*3) / (self.duration_ * 3), 0.0, 1.0)
-              self.low_cmd.motor_cmd[joint].tau = 0.   
+              self.low_cmd.motor_cmd[joint].tau = 0.
               # 目标角度 = (1-ratio) × 当前角度（ratio→1 时趋近于 0）
-              self.low_cmd.motor_cmd[joint].q = (1.0 - ratio) * self.low_state.motor_state[joint].q
-              self.low_cmd.motor_cmd[joint].dq = 0.   
-              self.low_cmd.motor_cmd[joint].kp = self.kp 
+              with self._state_lock:
+                  cur_q = self.low_state.motor_state[joint].q
+              self.low_cmd.motor_cmd[joint].q = self._clip_joint(joint, (1.0 - ratio) * cur_q)
+              self.low_cmd.motor_cmd[joint].dq = 0.
+              self.low_cmd.motor_cmd[joint].kp = self.kp
               self.low_cmd.motor_cmd[joint].kd = self.kd
 
         elif self.time_ < self.duration_ * 7 :

@@ -21,6 +21,7 @@ G1 人形机器人手臂多姿态演示
 
 import time
 import sys
+import threading  # 保护 low_state 在 DDS 回调与控制线程间的并发访问
 
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
 from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
@@ -176,6 +177,7 @@ class MultiPoseController:
         self.first_low_state = False
 
         # DDS 对象
+        self._state_lock = threading.Lock()
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()
         self.low_state = None
         self.crc = CRC()
@@ -232,25 +234,51 @@ class MultiPoseController:
         self.thread = RecurrentThread(
             interval=self.control_dt, target=self._control_loop, name="multi_pose"
         )
+        _t0 = time.time()
         while not self.first_low_state:
+            if time.time() - _t0 > 10.0:
+                raise TimeoutError("未收到关节状态消息，请检查 DDS 通信和网络接口")
             time.sleep(0.1)
         self.thread.Start()
 
     def _state_handler(self, msg):
         """关节状态回调。"""
-        self.low_state = msg
+        with self._state_lock:
+            self.low_state = msg
         if not self.first_low_state:
             self.first_low_state = True
 
     def _get_current_joint_angles(self):
         """从 lowstate 读取当前手臂关节角度。"""
-        return [float(self.low_state.motor_state[j].q) for j in ARM_JOINTS]
+        with self._state_lock:
+            state = self.low_state
+        if state is None:
+            return [0.0] * len(ARM_JOINTS)
+        return [float(state.motor_state[j].q) for j in ARM_JOINTS]
+
+    # 关节角度安全限位（弧度），防止超限指令损坏电机
+    JOINT_LIMITS = {
+        G1JointIndex.LeftShoulderPitch:  (-2.5, 2.5),
+        G1JointIndex.LeftShoulderRoll:   (-1.5, 2.0),
+        G1JointIndex.LeftShoulderYaw:    (-1.5, 1.5),
+        G1JointIndex.LeftElbow:          (-1.5, 2.0),
+        G1JointIndex.LeftWristRoll:      (-1.5, 1.5),
+        G1JointIndex.RightShoulderPitch: (-2.5, 2.5),
+        G1JointIndex.RightShoulderRoll:  (-2.0, 1.5),
+        G1JointIndex.RightShoulderYaw:   (-1.5, 1.5),
+        G1JointIndex.RightElbow:         (-1.5, 2.0),
+        G1JointIndex.RightWristRoll:     (-1.5, 1.5),
+        G1JointIndex.WaistYaw:           (-1.5, 1.5),
+        G1JointIndex.WaistRoll:          (-0.5, 0.5),
+        G1JointIndex.WaistPitch:         (-0.5, 0.5),
+    }
 
     def _send_joint_cmd(self, target_angles):
         """向所有受控关节发送 PD 位置控制指令。"""
         self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1  # 启用 arm_sdk
         for i, joint in enumerate(ARM_JOINTS):
-            self.low_cmd.motor_cmd[joint].q = target_angles[i]
+            lo, hi = self.JOINT_LIMITS.get(joint, (-3.14, 3.14))
+            self.low_cmd.motor_cmd[joint].q = float(np.clip(target_angles[i], lo, hi))
             self.low_cmd.motor_cmd[joint].dq = 0.0
             self.low_cmd.motor_cmd[joint].tau = 0.0
             self.low_cmd.motor_cmd[joint].kp = self.kp
@@ -258,6 +286,10 @@ class MultiPoseController:
 
     def _control_loop(self):
         """50Hz 控制回调 — 根据时间表执行当前阶段。"""
+        with self._state_lock:
+            if self.low_state is None:
+                return  # 等待 DDS 状态就绪，跳过本帧
+
         self.time += self.control_dt
 
         if self.time >= self.total_time:

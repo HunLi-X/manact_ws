@@ -95,9 +95,9 @@ class GraspStateMachineMixin:
         """
         self._gs_node = node
         self._gs_include_idle = include_idle
-        self._gs_net_iface = network_interface
 
         # ---- 声明公共参数 ----
+        node.declare_parameter("network_interface", "")
         node.declare_parameter("detection_topic", "/g1/vision/detections")
         node.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         node.declare_parameter("target_class_id", "chair")
@@ -139,6 +139,9 @@ class GraspStateMachineMixin:
         self._gs_turn_speed = float(p("turn_yaw_speed"))
         self._gs_turn_duration = float(p("turn_duration"))
         self._gs_auto_stand = bool(p("auto_stand"))
+
+        # network_interface: 优先使用函数参数，否则从 ROS 参数读取
+        self._gs_net_iface = network_interface or p("network_interface")
 
         # arm 脚本路径
         arm_dir = p("arm_script_dir")
