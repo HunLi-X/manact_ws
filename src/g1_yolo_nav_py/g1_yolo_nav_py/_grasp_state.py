@@ -109,12 +109,12 @@ class GraspStateMachineMixin:
         node.declare_parameter("center_tolerance", 0.08)
         node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
         node.declare_parameter("step_duration", 0.3)           # 步进式对齐：每步持续时间
-        node.declare_parameter("camera_settle_time", 5.0)      # 步进式对齐：等待相机更新
+        node.declare_parameter("camera_settle_time", 2.0)      # 步进式对齐：等待相机更新
         node.declare_parameter("forward_speed", 0.2)
         node.declare_parameter("arrive_bbox_ratio", 0.45)
         node.declare_parameter("align_stable_time", 1.0)
         node.declare_parameter("lost_timeout", 2.0)
-        node.declare_parameter("search_yaw_speed", 0.6)
+        node.declare_parameter("search_yaw_speed", 0.3)
         node.declare_parameter("turn_yaw_speed", 0.6)
         node.declare_parameter("turn_duration", 2.6)
         node.declare_parameter("auto_stand", True)
