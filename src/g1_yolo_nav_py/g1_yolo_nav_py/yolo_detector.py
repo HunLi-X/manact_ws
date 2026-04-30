@@ -18,8 +18,6 @@ for _p in [
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
 # ==================================================================
-import cv2  # OpenCV 图像格式处理
-import numpy as np  # 数值计算
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
@@ -45,7 +43,7 @@ class YoloDetectorNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("model_path", "yolo_v11x_best.pt")
-        self.declare_parameter("confidence_threshold", 0.25)
+        self.declare_parameter("confidence_threshold", 0.8)
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
@@ -120,16 +118,13 @@ class YoloDetectorNode(Node):
 
         # 保持原始尺寸用于坐标还原
         orig_h, orig_w = cv_image.shape[:2]
-        if not hasattr(self, '_img_logged'):
-            self._img_logged = True
-            self.get_logger().info(f"输入图像尺寸: {orig_w}x{orig_h}, 推理尺寸: {self._max_size}")
 
-        # 推理（不做类别过滤，先看全部结果）
+        # 推理
         results = self._model(
             cv_image,
             conf=self._conf_thresh,
             iou=self._nms_thresh,
-            imgsz=self._max_size,
+            classes=self._target_class_ids if self._target_class_ids else None,
             verbose=False,
         )
 
@@ -138,36 +133,7 @@ class YoloDetectorNode(Node):
         det_array.header = msg.header
 
         if results and len(results) > 0:
-            all_boxes = results[0].boxes
-            # 调试：每 50 帧打印一次原始检测情况
-            if not hasattr(self, '_frame_cnt'):
-                self._frame_cnt = 0
-            self._frame_cnt += 1
-            if self._frame_cnt % 50 == 0:
-                raw_classes = [self._model.names[int(b.cls[0])] for b in all_boxes]
-                raw_confs = [float(b.conf[0]) for b in all_boxes]
-                self.get_logger().info(
-                    f"原始检测 ({len(all_boxes)}个): "
-                    f"{list(zip(raw_classes, [f'{c:.0%}' for c in raw_confs]))}"
-                )
-
-            # 按目标类别过滤
-            if self._target_class_ids:
-                boxes = [b for b in all_boxes if int(b.cls[0]) in self._target_class_ids]
-            else:
-                boxes = list(all_boxes)
-
-            if len(boxes) == 0 and len(all_boxes) > 0:
-                self.get_logger().warn(
-                    f"检测到 {len(all_boxes)} 个物体但无目标类别 "
-                    f"{list(self.get_parameter('target_classes').value)}，"
-                    f"实际检测到: {list(set(self._model.names[int(b.cls[0])] for b in all_boxes))}"
-                )
-            elif len(all_boxes) == 0:
-                self.get_logger().warn(
-                    f"模型未检测到任何物体 (conf>={self._conf_thresh})"
-                )
-
+            boxes = results[0].boxes
             for box in boxes:
                 det = Detection2D()
                 hyp = ObjectHypothesisWithPose()
@@ -202,13 +168,9 @@ class YoloDetectorNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = YoloDetectorNode()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":
