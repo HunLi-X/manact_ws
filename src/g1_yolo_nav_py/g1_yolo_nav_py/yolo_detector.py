@@ -45,7 +45,7 @@ class YoloDetectorNode(Node):
         super().__init__("g1_yolo_detector_node")
 
         # ---- 参数 ----
-        self.declare_parameter("model_path", "yolo_v11x_best.pt")
+        self.declare_parameter("model_path", "yolo_v11s_best.pt")
         self.declare_parameter("confidence_threshold", 0.25)
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
