@@ -119,12 +119,11 @@ class YoloDetectorNode(Node):
         # 保持原始尺寸用于坐标还原
         orig_h, orig_w = cv_image.shape[:2]
 
-        # 推理
+        # 推理（不做类别过滤，先看全部结果）
         results = self._model(
             cv_image,
             conf=self._conf_thresh,
             iou=self._nms_thresh,
-            classes=self._target_class_ids if self._target_class_ids else None,
             verbose=False,
         )
 
@@ -133,14 +132,36 @@ class YoloDetectorNode(Node):
         det_array.header = msg.header
 
         if results and len(results) > 0:
-            boxes = results[0].boxes
-            # 调试：模型原始检测数量（过滤前）
-            if len(boxes) == 0:
-                self.get_logger().warn(
-                    f"未检测到目标 (conf>={self._conf_thresh}, "
-                    f"target_ids={self._target_class_ids}, "
-                    f"目标类别={list(self.get_parameter('target_classes').value)})"
+            all_boxes = results[0].boxes
+            # 调试：每 50 帧打印一次原始检测情况
+            if not hasattr(self, '_frame_cnt'):
+                self._frame_cnt = 0
+            self._frame_cnt += 1
+            if self._frame_cnt % 50 == 0:
+                raw_classes = [self._model.names[int(b.cls[0])] for b in all_boxes]
+                raw_confs = [float(b.conf[0]) for b in all_boxes]
+                self.get_logger().info(
+                    f"原始检测 ({len(all_boxes)}个): "
+                    f"{list(zip(raw_classes, [f'{c:.0%}' for c in raw_confs]))}"
                 )
+
+            # 按目标类别过滤
+            if self._target_class_ids:
+                boxes = [b for b in all_boxes if int(b.cls[0]) in self._target_class_ids]
+            else:
+                boxes = list(all_boxes)
+
+            if len(boxes) == 0 and len(all_boxes) > 0:
+                self.get_logger().warn(
+                    f"检测到 {len(all_boxes)} 个物体但无目标类别 "
+                    f"{list(self.get_parameter('target_classes').value)}，"
+                    f"实际检测到: {list(set(self._model.names[int(b.cls[0])] for b in all_boxes))}"
+                )
+            elif len(all_boxes) == 0:
+                self.get_logger().warn(
+                    f"模型未检测到任何物体 (conf>={self._conf_thresh})"
+                )
+
             for box in boxes:
                 det = Detection2D()
                 hyp = ObjectHypothesisWithPose()
