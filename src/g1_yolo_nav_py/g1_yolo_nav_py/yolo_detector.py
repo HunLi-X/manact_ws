@@ -118,12 +118,16 @@ class YoloDetectorNode(Node):
 
         # 保持原始尺寸用于坐标还原
         orig_h, orig_w = cv_image.shape[:2]
+        if not hasattr(self, '_img_logged'):
+            self._img_logged = True
+            self.get_logger().info(f"输入图像尺寸: {orig_w}x{orig_h}, 推理尺寸: {self._max_size}")
 
         # 推理（不做类别过滤，先看全部结果）
         results = self._model(
             cv_image,
             conf=self._conf_thresh,
             iou=self._nms_thresh,
+            imgsz=self._max_size,
             verbose=False,
         )
 
