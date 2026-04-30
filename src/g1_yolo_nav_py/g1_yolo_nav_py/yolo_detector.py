@@ -5,6 +5,7 @@
 # ==================================================================
 import os  # 路径判断与 sys.path 修改
 import sys  # sys.path 修改
+from collections import deque  # 多帧投票缓冲区
 
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
@@ -26,6 +27,8 @@ from sensor_msgs.msg import Image  # ROS2 图像消息
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D  # 检测结果消息
 from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
 from ament_index_python.packages import get_package_share_directory  # 获取 ROS2 包共享目录
+import cv2  # 图像预处理
+import numpy as np  # 数组操作
 
 # ultralytics: YOLO 目标检测模型库（可选依赖）
 try:
@@ -43,12 +46,15 @@ class YoloDetectorNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("model_path", "yolo_v11x_best.pt")
-        self.declare_parameter("confidence_threshold", 0.8)
+        self.declare_parameter("confidence_threshold", 0.25)
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_classes", ["chair"])  # 按类别名称过滤
         self.declare_parameter("max_image_size", 640)
+        self.declare_parameter("use_tta", False)  # 测试时增强（TTA），提高精度但降低帧率
+        self.declare_parameter("clahe_enabled", True)  # CLAHE 对比度增强
+        self.declare_parameter("voting_window", 3)  # 多帧投票窗口大小（1 表示关闭）
 
         model_path = self.get_parameter("model_path").value
         # 若为相对路径，自动解析为 share 目录下的 models 子目录
@@ -58,8 +64,21 @@ class YoloDetectorNode(Node):
         self._conf_thresh = float(self.get_parameter("confidence_threshold").value)
         self._nms_thresh = float(self.get_parameter("nms_threshold").value)
         self._max_size = int(self.get_parameter("max_image_size").value)
+        self._use_tta = bool(self.get_parameter("use_tta").value)
+        self._clahe_enabled = bool(self.get_parameter("clahe_enabled").value)
+        self._voting_window = int(self.get_parameter("voting_window").value)
 
-        self.get_logger().info(f"模型路径: {model_path}, 置信度阈值: {self._conf_thresh}")
+        # CLAHE 对比度增强器
+        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+        # 多帧投票缓冲区：每帧的检测结果列表
+        self._det_buffer: deque = deque(maxlen=max(self._voting_window, 1))
+
+        self.get_logger().info(
+            f"模型路径: {model_path}, 置信度阈值: {self._conf_thresh}, "
+            f"imgsz: {self._max_size}, TTA: {self._use_tta}, "
+            f"CLAHE: {self._clahe_enabled}, 投票窗口: {self._voting_window}"
+        )
 
         # ---- 加载模型 ----
         if YOLO is None:
@@ -108,6 +127,15 @@ class YoloDetectorNode(Node):
         self.get_logger().info(f"订阅图像: {input_topic}, 发布检测: {output_topic}")
 
     # ------------------------------------------------------------------
+    def _preprocess(self, image: np.ndarray) -> np.ndarray:
+        """CLAHE 对比度增强，改善低光/逆光场景检测。"""
+        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l = self._clahe.apply(l)
+        lab = cv2.merge([l, a, b])
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+    # ------------------------------------------------------------------
     def _image_callback(self, msg: Image) -> None:
         """图像回调：执行推理并发布检测结果。"""
         try:
@@ -119,50 +147,92 @@ class YoloDetectorNode(Node):
         # 保持原始尺寸用于坐标还原
         orig_h, orig_w = cv_image.shape[:2]
 
-        # 推理
-        results = self._model(
-            cv_image,
+        # CLAHE 预处理
+        if self._clahe_enabled:
+            cv_image = self._preprocess(cv_image)
+
+        # 推理参数
+        infer_kwargs = dict(
             conf=self._conf_thresh,
             iou=self._nms_thresh,
             classes=self._target_class_ids if self._target_class_ids else None,
+            imgsz=self._max_size,
             verbose=False,
         )
+        if self._use_tta:
+            infer_kwargs["augment"] = True
 
-        # 构造检测结果
+        results = self._model(cv_image, **infer_kwargs)
+
+        # 提取当前帧检测
+        cur_dets = []
+        if results and len(results) > 0:
+            for box in results[0].boxes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                cx = (x1 + x2) / 2.0 / orig_w
+                cy = (y1 + y2) / 2.0 / orig_h
+                w = (x2 - x1) / orig_w
+                h = (y2 - y1) / orig_h
+                cur_dets.append({
+                    "id": self._model.names[int(box.cls[0])],
+                    "score": float(box.conf[0]),
+                    "cx": cx, "cy": cy, "w": w, "h": h,
+                })
+
+        # 多帧投票：只有连续 N 帧中都出现的检测才输出
+        self._det_buffer.append(cur_dets)
+        stable_dets = self._vote_detections() if len(self._det_buffer) >= self._voting_window else cur_dets
+
+        # 构造并发布
         det_array = Detection2DArray()
         det_array.header = msg.header
 
-        if results and len(results) > 0:
-            boxes = results[0].boxes
-            for box in boxes:
-                det = Detection2D()
-                hyp = ObjectHypothesisWithPose()
-                hyp.id = self._model.names[int(box.cls[0])]
-                hyp.score = float(box.conf[0])
+        for d in stable_dets:
+            det = Detection2D()
+            hyp = ObjectHypothesisWithPose()
+            hyp.id = d["id"]
+            hyp.score = d["score"]
+            bbox = BoundingBox2D()
+            bbox.center.x = d["cx"]
+            bbox.center.y = d["cy"]
+            bbox.size_x = d["w"]
+            bbox.size_y = d["h"]
+            det.bbox = bbox
+            det.results.append(hyp)
+            det_array.detections.append(det)
 
-                # BoundingBox2D（归一化坐标）
-                # 注意：Pose2D 只有 x, y, theta，没有 position 嵌套
-                bbox = BoundingBox2D()
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                cx = (x1 + x2) / 2.0
-                cy = (y1 + y2) / 2.0
-                w = x2 - x1
-                h = y2 - y1
-                bbox.center.x = cx / orig_w
-                bbox.center.y = cy / orig_h
-                bbox.size_x = w / orig_w
-                bbox.size_y = h / orig_h
-
-                det.bbox = bbox
-                det.results.append(hyp)
-                det_array.detections.append(det)
-
-                self.get_logger().info(
-                    f'检测到目标: {hyp.id} (置信度={hyp.score:.0%}), '
-                    f'中心=({bbox.center.x:.2f},{bbox.center.y:.2f})'
-                )
+            self.get_logger().info(
+                f'检测到目标: {hyp.id} (置信度={hyp.score:.0%}), '
+                f'中心=({bbox.center.x:.2f},{bbox.center.y:.2f})'
+            )
 
         self._pub.publish(det_array)
+
+    # ------------------------------------------------------------------
+    def _vote_detections(self) -> list:
+        """多帧投票：IoU 匹配 + 出现次数计数，过滤单帧闪烁误检。"""
+        from math import sqrt
+
+        window = list(self._det_buffer)
+        # 收集最近一帧的检测作为基准
+        latest = window[-1]
+        if not latest:
+            return []
+
+        confirmed = []
+        for det in latest:
+            count = 1
+            for prev_frame in window[:-1]:
+                for prev_det in prev_frame:
+                    # 简化 IoU：用中心点距离判断是否为同一目标
+                    dist = sqrt((det["cx"] - prev_det["cx"]) ** 2 + (det["cy"] - prev_det["cy"]) ** 2)
+                    if dist < 0.1 and det["id"] == prev_det["id"]:
+                        count += 1
+                        break
+            if count >= self._voting_window:
+                confirmed.append(det)
+
+        return confirmed
 
 
 def main(args=None) -> None:
