@@ -43,7 +43,7 @@ class YoloDetectorNode(Node):
 
         # ---- 参数 ----
         self.declare_parameter("model_path", "yolo_v11x_best.pt")
-        self.declare_parameter("confidence_threshold", 0.5)
+        self.declare_parameter("confidence_threshold", 0.25)
         self.declare_parameter("nms_threshold", 0.45)
         self.declare_parameter("input_image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("output_detection_topic", "/g1/vision/detections")
@@ -134,6 +134,13 @@ class YoloDetectorNode(Node):
 
         if results and len(results) > 0:
             boxes = results[0].boxes
+            # 调试：模型原始检测数量（过滤前）
+            if len(boxes) == 0:
+                self.get_logger().warn(
+                    f"未检测到目标 (conf>={self._conf_thresh}, "
+                    f"target_ids={self._target_class_ids}, "
+                    f"目标类别={list(self.get_parameter('target_classes').value)})"
+                )
             for box in boxes:
                 det = Detection2D()
                 hyp = ObjectHypothesisWithPose()
