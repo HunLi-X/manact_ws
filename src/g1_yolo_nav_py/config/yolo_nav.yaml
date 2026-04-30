@@ -6,7 +6,7 @@
 g1_yolo_detector_node:
   ros__parameters:
     model_path: "yolo_v11x_best.pt"           # YOLO 模型文件路径
-    confidence_threshold: 0.8                 # 检测置信度阈值
+    confidence_threshold: 0.5                 # 检测置信度阈值
     nms_threshold: 0.45                       # NMS IoU 阈值
     input_image_topic: "/D455_1/color/image_raw"  # D455 彩色图像话题
     output_detection_topic: "/g1/vision/detections"  # 检测结果话题
