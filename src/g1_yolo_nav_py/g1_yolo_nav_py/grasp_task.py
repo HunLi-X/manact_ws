@@ -10,7 +10,6 @@ G1 抓取任务主控程序
     GRABBING    → 执行 armup.py 抓取
     MENU        → 交互菜单
 
-对齐逻辑与 yaw_align.py 完全一致：步进式旋转，每次一小步后等待相机更新。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task

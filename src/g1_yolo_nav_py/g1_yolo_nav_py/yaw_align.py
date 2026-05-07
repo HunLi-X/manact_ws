@@ -4,6 +4,9 @@
 运动控制通过 SportClient 统一封装（Loco API 方式）。
 不自动执行 FSM 初始化，需手动进入走跑模式。
 
+对齐逻辑封装在 StepAligner 中（_step_aligner.py），
+grasp_task 也使用同一个 StepAligner，保证行为一致。
+
 控制逻辑（步进式）：
     1. 检测目标位置 u（归一化 0~1，0.5 = 画面中央）
     2. 若目标偏离中心，发送一次短时间小幅度旋转（SET_VELOCITY, duration=step_duration）
@@ -34,10 +37,11 @@ from g1_yolo_nav_py._detection_utils import find_best_detection
 # 3. 本项目导入
 # ==================================================================
 from g1_yolo_nav_py.sport_client import SportClient
+from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
 
 
 class YawAlignNode(Node):
-    """偏航对齐节点 — 步进式旋转，适配慢速相机更新。
+    """偏航对齐节点 — 使用 StepAligner 步进式旋转。
 
     每次只移动一小步，等相机更新后再决定下一步，
     避免连续旋转时相机延迟导致过冲。
@@ -51,32 +55,24 @@ class YawAlignNode(Node):
         self.declare_parameter("target_class_id", "chair")
         self.declare_parameter("camera_fov_deg", 87.0)
         self.declare_parameter("center_tolerance", 0.08)
-        self.declare_parameter("step_yaw_speed", 0.3)       # 每步旋转速度 (rad/s)
-        self.declare_parameter("step_duration", 0.8)         # 每步旋转持续时间 (秒)
-        self.declare_parameter("camera_settle_time", 2.0)    # 旋转后等待相机更新时间 (秒)
-        self.declare_parameter("max_consecutive_steps", 10)   # 单次最大连续步数
+        self.declare_parameter("step_yaw_speed", 0.3)
+        self.declare_parameter("step_duration", 0.8)
+        self.declare_parameter("camera_settle_time", 2.0)
+        self.declare_parameter("max_consecutive_steps", 10)
         self.declare_parameter("lost_timeout", 10.0)
-        self.declare_parameter("check_rate", 2.0)            # tick 频率（低频即可）
+        self.declare_parameter("check_rate", 2.0)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
         self._target_class = p("target_class_id")
         self._fov_rad = math.radians(float(p("camera_fov_deg")))
-        self._center_tol = float(p("center_tolerance"))
-        self._step_speed = float(p("step_yaw_speed"))
-        self._step_dur = float(p("step_duration"))
-        self._settle_time = float(p("camera_settle_time"))
-        self._max_steps = int(p("max_consecutive_steps"))
         self._lost_timeout = float(p("lost_timeout"))
         self._check_rate = float(p("check_rate"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._last_detect_time: float = 0.0
-        self._step_count: int = 0           # 本轮已走步数
-        self._settling: bool = False        # 正在等待相机更新
-        self._settle_start: float = 0.0     # 开始等待的时间
-        self._aligned_logged: bool = False  # 已居中是否已打印日志
+        self._aligned_logged: bool = False
 
         # ---- ROS2 订阅 ----
         self.create_subscription(Detection2DArray, self._det_topic,
@@ -88,6 +84,17 @@ class YawAlignNode(Node):
         # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
         self._sport.skip_init()
 
+        # ---- 步进式对齐器（核心逻辑，grasp_task 也使用同一个） ----
+        self._aligner = StepAligner(
+            move_fn=self._sport.move,
+            logger=self.get_logger(),
+            center_tolerance=float(p("center_tolerance")),
+            step_yaw_speed=float(p("step_yaw_speed")),
+            step_duration=float(p("step_duration")),
+            camera_settle_time=float(p("camera_settle_time")),
+            max_consecutive_steps=int(p("max_consecutive_steps")),
+        )
+
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._check_rate, self._tick)
 
@@ -97,8 +104,8 @@ class YawAlignNode(Node):
 
         self.get_logger().info(
             f"偏航对齐节点就绪（步进模式）: 目标={self._target_class}, "
-            f"步速={self._step_speed}rad/s, 步时={self._step_dur}s, "
-            f"等待={self._settle_time}s, 容差={self._center_tol}"
+            f"步速={p('step_yaw_speed')}rad/s, 步时={p('step_duration')}s, "
+            f"等待={p('camera_settle_time')}s, 容差={p('center_tolerance')}"
         )
 
     # ==================================================================
@@ -150,85 +157,27 @@ class YawAlignNode(Node):
                 "请确认 unitree SDK bridge 已启动。"
             )
 
-    # ==================================================================
-    #  步进式对齐逻辑
-    # ==================================================================
+
     def _tick(self) -> None:
-        """步进式对齐：移动一小步 → 等待相机更新 → 再检测 → 再移动。"""
-        # FSM 未就绪时不处理
+        """步进式对齐：委托给 StepAligner。"""
         if not self._sport.ready:
             return
 
         now = time.time()
 
-        # ---- 1. 目标丢失 ----
+        # 目标丢失超时
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            if self._settling:
-                # 等待中丢失目标，停止
-                self._sport.stop()
-                self._settling = False
-                self._step_count = 0
-                self.get_logger().info("[对齐] 等待中目标丢失，停止旋转")
             self._aligned_logged = False
-            return
 
-        error = self._target_u - 0.5
+        action, extra = self._aligner.tick(self._target_u)
 
-        # ---- 2. 已居中 ----
-        if abs(error) < self._center_tol:
-            if self._settling:
-                # 等待后检测到已居中
-                self._settling = False
-                self._step_count = 0
-            if not self._aligned_logged:
-                self._aligned_logged = True
-                self._sport.stop()
-                self.get_logger().info(
-                    f"[对齐] 目标已居中: u={self._target_u:.3f}, "
-                    f"误差={error:.3f} < 容差={self._center_tol}"
-                )
-            return
-
-        # ---- 3. 正在等待相机更新 ----
-        if self._settling:
-            elapsed = now - self._settle_start
-            if elapsed < self._settle_time:
-                # 还在等待中，不动作
-                return
-            # 等待结束，用最新的 target_u 重新判断（已在上面处理了居中/丢失）
-            self._settling = False
-            self.get_logger().info(
-                f"[对齐] 等待结束，重新检测: u={self._target_u:.3f}, 误差={error:.3f}"
-            )
-
-        # ---- 4. 发送一步旋转 ----
-        # 旋转方向：目标在右 (u > 0.5) → 机器人右转 (vyaw < 0)
-        vyaw = -self._step_speed if error > 0 else self._step_speed
-
-        self._sport.move(vyaw=vyaw, duration=self._step_dur)
-        self._step_count += 1
-
-        # 计算旋转角度供日志参考
-        turn_deg = math.degrees(vyaw * self._step_dur)
-
-        self.get_logger().info(
-            f"[对齐] 第{self._step_count}步: u={self._target_u:.3f}, "
-            f"误差={error:+.3f}, vyaw={vyaw:+.2f}rad/s × {self._step_dur}s "
-            f"(≈{turn_deg:+.1f}°), 等待{self._settle_time}s..."
-        )
-
-        # ---- 5. 进入等待状态 ----
-        self._settling = True
-        self._settle_start = now
-        self._aligned_logged = False
-
-        # 超过最大步数保护
-        if self._step_count >= self._max_steps:
-            self.get_logger().warn(
-                f"[对齐] 已连续旋转 {self._step_count} 步仍未居中，"
-                f"重置步数计数器继续尝试"
-            )
-            self._step_count = 0
+        if action == AlignAction.ALIGNED and not self._aligned_logged:
+            self._aligned_logged = True
+            self.get_logger().info(f"[对齐] {extra}")
+        elif action == AlignAction.ROTATING and extra:
+            self.get_logger().info(f"[对齐] {extra}")
+        elif action == AlignAction.LOST and extra:
+            self.get_logger().info(f"[对齐] {extra}")
 
     def destroy_node(self) -> None:
         self._sport.stop()

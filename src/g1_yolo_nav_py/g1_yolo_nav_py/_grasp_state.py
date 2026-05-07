@@ -4,11 +4,11 @@
     - State 枚举（WORKING = 搜索 + 对齐 + 接近，无状态切换）
     - 公共参数声明
     - 检测回调 _on_detection
-    - 统一工作循环 _gs_tick_working（搜索 + 步进式对齐 + 接近，与 yaw_align.py 一致）
+    - 统一工作循环 _gs_tick_working（搜索 + StepAligner 对齐 + 接近）
     - arm 脚本执行（_run_grab / _run_armdown）
     - 右转放下 _do_turn_and_put_down
 
-对齐逻辑与 yaw_align.py 完全一致：步进式旋转，每次一小步后等待相机更新。
+对齐逻辑直接使用 StepAligner（_step_aligner.py），与 yaw_align.py 共用同一份代码。
 
 子类需要实现：
     - _log_info(msg) — 信息日志（grasp_task 用 logger，control_panel 用 _append_log）
@@ -36,6 +36,7 @@ from cv_bridge import CvBridge
 
 from g1_yolo_nav_py.sport_client import SportClient
 from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
+from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
 
 
 # ==================================================================
@@ -146,6 +147,17 @@ class GraspStateMachineMixin:
         # ---- 运动控制客户端 ----
         self._sport = SportClient(node)
 
+        # ---- 步进式对齐器（与 yaw_align.py 共用同一份代码） ----
+        self._gs_aligner = StepAligner(
+            move_fn=self._sport.move,
+            logger=node.get_logger(),
+            center_tolerance=float(p("center_tolerance")),
+            step_yaw_speed=float(p("step_yaw_speed")),
+            step_duration=float(p("step_duration")),
+            camera_settle_time=float(p("camera_settle_time")),
+            max_consecutive_steps=int(p("max_consecutive_steps")),
+        )
+
         # ---- 内部状态 ----
         self._gs_target_u: Optional[float] = None
         self._gs_target_v: Optional[float] = None
@@ -158,10 +170,7 @@ class GraspStateMachineMixin:
         self._gs_align_start: Optional[float] = None
         self._gs_last_forward_time: float = 0.0
         self._gs_state: GraspState = start_state
-        self._gs_settling: bool = False       # 步进式对齐：正在等待相机更新
-        self._gs_settle_start: float = 0.0    # 开始等待的时间
-        self._gs_step_count: int = 0          # 步进式对齐：本轮已走步数
-        self._gs_aligned: bool = False        # 步进式对齐：目标已居中
+        self._gs_aligned: bool = False        # 目标已居中（用于稳定计时和接近判断）
 
         # ---- ROS2 订阅 ----
         sensor_qos = QoSProfile(
