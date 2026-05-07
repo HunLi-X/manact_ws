@@ -112,7 +112,6 @@ class GraspStateMachineMixin:
         node.declare_parameter("search_yaw_speed", 0.3)
         node.declare_parameter("turn_yaw_speed", 0.6)
         node.declare_parameter("turn_duration", 2.6)
-        node.declare_parameter("auto_stand", True)
         node.declare_parameter("arm_script_dir", arm_script_dir or _DEFAULT_ARM_DIR)
 
         p = lambda n: node.get_parameter(n).value
@@ -135,7 +134,6 @@ class GraspStateMachineMixin:
         self._gs_search_speed = float(p("search_yaw_speed"))
         self._gs_turn_speed = float(p("turn_yaw_speed"))
         self._gs_turn_duration = float(p("turn_duration"))
-        self._gs_auto_stand = bool(p("auto_stand"))
 
         # network_interface: 优先使用函数参数，否则从 ROS 参数读取
         self._gs_net_iface = network_interface or p("network_interface")
