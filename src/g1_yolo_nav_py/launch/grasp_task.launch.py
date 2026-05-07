@@ -7,7 +7,7 @@ Launch 文件：G1 抓取任务一键全流程
 启动节点：
     1. RealSense D455 相机驱动
     2. g1_yolo_detector_node    - YOLO 目标检测
-    3. g1_grasp_task_node       - 抓取任务主控（搜索→StepAligner 对齐→接近→抓取→菜单）
+    3. g1_grasp_task_node       - 抓取任务主控（搜索→StepAligner 对齐→ForwardApproach 接近→抓取→菜单）
     4. D455 相机静态 TF
 
 使用示例：

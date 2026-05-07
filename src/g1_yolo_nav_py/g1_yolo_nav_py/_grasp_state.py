@@ -124,7 +124,6 @@ class GraspStateMachineMixin:
         self._gs_use_depth = bool(p("use_depth_distance"))
         self._gs_stop_distance = float(p("stop_distance"))
         self._gs_depth_radius = max(1, int(p("depth_sample_radius")))
-        self._gs_fov_rad = math.radians(float(p("camera_fov_deg")))
         self._gs_arrive_ratio = float(p("arrive_bbox_ratio"))   # 控制面板状态显示用
         self._gs_lost_timeout = float(p("lost_timeout"))
         self._gs_search_speed = float(p("search_yaw_speed"))
