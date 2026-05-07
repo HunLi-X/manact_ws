@@ -2,12 +2,13 @@
 Launch 文件：G1 抓取任务一键全流程
 ===================================
 从相机驱动到抓取完成，一条命令搞定。
+需手动将机器人切换到走跑模式后再启动。
 
 启动节点：
     1. RealSense D455 相机驱动
     2. g1_yolo_detector_node    - YOLO 目标检测
-    3. g1_grasp_task_node       - 抓取任务主控（搜索→对齐→接近→抓取→菜单）
-    5. D455 相机静态 TF
+    3. g1_grasp_task_node       - 抓取任务主控（搜索→StepAligner 对齐→接近→抓取→菜单）
+    4. D455 相机静态 TF
 
 使用示例：
     # 默认配置（检测 chair）
@@ -17,7 +18,7 @@ Launch 文件：G1 抓取任务一键全流程
     ros2 launch g1_yolo_nav_py grasp_task.launch.py target_class:=bottle
 
     # 指定网卡 + 降低速度
-    ros2 launch g1_yolo_nav_py grasp_task.launch.py \
+    ros2 launch g1_yolo_nav_py grasp_task.launch.py \\
         network_interface:=eth0 forward_speed:=0.15
 
     # 不启动相机（相机已在其他地方启动）

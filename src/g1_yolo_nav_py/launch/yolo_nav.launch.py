@@ -1,14 +1,12 @@
 """
 Launch 文件：启动 YOLO 目标识别 + 偏航对齐 + 前进接近
+需手动将机器人切换到走跑模式后再启动。
 
 启动节点：
     1. g1_yolo_detector_node     - YOLO 目标检测
-    2. g1_yaw_align_node         - 偏航对齐（机器人旋转，非腰部旋转）
+    2. g1_yaw_align_node         - 偏航对齐（StepAligner 步进式旋转）
     3. g1_loco_forward_node      - Loco API 前进控制
     4. d455_camera_tf_publisher   - D455 相机静态 TF
-
-控制方式：
-    所有运动控制通过 Loco API（/api/sport/request）完成（参考 ctrl_keyboard 已验证方案）。
 
 使用示例：
     ros2 launch g1_yolo_nav_py yolo_nav.launch.py
