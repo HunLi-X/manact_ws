@@ -178,12 +178,8 @@ class GraspStateMachineMixin:
                 Image, self._gs_depth_topic, self._gs_on_depth, sensor_qos
             )
 
-        # ---- FSM 初始化 ----
-        if self._gs_auto_stand:
-            self._sport.auto_init_if_needed()
-        else:
-            self._sport.skip_init()
-            node.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
+        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
+        self._sport.skip_init()
 
     # ------------------------------------------------------------------
     #  属性
