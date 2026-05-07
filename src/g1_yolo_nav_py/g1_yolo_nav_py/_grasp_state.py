@@ -75,7 +75,7 @@ class GraspStateMachineMixin:
         node: Node,
         *,
         include_idle: bool = False,
-        start_state: GraspState = GraspState.SEARCHING,
+        start_state: GraspState = GraspState.WORKING,
         arm_script_dir: Optional[str] = None,
         network_interface: str = "",
     ) -> None:
