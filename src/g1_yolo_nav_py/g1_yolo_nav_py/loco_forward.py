@@ -3,8 +3,8 @@
 """
 前进控制节点 — 检测到目标对齐后，通过 Loco API SET_VELOCITY 控制机器人前进。
 
-运动控制通过 SportClient 统一封装（Loco API 方式，参考 ctrl_keyboard 已验证方案）。
-启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
+运动控制通过 SportClient 统一封装（Loco API 方式）。
+不自动执行 FSM 初始化，需手动进入走跑模式。
 
 状态机：
     IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
@@ -63,7 +63,6 @@ class LocoForwardNode(Node):
         self.declare_parameter("arrive_bbox_ratio", 0.45)
         self.declare_parameter("lost_timeout", 1.0)
         self.declare_parameter("check_rate", 10.0)
-        self.declare_parameter("auto_stand", True)
         self.declare_parameter("sit_on_exit", True)  # 退出时是否自动坐下
 
         p = lambda n: self.get_parameter(n).value
@@ -79,7 +78,6 @@ class LocoForwardNode(Node):
         self._arrive_ratio = float(p("arrive_bbox_ratio"))
         self._lost_timeout = float(p("lost_timeout"))
         self._rate = float(p("check_rate"))
-        self._auto_stand = bool(p("auto_stand"))
         self._sit_on_exit = bool(p("sit_on_exit"))
 
         # ---- 内部状态 ----
@@ -114,12 +112,8 @@ class LocoForwardNode(Node):
         # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
 
-        # ---- FSM 初始化 ----
-        if self._auto_stand:
-            self._sport.auto_init_if_needed()
-        else:
-            self._sport.skip_init()
-            self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
+        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
+        self._sport.skip_init()
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
@@ -131,7 +125,7 @@ class LocoForwardNode(Node):
         self.get_logger().info(
             f"前进节点就绪（Loco API）: 速度={self._speed}m/s, "
             f"深度距离={self._use_depth}(停止≤{self._stop_distance}m), "
-            f"bbox到达={self._arrive_ratio}, auto_stand={self._auto_stand}"
+            f"bbox到达={self._arrive_ratio}"
         )
 
     # ==================================================================

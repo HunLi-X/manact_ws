@@ -6,10 +6,11 @@ G1 抓取任务主控程序
 一键执行：YOLO 检测 → 搜索 → 对齐 → 接近 → 抓取 → 交互菜单
 
 状态机：
-    WORKING     → 搜索 + 步进式对齐 + 接近（连续行为，无状态切换）
+    WORKING     → 搜索 + StepAligner 对齐 + 接近（连续行为，无状态切换）
     GRABBING    → 执行 armup.py 抓取
     MENU        → 交互菜单
 
+对齐逻辑直接使用 StepAligner（_step_aligner.py），与 yaw_align.py 共用同一份代码。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task
