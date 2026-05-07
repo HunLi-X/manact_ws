@@ -292,10 +292,11 @@ class GraspStateMachineMixin:
     #  统一工作循环（搜索 + 对齐 + 接近，无状态切换）
     # ------------------------------------------------------------------
     def _gs_tick_working(self) -> None:
-        """WORKING：搜索 → StepAligner 对齐 → 接近。
+        """WORKING：搜索 → StepAligner 对齐 → ForwardApproach 接近。
 
         不做状态切换，一个连续函数处理所有运动阶段。
-        对齐逻辑委托给 StepAligner（与 yaw_align.py 共用同一份代码）。
+        对齐逻辑委托给 StepAligner（与 yaw_align.py 共用）。
+        接近逻辑委托给 ForwardApproach（与 loco_forward.py 共用）。
         """
         now = time.time()
 
@@ -306,6 +307,7 @@ class GraspStateMachineMixin:
                 self._log_info("[工作] 等待中目标丢失，停止旋转")
             self._gs_aligned = False
             self._gs_aligner.reset()
+            self._gs_approach.reset()
             self._sport.move(vyaw=self._gs_search_speed)
             return
 
@@ -325,52 +327,31 @@ class GraspStateMachineMixin:
                 self._log_info(f"[工作] {extra}")
             return
 
-        # ---- 3. 已居中：稳定后检查是否到达 ----
+        # ---- 3. 已居中，前进接近（委托给 ForwardApproach） ----
         if not self._gs_aligned:
             self._gs_aligned = True
             self._log_info(f"[工作] {extra}")
 
-        # 居中稳定计时
-        if self._gs_align_start is None:
-            self._gs_align_start = now
-        if now - self._gs_align_start < self._gs_stable_time:
-            return
+        app_action, app_msg = self._gs_approach.tick(
+            target_u=self._gs_target_u,
+            target_distance=self._gs_target_distance,
+            bbox_size_x=self._gs_bbox_size_x,
+            bbox_size_y=self._gs_bbox_size_y,
+        )
 
-        # 深度距离到达判断（优先）
-        if self._gs_use_depth and self._gs_target_distance is not None:
-            if self._gs_target_distance <= self._gs_stop_distance:
-                self._sport.stop()
-                self.gs_state = GraspState.GRABBING
-                self._log_info(
-                    f"[工作] 到达目标 (深度={self._gs_target_distance:.2f}m)，开始抓取"
-                )
-                self._gs_run_grab()
-                return
-
-        # bbox 占比到达判断（fallback）
-        bbox_max = max(self._gs_bbox_size_x, self._gs_bbox_size_y)
-        if bbox_max >= self._gs_arrive_ratio:
-            self._sport.stop()
+        if app_action == ApproachAction.ARRIVED:
             self.gs_state = GraspState.GRABBING
-            self._log_info(
-                f"[工作] 到达目标 (bbox={bbox_max:.2f})，开始抓取"
-            )
+            self._log_info(f"[工作] {app_msg}，开始抓取")
             self._gs_run_grab()
             return
 
-        # 目标偏离过大，停止前进，重新对齐（不切换状态）
-        error = abs(self._gs_target_u - 0.5)
-        if error > self._gs_center_tol * 2:
-            self._sport.stop()
+        if app_action == ApproachAction.DRIFTED:
             self._gs_aligned = False
-            self._gs_align_start = None
             self._gs_aligner.reset()
-            self._log_info("[工作] 目标偏离，重新对齐")
+            self._log_info(f"[工作] {app_msg}")
             return
 
-        # 前进接近
-        self._sport.move(vx=self._gs_fwd_speed)
-        self._gs_last_forward_time = now
+        # APPROACHING / WAIT → 继续等下一 tick
 
     # ------------------------------------------------------------------
     #  arm 脚本执行
