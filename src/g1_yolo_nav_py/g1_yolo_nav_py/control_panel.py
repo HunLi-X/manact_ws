@@ -10,15 +10,9 @@ G1 NavGrasp 控制面板 (tkinter)
 
 状态机（共享自 _grasp_state.py）：
     IDLE        → 空闲等待
-    SEARCHING   → 旋转搜索目标
-    ALIGNING    → 偏航对齐让目标居中
-    APPROACHING → 前进到目标附近
+    WORKING     → 搜索 + 步进式对齐 + 接近（连续行为，无状态切换）
     GRABBING    → 执行 armup.py 抓取
     MENU        → 交互菜单（放下/右转放下）
-
-控制方式：
-    所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    使用 Loco API（SET_VELOCITY/SET_FSM_ID 等，参考 ctrl_keyboard 已验证方案）。
 
 运行：
     ros2 run g1_yolo_nav_py control_panel

@@ -1,18 +1,14 @@
 """抓取任务状态机基类 — grasp_task.py 与 control_panel.py 共享的逻辑。
 
 提取以下共享内容：
-    - State 枚举
+    - State 枚举（WORKING = 搜索 + 对齐 + 接近，无状态切换）
     - 公共参数声明
     - 检测回调 _on_detection
-    - 步进式对齐 _tick_aligning（移动一小步 → 等待相机更新 → 再检测）
-    - 状态机 tick / _tick_searching / _tick_approaching
+    - 统一工作循环 _gs_tick_working（搜索 + 步进式对齐 + 接近，与 yaw_align.py 一致）
     - arm 脚本执行（_run_grab / _run_armdown）
     - 右转放下 _do_turn_and_put_down
 
-运动控制使用 Loco API（参考 ctrl_keyboard 已验证方案）：
-    - SET_VELOCITY(7105): {"velocity": [vx, vy, vyaw], "duration": t}
-    - SET_FSM_ID(7101): {"data": fsm_id}
-    - SET_BALANCE_MODE(7102): {"data": mode}
+对齐逻辑与 yaw_align.py 完全一致：步进式旋转，每次一小步后等待相机更新。
 
 子类需要实现：
     - _log_info(msg) — 信息日志（grasp_task 用 logger，control_panel 用 _append_log）
