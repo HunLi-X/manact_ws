@@ -2,18 +2,17 @@
 偏航对齐节点 — 步进式旋转对齐（适配慢速相机更新）。
 
 运动控制通过 SportClient 统一封装（Loco API 方式）。
-启动时自动执行 FSM 初始化（DAMP → STAND_UP → START → WALK_RUN → CONTINUOUS_GAIT）。
+不自动执行 FSM 初始化，需手动进入走跑模式。
 
 控制逻辑（步进式）：
     1. 检测目标位置 u（归一化 0~1，0.5 = 画面中央）
     2. 若目标偏离中心，发送一次短时间小幅度旋转（SET_VELOCITY, duration=step_duration）
-    3. 等待 camera_settle_time（默认 5 秒）让相机更新
+    3. 等待 camera_settle_time（默认 2 秒）让相机更新
     4. 重新检测目标位置，重复步骤 2~3
     5. 目标居中后停止
 
 运行：
     ros2 run g1_yolo_nav_py yaw_align
-    ros2 run g1_yolo_nav_py yaw_align --ros-args -p auto_stand:=false
 """
 
 # ==================================================================
@@ -58,7 +57,6 @@ class YawAlignNode(Node):
         self.declare_parameter("max_consecutive_steps", 10)   # 单次最大连续步数
         self.declare_parameter("lost_timeout", 10.0)
         self.declare_parameter("check_rate", 2.0)            # tick 频率（低频即可）
-        self.declare_parameter("auto_stand", True)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
@@ -71,7 +69,6 @@ class YawAlignNode(Node):
         self._max_steps = int(p("max_consecutive_steps"))
         self._lost_timeout = float(p("lost_timeout"))
         self._check_rate = float(p("check_rate"))
-        self._auto_stand = bool(p("auto_stand"))
 
         # ---- 内部状态 ----
         self._target_u: Optional[float] = None
@@ -88,12 +85,8 @@ class YawAlignNode(Node):
         # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
 
-        # ---- FSM 初始化 ----
-        if self._auto_stand:
-            self._sport.auto_init_if_needed()
-        else:
-            self._sport.skip_init()
-            self.get_logger().info("跳过自动状态初始化，请确保机器人已处于走跑模式")
+        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
+        self._sport.skip_init()
 
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._check_rate, self._tick)
@@ -105,8 +98,7 @@ class YawAlignNode(Node):
         self.get_logger().info(
             f"偏航对齐节点就绪（步进模式）: 目标={self._target_class}, "
             f"步速={self._step_speed}rad/s, 步时={self._step_dur}s, "
-            f"等待={self._settle_time}s, 容差={self._center_tol}, "
-            f"auto_stand={self._auto_stand}"
+            f"等待={self._settle_time}s, 容差={self._center_tol}"
         )
 
     # ==================================================================
