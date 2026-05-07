@@ -6,8 +6,8 @@
 运动控制通过 SportClient 统一封装（Loco API 方式）。
 不自动执行 FSM 初始化，需手动进入走跑模式。
 
-状态机：
-    IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
+前进逻辑封装在 ForwardApproach 中（_forward_approach.py），
+grasp_task 也使用同一个 ForwardApproach，保证行为一致。
 
 运行：
     ros2 run g1_yolo_nav_py loco_forward
@@ -18,34 +18,30 @@
 # 1. 标准库导入
 # ==================================================================
 import math
-import time  # 计时
-from typing import Optional  # 类型注解
+import time
+from typing import Optional
 
 # ==================================================================
 # 2. 第三方库与 ROS2 导入
 # ==================================================================
 import numpy as np
-import rclpy  # ROS2 Python 客户端库
-from rclpy.node import Node  # ROS2 节点基类
+import rclpy
+from rclpy.node import Node
 from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
-from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
+from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
 # ==================================================================
 # 3. 本项目导入
 # ==================================================================
-from g1_yolo_nav_py.sport_client import SportClient  # 统一运动控制客户端
+from g1_yolo_nav_py.sport_client import SportClient
+from g1_yolo_nav_py._forward_approach import ForwardApproach, ApproachAction
 
 
 class LocoForwardNode(Node):
-    """
-    前进节点 — 目标对齐后通过 Loco API SET_VELOCITY 前进到目标。
-
-    状态机：
-        IDLE ──(目标居中且稳定)──→ MOVING ──(到达/丢失)──→ IDLE
-    """
+    """前进节点 — 使用 ForwardApproach 前进到目标。"""
 
     def __init__(self) -> None:
         super().__init__("g1_loco_forward_node")
@@ -63,19 +59,14 @@ class LocoForwardNode(Node):
         self.declare_parameter("arrive_bbox_ratio", 0.45)
         self.declare_parameter("lost_timeout", 1.0)
         self.declare_parameter("check_rate", 10.0)
-        self.declare_parameter("sit_on_exit", True)  # 退出时是否自动坐下
+        self.declare_parameter("sit_on_exit", True)
 
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
         self._depth_topic = p("depth_topic")
         self._target_class = p("target_class_id")
         self._use_depth = bool(p("use_depth_distance"))
-        self._stop_distance = float(p("stop_distance"))
         self._depth_radius = max(1, int(p("depth_sample_radius")))
-        self._speed = float(p("forward_speed"))
-        self._center_tol = float(p("center_tolerance"))
-        self._stable_time = float(p("align_stable_time"))
-        self._arrive_ratio = float(p("arrive_bbox_ratio"))
         self._lost_timeout = float(p("lost_timeout"))
         self._rate = float(p("check_rate"))
         self._sit_on_exit = bool(p("sit_on_exit"))
@@ -89,9 +80,6 @@ class LocoForwardNode(Node):
         self._bbox_size_x: float = 0.0
         self._bbox_size_y: float = 0.0
         self._last_detect_time: float = 0.0
-        self._moving: bool = False
-        self._align_start: Optional[float] = None
-        self._last_forward_time: float = 0.0
 
         # ---- CV Bridge ----
         self._bridge = CvBridge()
@@ -99,8 +87,7 @@ class LocoForwardNode(Node):
         # ---- ROS2 订阅 ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=5,
+            history=HistoryPolicy.KEEP_LAST, depth=5,
         )
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, 10)
@@ -115,24 +102,36 @@ class LocoForwardNode(Node):
         # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
         self._sport.skip_init()
 
+        # ---- 前进接近器（核心逻辑，grasp_task 也使用同一个） ----
+        self._approach = ForwardApproach(
+            move_fn=self._sport.move,
+            stop_fn=self._sport.stop,
+            logger=self.get_logger(),
+            forward_speed=float(p("forward_speed")),
+            center_tolerance=float(p("center_tolerance")),
+            align_stable_time=float(p("align_stable_time")),
+            use_depth=self._use_depth,
+            stop_distance=float(p("stop_distance")),
+            arrive_bbox_ratio=float(p("arrive_bbox_ratio")),
+        )
+
         # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
 
-        # ---- 延迟诊断（3秒后检查关键话题，只执行一次）----
+        # ---- 延迟诊断 ----
         self._diag_done = False
         self._diag_timer = self.create_timer(3.0, self._diag_check)
 
         self.get_logger().info(
-            f"前进节点就绪（Loco API）: 速度={self._speed}m/s, "
-            f"深度距离={self._use_depth}(停止≤{self._stop_distance}m), "
-            f"bbox到达={self._arrive_ratio}"
+            f"前进节点就绪: 速度={p('forward_speed')}m/s, "
+            f"深度={self._use_depth}(停止≤{p('stop_distance')}m), "
+            f"bbox到达={p('arrive_bbox_ratio')}"
         )
 
     # ==================================================================
     #  诊断
     # ==================================================================
     def _diag_check(self):
-        """启动后延迟检查关键话题状态。"""
         if self._diag_done:
             return
         self._diag_done = True
@@ -156,8 +155,7 @@ class LocoForwardNode(Node):
         )
         if sport_sub_count == 0:
             self.get_logger().error(
-                "[诊断] ⚠ 运动话题无订阅者! "
-                "MOVE 命令不会被机器人执行! "
+                "[诊断] 运动话题无订阅者! "
                 "请确认 unitree SDK bridge 已启动。"
             )
 
@@ -183,7 +181,6 @@ class LocoForwardNode(Node):
     #  深度图回调
     # ==================================================================
     def _on_depth(self, msg: Image) -> None:
-        """缓存最新深度图，支持 16UC1(mm) 和 32FC1(m)。"""
         try:
             self._depth_image = self._bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
@@ -193,7 +190,6 @@ class LocoForwardNode(Node):
             self.get_logger().warn(f"深度图转换失败: {e}")
 
     def _update_target_distance(self) -> None:
-        """按检测框中心区域计算目标距离。"""
         self._target_distance = None
         if not self._use_depth or self._depth_image is None:
             return
@@ -208,83 +204,28 @@ class LocoForwardNode(Node):
             self._target_distance = distance
 
     # ==================================================================
-    #  状态机
+    #  tick（委托给 ForwardApproach）
     # ==================================================================
-    def _start_move(self) -> None:
-        """开始前进。"""
-        if self._moving:
-            return
-        self._sport.move(vx=self._speed)
-        self._moving = True
-        self._last_forward_time = time.time()
-        self.get_logger().info(f"开始前进: vx={self._speed} m/s")
-
-    def _continue_move(self) -> None:
-        """持续前进（每秒发送一次 MOVE）。"""
-        now = time.time()
-        if now - self._last_forward_time >= 1.0:
-            self._sport.move(vx=self._speed)
-            self._last_forward_time = now
-
-    def _stop_move(self) -> None:
-        """停止前进。"""
-        if not self._moving:
-            return
-        self._sport.stop()
-        self._moving = False
-        self.get_logger().info("停止前进")
-
     def _tick(self) -> None:
-        now = time.time()
-
-        # FSM 未就绪时不处理
         if not self._sport.ready:
             return
 
-        # ---- 1. 目标丢失 ----
+        now = time.time()
+
+        # 目标丢失超时
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
-            self._stop_move()
-            self._align_start = None
+            self._approach.stop()
             return
 
-        error = abs(self._target_u - 0.5)
+        action, msg = self._approach.tick(
+            target_u=self._target_u,
+            target_distance=self._target_distance,
+            bbox_size_x=self._bbox_size_x,
+            bbox_size_y=self._bbox_size_y,
+        )
 
-        # ---- 2. 目标偏离中心 ----
-        if error > self._center_tol:
-            self._stop_move()
-            self._align_start = None
-            return
-
-        # ---- 3. 开始/更新居中计时 ----
-        if self._align_start is None:
-            self._align_start = now
-
-        aligned_dur = now - self._align_start
-
-        # ---- 4. 到达判断（深度距离优先，bbox 作为 fallback） ----
-        if self._use_depth and self._target_distance is not None:
-            if self._target_distance <= self._stop_distance:
-                self._stop_move()
-                self.get_logger().info(
-                    f"到达目标! 深度距离={self._target_distance:.2f}m "
-                    f"<= {self._stop_distance:.2f}m"
-                )
-                return
-
-        bbox_max = max(self._bbox_size_x, self._bbox_size_y)
-        if bbox_max >= self._arrive_ratio:
-            self._stop_move()
-            self.get_logger().info(
-                f"到达目标! bbox={bbox_max:.2f} >= {self._arrive_ratio}"
-            )
-            return
-
-        # ---- 5. 居中稳定 → 前进 ----
-        if aligned_dur >= self._stable_time:
-            if not self._moving:
-                self._start_move()
-            else:
-                self._continue_move()
+        if action == ApproachAction.ARRIVED and msg:
+            self.get_logger().info(f"[前进] {msg}")
 
     def destroy_node(self) -> None:
         self._sport.stop()
