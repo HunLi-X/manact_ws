@@ -74,9 +74,7 @@ from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共
 # 状态中文显示
 _STATE_LABELS = {
     GraspState.IDLE: "空闲",
-    GraspState.SEARCHING: "搜索中",
-    GraspState.ALIGNING: "对齐中",
-    GraspState.APPROACHING: "接近中",
+    GraspState.WORKING: "执行中",
     GraspState.GRABBING: "抓取中",
     GraspState.MENU: "操作菜单",
 }
@@ -106,12 +104,10 @@ _TEXT_MUTED      = "#94A3B8"   # 弱化文字 (Slate-400)
 
 # 状态对应颜色
 _STATE_COLORS = {
-    GraspState.IDLE:        _TEXT_SECONDARY,
-    GraspState.SEARCHING:   _ACCENT_ORANGE,
-    GraspState.ALIGNING:    _ACCENT_CYAN,
-    GraspState.APPROACHING: _ACCENT_BLUE,
-    GraspState.GRABBING:    _ACCENT_RED,
-    GraspState.MENU:        _ACCENT_GREEN,
+    GraspState.IDLE:     _TEXT_SECONDARY,
+    GraspState.WORKING:  _ACCENT_CYAN,
+    GraspState.GRABBING: _ACCENT_RED,
+    GraspState.MENU:     _ACCENT_GREEN,
 }
 
 
@@ -522,7 +518,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         h, w = out.shape[:2]
 
         # 绘制十字准心
-        if self._gs_target_u is not None and self._gs_state in (GraspState.ALIGNING, GraspState.APPROACHING):
+        if self._gs_target_u is not None and self._gs_state == GraspState.WORKING:
             cx = int(self._gs_target_u * w)
             cy = h // 2
             cv2.line(out, (cx - 15, cy), (cx + 15, cy), (0, 255, 255), 1)
@@ -583,9 +579,11 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._gs_state = GraspState.SEARCHING
+        self._gs_state = GraspState.WORKING
         self._gs_align_start = None
-        self._append_log(f"[状态] → SEARCHING: 开始搜索 '{self._gs_target_class}'")
+        self._gs_aligned = False
+        self._gs_settling = False
+        self._append_log(f"[状态] → WORKING: 开始搜索 '{self._gs_target_class}'")
         self._update_state_display()
 
     def _do_grab(self):

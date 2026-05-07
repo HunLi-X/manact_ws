@@ -3,19 +3,14 @@
 """
 G1 抓取任务主控程序
 ==================
-一键执行：YOLO 检测 → 偏航对齐 → 前进接近 → 抓取 → 交互菜单
+一键执行：YOLO 检测 → 搜索 → 对齐 → 接近 → 抓取 → 交互菜单
 
 状态机：
-    SEARCHING   → 旋转搜索目标
-    ALIGNING    → 偏航对齐让目标居中
-    APPROACHING → 前进到目标附近
+    WORKING     → 搜索 + 步进式对齐 + 接近（连续行为，无状态切换）
     GRABBING    → 执行 armup.py 抓取
     MENU        → 交互菜单
 
-控制方式：
-    所有运动控制通过 SportClient 统一封装（/api/sport/request），
-    使用 Loco API（SET_VELOCITY/SET_FSM_ID 等，参考 ctrl_keyboard 已验证方案）。
-    启动时自动执行 FSM 初始化（DAMP → STAND_UP → WALK_RUN → CONTINUOUS_GAIT）。
+对齐逻辑与 yaw_align.py 完全一致：步进式旋转，每次一小步后等待相机更新。
 
 运行：
     ros2 run g1_yolo_nav_py grasp_task
@@ -36,7 +31,7 @@ class GraspTaskNode(Node, GraspStateMachineMixin):
 
         self._init_grasp_state(
             self,
-            start_state=GraspState.SEARCHING,
+            start_state=GraspState.WORKING,
         )
 
         # ---- 定时器（10Hz）----
