@@ -4,11 +4,12 @@
     - State 枚举（WORKING = 搜索 + 对齐 + 接近，无状态切换）
     - 公共参数声明
     - 检测回调 _on_detection
-    - 统一工作循环 _gs_tick_working（搜索 + StepAligner 对齐 + 接近）
+    - 统一工作循环 _gs_tick_working（搜索 + StepAligner 对齐 + ForwardApproach 接近）
     - arm 脚本执行（_run_grab / _run_armdown）
     - 右转放下 _do_turn_and_put_down
 
 对齐逻辑直接使用 StepAligner（_step_aligner.py），与 yaw_align.py 共用同一份代码。
+接近逻辑直接使用 ForwardApproach（_forward_approach.py），与 loco_forward.py 共用同一份代码。
 
 子类需要实现：
     - _log_info(msg) — 信息日志（grasp_task 用 logger，control_panel 用 _append_log）
