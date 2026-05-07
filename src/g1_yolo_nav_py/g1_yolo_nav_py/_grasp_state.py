@@ -280,92 +280,48 @@ class GraspStateMachineMixin:
     #  统一工作循环（搜索 + 对齐 + 接近，无状态切换）
     # ------------------------------------------------------------------
     def _gs_tick_working(self) -> None:
-        """WORKING：搜索 → 步进式对齐 → 接近，与 yaw_align.py 逻辑一致。
+        """WORKING：搜索 → StepAligner 对齐 → 接近。
 
         不做状态切换，一个连续函数处理所有运动阶段。
+        对齐逻辑委托给 StepAligner（与 yaw_align.py 共用同一份代码）。
         """
         now = time.time()
 
         # ---- 1. 未检测到目标：原地旋转搜索 ----
         if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
-            if self._gs_settling:
-                self._sport.stop()
-                self._gs_settling = False
-                self._gs_step_count = 0
+            if self._gs_aligner.settling:
+                self._gs_aligner.stop()
                 self._log_info("[工作] 等待中目标丢失，停止旋转")
             self._gs_aligned = False
+            self._gs_aligner.reset()
             self._sport.move(vyaw=self._gs_search_speed)
             return
 
-        # ---- 2. 检测到目标，步进式对齐 ----
-        error = self._gs_target_u - 0.5
+        # ---- 2. 检测到目标，步进式对齐（委托给 StepAligner） ----
+        action, extra = self._gs_aligner.tick(self._gs_target_u)
 
-        if abs(error) >= self._gs_center_tol:
-            # 未居中：重置对齐标志
-            self._gs_aligned = False
-            self._gs_align_start = None
+        if action == AlignAction.ROTATING:
+            if extra:
+                self._log_info(f"[工作] {extra}")
+            return
 
-            # 正在等待相机更新
-            if self._gs_settling:
-                elapsed = now - self._gs_settle_start
-                if elapsed < self._gs_settle_time:
-                    return  # 还在等待中
-                # 等待结束，重新检测
-                self._gs_settling = False
-                self._log_info(
-                    f"[工作] 等待结束，重新检测: u={self._gs_target_u:.3f}, 误差={error:.3f}"
-                )
+        if action == AlignAction.WAIT:
+            return
 
-            # 目标在等待中丢失
-            if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
-                self._sport.stop()
-                self._gs_settling = False
-                self._gs_step_count = 0
-                self._log_info("[工作] 等待中目标丢失，停止旋转")
-                return
-
-            # 发送一步旋转
-            vyaw = -self._gs_step_speed if error > 0 else self._gs_step_speed
-            self._sport.move(vyaw=vyaw, duration=self._gs_step_dur)
-            self._gs_step_count += 1
-
-            turn_deg = math.degrees(vyaw * self._gs_step_dur)
-            self._log_info(
-                f"[工作] 第{self._gs_step_count}步: u={self._gs_target_u:.3f}, "
-                f"误差={error:+.3f}, 旋转≈{turn_deg:+.1f}°, "
-                f"等待{self._gs_settle_time}s..."
-            )
-
-            # 进入等待状态
-            self._gs_settling = True
-            self._gs_settle_start = now
-            self._gs_align_start = None
-
-            # 超过最大步数保护
-            if self._gs_step_count >= self._gs_max_steps:
-                self._log_info(
-                    f"[工作] 已连续旋转 {self._gs_step_count} 步仍未居中，"
-                    f"重置步数计数器继续尝试"
-                )
-                self._gs_step_count = 0
+        if action == AlignAction.LOST:
+            if extra:
+                self._log_info(f"[工作] {extra}")
             return
 
         # ---- 3. 已居中：稳定后检查是否到达 ----
-        if self._gs_settling:
-            self._gs_settling = False
-            self._gs_step_count = 0
         if not self._gs_aligned:
             self._gs_aligned = True
-            self._log_info(
-                f"[工作] 目标已居中: u={self._gs_target_u:.3f}, "
-                f"误差={error:.3f} < 容差={self._gs_center_tol}"
-            )
+            self._log_info(f"[工作] {extra}")
 
         # 居中稳定计时
         if self._gs_align_start is None:
             self._gs_align_start = now
         if now - self._gs_align_start < self._gs_stable_time:
-            self._sport.stop()
             return
 
         # 深度距离到达判断（优先）
@@ -391,10 +347,12 @@ class GraspStateMachineMixin:
             return
 
         # 目标偏离过大，停止前进，重新对齐（不切换状态）
-        if abs(error) > self._gs_center_tol * 2:
+        error = abs(self._gs_target_u - 0.5)
+        if error > self._gs_center_tol * 2:
             self._sport.stop()
             self._gs_aligned = False
             self._gs_align_start = None
+            self._gs_aligner.reset()
             self._log_info("[工作] 目标偏离，重新对齐")
             return
 

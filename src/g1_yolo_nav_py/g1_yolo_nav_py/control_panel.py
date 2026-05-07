@@ -576,7 +576,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._gs_state = GraspState.WORKING
         self._gs_align_start = None
         self._gs_aligned = False
-        self._gs_settling = False
+        self._gs_aligner.reset()
         self._append_log(f"[状态] → WORKING: 开始搜索 '{self._gs_target_class}'")
         self._update_state_display()
 
