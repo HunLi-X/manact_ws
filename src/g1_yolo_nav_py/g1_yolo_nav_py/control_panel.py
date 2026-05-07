@@ -801,19 +801,16 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             return
         if self._gs_state == GraspState.IDLE:
             self._status_label.config(text="  空闲", fg=_TEXT_MUTED)
-        elif self._gs_state == GraspState.SEARCHING:
-            self._status_label.config(text="  搜索目标中...", fg=_ACCENT_ORANGE)
-        elif self._gs_state == GraspState.ALIGNING:
-            err = abs(self._gs_target_u - 0.5) if self._gs_target_u else 0
-            self._status_label.config(
-                text=f"  对齐中 err={err:.3f}", fg=_ACCENT_CYAN
-            )
-        elif self._gs_state == GraspState.APPROACHING:
-            bbox_max = max(self._gs_bbox_size_x, self._gs_bbox_size_y)
-            self._status_label.config(
-                text=f"  前进中 bbox={bbox_max:.2f}/{self._gs_arrive_ratio:.2f}",
-                fg=_ACCENT_BLUE
-            )
+        elif self._gs_state == GraspState.WORKING:
+            if self._gs_target_u is not None:
+                err = abs(self._gs_target_u - 0.5)
+                bbox_max = max(self._gs_bbox_size_x, self._gs_bbox_size_y)
+                self._status_label.config(
+                    text=f"  工作中 err={err:.3f} bbox={bbox_max:.2f}/{self._gs_arrive_ratio:.2f}",
+                    fg=_ACCENT_CYAN
+                )
+            else:
+                self._status_label.config(text="  搜索目标中...", fg=_ACCENT_ORANGE)
         elif self._gs_state == GraspState.GRABBING:
             self._status_label.config(text="  抓取中...", fg=_ACCENT_RED)
         elif self._gs_state == GraspState.MENU:
