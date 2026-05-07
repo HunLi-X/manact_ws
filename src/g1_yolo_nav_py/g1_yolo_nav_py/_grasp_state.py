@@ -37,6 +37,7 @@ from cv_bridge import CvBridge
 from g1_yolo_nav_py.sport_client import SportClient
 from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
 from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
+from g1_yolo_nav_py._forward_approach import ForwardApproach, ApproachAction
 
 
 # ==================================================================
