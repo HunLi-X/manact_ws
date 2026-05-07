@@ -52,7 +52,7 @@ class YawAlignNode(Node):
         self.declare_parameter("camera_fov_deg", 87.0)
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("step_yaw_speed", 0.3)       # 每步旋转速度 (rad/s)
-        self.declare_parameter("step_duration", 0.3)         # 每步旋转持续时间 (秒)
+        self.declare_parameter("step_duration", 0.8)         # 每步旋转持续时间 (秒)
         self.declare_parameter("camera_settle_time", 2.0)    # 旋转后等待相机更新时间 (秒)
         self.declare_parameter("max_consecutive_steps", 10)   # 单次最大连续步数
         self.declare_parameter("lost_timeout", 10.0)
