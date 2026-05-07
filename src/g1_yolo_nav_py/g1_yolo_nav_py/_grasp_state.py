@@ -159,6 +159,19 @@ class GraspStateMachineMixin:
             max_consecutive_steps=int(p("max_consecutive_steps")),
         )
 
+        # ---- 前进接近器（与 loco_forward.py 共用同一份代码） ----
+        self._gs_approach = ForwardApproach(
+            move_fn=self._sport.move,
+            stop_fn=self._sport.stop,
+            logger=node.get_logger(),
+            forward_speed=float(p("forward_speed")),
+            center_tolerance=float(p("center_tolerance")),
+            align_stable_time=float(p("align_stable_time")),
+            use_depth=bool(p("use_depth_distance")),
+            stop_distance=float(p("stop_distance")),
+            arrive_bbox_ratio=float(p("arrive_bbox_ratio")),
+        )
+
         # ---- 内部状态 ----
         self._gs_target_u: Optional[float] = None
         self._gs_target_v: Optional[float] = None
@@ -168,10 +181,8 @@ class GraspStateMachineMixin:
         self._gs_bbox_size_x: float = 0.0
         self._gs_bbox_size_y: float = 0.0
         self._gs_last_detect_time: float = 0.0
-        self._gs_align_start: Optional[float] = None
-        self._gs_last_forward_time: float = 0.0
         self._gs_state: GraspState = start_state
-        self._gs_aligned: bool = False        # 目标已居中（用于稳定计时和接近判断）
+        self._gs_aligned: bool = False        # 目标已居中（用于对齐完成日志）
 
         # ---- ROS2 订阅 ----
         sensor_qos = QoSProfile(
