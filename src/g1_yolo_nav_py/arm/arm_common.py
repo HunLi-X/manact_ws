@@ -144,7 +144,7 @@ class BaseArmController:
             return [0.0] * len(ARM_JOINTS)
         return [float(state.motor_state[j].q) for j in ARM_JOINTS]
 
-    def _send_joint_cmd(self, target_angles, enable_sdk=True):
+    def _send_joint_cmd(self, target_angles: list[float], enable_sdk: bool = True) -> None:
         """向所有受控关节发送 PD 位置控制指令（含角度限位）。"""
         if enable_sdk:
             self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1

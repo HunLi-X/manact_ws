@@ -222,9 +222,6 @@ class SportClient:
         self._ready = True
         logger().info("[FSM] 初始化完成，就绪")
 
-    def check_subscribers(self) -> int:
-        """返回 /api/sport/request 话题的订阅者数量。"""
-        return self._pub.get_subscription_count() if hasattr(self._pub, 'get_subscription_count') else 0
 
     def has_subscribers(self) -> bool:
         """检查 /api/sport/request 是否有订阅者。"""
