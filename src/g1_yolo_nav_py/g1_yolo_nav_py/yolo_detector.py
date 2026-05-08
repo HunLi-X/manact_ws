@@ -1,8 +1,8 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
-import os  # 路径判断与 sys.path 修改
-import sys  # sys.path 修改
-from collections import deque  # 多帧投票缓冲区
+import os
+import sys
+from collections import deque
 
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
@@ -13,20 +13,20 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import rclpy  # ROS2 Python 客户端库
-from rclpy.node import Node  # ROS2 节点基类
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from typing import List  # 类型注解（Python 3.8 兼容）
-from sensor_msgs.msg import Image  # ROS2 图像消息
-from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D  # 检测结果消息
-from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
-from ament_index_python.packages import get_package_share_directory  # 获取 ROS2 包共享目录
-import cv2  # 图像预处理
-import numpy as np  # 数组操作
+from sensor_msgs.msg import Image
+from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D
+from cv_bridge import CvBridge
+from ament_index_python.packages import get_package_share_directory
+import cv2
+import numpy as np
 
 # ultralytics: YOLO 目标检测模型库（可选依赖）
 try:
-    from ultralytics import YOLO  # YOLO 推理模型
+    from ultralytics import YOLO
 except Exception as _e:
     print(f"[DEBUG] ultralytics import failed: {type(_e).__name__}: {_e}")
     YOLO = None

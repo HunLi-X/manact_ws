@@ -46,8 +46,8 @@ from cv_bridge import CvBridge
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
 # 所有运动控制通过 SportClient 统一封装（Loco API），无需 LocoClient / DDS。
 
-from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState  # 共享状态机
-from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共享绘制和转换
+from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState
+from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk
 
 _STATE_LABELS = {
     GraspState.IDLE: "空闲",

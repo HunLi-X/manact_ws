@@ -1,9 +1,9 @@
 """空间投影节点 — 将 2D 检测结果投影到 3D 空间，发布目标位姿。"""
 
-import os   # sys.path 修改
-import sys  # sys.path 修改
-import math  # 角度弧度转换
-from typing import Optional  # 类型注解
+import os
+import sys
+import math
+from typing import Optional
 
 # ROS2 colcon 会隔离 PYTHONPATH，必须在所有 import 之前追加路径
 for _p in [
@@ -13,17 +13,17 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-import numpy as np  # 数值计算与矩阵运算
-import rclpy  # ROS2 Python 客户端库
-from rclpy.node import Node  # ROS2 节点基类
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
-from sensor_msgs.msg import CameraInfo, Image  # 相机内参与深度图像消息
-from vision_msgs.msg import Detection2DArray  # 2D 检测结果消息
-from geometry_msgs.msg import PoseStamped  # 3D 位姿消息
-from std_msgs.msg import Header  # ROS2 消息头
-import tf2_ros  # TF2 坐标变换库
-from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
-import cv2  # OpenCV（仅深度图转换用）
+import numpy as np
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from sensor_msgs.msg import CameraInfo, Image
+from vision_msgs.msg import Detection2DArray
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Header
+import tf2_ros
+from cv_bridge import CvBridge
+import cv2
 
 class SpatialTargetNode(Node):
     """将 2D 检测框投影到 odom 坐标系下的 3D 坐标。"""
