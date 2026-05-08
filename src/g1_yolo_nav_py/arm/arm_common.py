@@ -80,7 +80,7 @@ class BaseArmController:
         _on_complete()    — 完成后的行为（默认：标记 done）
     """
 
-    def __init__(self, poses, transition_time=2.0, kp=60.0, kd=1.5):
+    def __init__(self, poses: list, transition_time: float = 2.0, kp: float = 60.0, kd: float = 1.5) -> None:
         self.poses = poses
         self.transition_time = transition_time
         self.kp = kp
@@ -156,8 +156,13 @@ class BaseArmController:
             self.low_cmd.motor_cmd[joint].kp = self.kp
             self.low_cmd.motor_cmd[joint].kd = self.kd
 
-    #  50Hz 控制循环
-    def _control_loop(self):
+    def _control_loop(self) -> None:
+        try:
+            self._do_control_step()
+        except Exception as e:
+            print(f"[arm] 控制循环异常: {e}")
+
+    def _do_control_step(self) -> None:
         with self._state_lock:
             if self.low_state is None:
                 return
