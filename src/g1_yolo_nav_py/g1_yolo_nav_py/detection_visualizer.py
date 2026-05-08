@@ -17,16 +17,10 @@
     pip install pillow
 """
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import threading
 import time
 from typing import Optional
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import tkinter as tk
 import numpy as np
 import cv2
@@ -41,11 +35,7 @@ from cv_bridge import CvBridge
 
 from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共享绘制和转换
 
-
-
-# ==================================================================
 # 设计系统 — 现代清新浅色 (Modern Light Teal)
-# ==================================================================
 _BG_DEEP       = "#F0FDFA"
 _BG_PRIMARY     = "#FFFFFF"
 _BG_SECONDARY   = "#0891B2"
@@ -60,14 +50,12 @@ _TEXT_PRIMARY    = "#134E4A"
 _TEXT_SECONDARY  = "#5F7A78"
 _TEXT_MUTED      = "#94A3B8"
 
-
 class DetectionVisualizerNode(Node):
     """订阅图像和检测结果，叠加检测框后 tkinter 显示 + 话题发布。"""
 
     def __init__(self) -> None:
         super().__init__("g1_detection_visualizer_node")
 
-        # ---- 参数 ----
         self.declare_parameter("image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("annotated_topic", "/g1/vision/annotated_image")
@@ -80,10 +68,8 @@ class DetectionVisualizerNode(Node):
         self._disp_w = int(self.get_parameter("display_width").value)
         self._disp_h = int(self.get_parameter("display_height").value)
 
-        # ---- CV Bridge ----
         self._bridge = CvBridge()
 
-        # ---- QoS ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST, depth=5,
@@ -93,14 +79,11 @@ class DetectionVisualizerNode(Node):
             history=HistoryPolicy.KEEP_LAST, depth=5,
         )
 
-        # ---- ROS2 订阅 ----
         self.create_subscription(Image, image_topic, self._image_cb, sensor_qos)
         self.create_subscription(Detection2DArray, det_topic, self._detection_cb, 10)
 
-        # ---- ROS2 发布 ----
         self._pub = self.create_publisher(Image, annotated_topic, pub_qos)
 
-        # ---- 缓存 ----
         self._cv_image: Optional[np.ndarray] = None
         self._detections: Optional[Detection2DArray] = None
         self._pub_count = 0
@@ -111,7 +94,6 @@ class DetectionVisualizerNode(Node):
         self._new_frame = False  # ROS2 回调标记有新帧
         self._last_header = None  # 保存 header 用于发布
 
-        # ---- tkinter GUI ----
         self._build_gui()
         self._update_loop()
 
@@ -120,9 +102,6 @@ class DetectionVisualizerNode(Node):
             f"输出={annotated_topic}"
         )
 
-    # ==================================================================
-    # GUI 构建
-    # ==================================================================
     def _build_gui(self):
         self.root = tk.Tk()
         self.root.title("G1 YOLO Detection Visualizer")
@@ -131,7 +110,6 @@ class DetectionVisualizerNode(Node):
         self.root.minsize(640, 360)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # ---- 顶部标题栏 ----
         title_frame = tk.Frame(self.root, bg=_BG_SECONDARY, height=42)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
@@ -152,11 +130,9 @@ class DetectionVisualizerNode(Node):
         )
         self._det_label.pack(side=tk.RIGHT, padx=10, pady=8)
 
-        # ---- 图像区域 ----
         img_frame = tk.Frame(self.root, bg=_BG_DEEP)
         img_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(6, 4))
 
-        # 左侧：原始图像（卡片风格）
         left_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         left_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 3))
 
@@ -174,7 +150,6 @@ class DetectionVisualizerNode(Node):
         )
         self._raw_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
-        # 右侧：检测图像（卡片风格）
         right_card = tk.Frame(img_frame, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         right_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(3, 0))
 
@@ -192,7 +167,6 @@ class DetectionVisualizerNode(Node):
         )
         self._det_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
-        # ---- 底部状态栏 ----
         status_frame = tk.Frame(self.root, bg=_BG_PRIMARY, height=28, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         status_frame.pack(fill=tk.X, padx=8, pady=(0, 6))
         status_frame.pack_propagate(False)
@@ -202,9 +176,6 @@ class DetectionVisualizerNode(Node):
         )
         self._status_label.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
-    # ==================================================================
-    # ROS2 回调
-    # ==================================================================
     def _image_cb(self, msg: Image):
         try:
             self._cv_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -217,9 +188,6 @@ class DetectionVisualizerNode(Node):
     def _detection_cb(self, msg: Detection2DArray):
         self._detections = msg
 
-    # ==================================================================
-    # 图像绘制
-    # ==================================================================
     def _draw_on_frame(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
         if self._detections is None:
@@ -234,9 +202,7 @@ class DetectionVisualizerNode(Node):
             cw, ch = self._disp_w, self._disp_h
         return cv2_to_tk(frame, cw, ch)
 
-    # ==================================================================
     # 标注图像发布（在主线程中执行，避免阻塞 ROS2 回调）
-    # ==================================================================
     def _publish_annotated(self) -> None:
         """绘制检测框并发布标注图像到话题。"""
         if self._cv_image is None or self._last_header is None:
@@ -251,9 +217,6 @@ class DetectionVisualizerNode(Node):
         except Exception as e:
             self.get_logger().warn(f"发布标注图像失败: {e}")
 
-    # ==================================================================
-    # GUI 刷新
-    # ==================================================================
     def _update_loop(self):
         """定时刷新 GUI（约 60Hz）。"""
         if not self._running:
@@ -271,7 +234,6 @@ class DetectionVisualizerNode(Node):
             self.root.after(16, self._update_loop)
 
     def _do_update(self):
-        # FPS 计算
         now = time.time()
         elapsed = now - self._fps_time
         if elapsed >= 1.0:
@@ -280,7 +242,6 @@ class DetectionVisualizerNode(Node):
             self._fps_time = now
             self._fps_label.config(text=f"FPS: {self._fps:.0f}")
 
-        # 只在有新帧时刷新图像
         if not self._new_frame:
             return
         self._new_frame = False
@@ -288,13 +249,11 @@ class DetectionVisualizerNode(Node):
         if self._cv_image is not None:
             frame_copy = self._cv_image.copy()
 
-            # 原始图像
             self._raw_photo = self._cv2_to_tk(frame_copy, self._raw_canvas)
             if self._raw_photo:
                 self._raw_canvas.delete("all")
                 self._raw_canvas.create_image(0, 0, anchor=tk.NW, image=self._raw_photo)
 
-            # 检测标注图像
             det_frame = self._draw_on_frame(frame_copy)
             self._det_photo = self._cv2_to_tk(det_frame, self._det_canvas)
             if self._det_photo:
@@ -304,7 +263,6 @@ class DetectionVisualizerNode(Node):
             # 发布标注图像（移到主线程，避免阻塞 ROS2 回调）
             self._publish_annotated()
 
-            # 检测信息
             det_count = len(self._detections.detections) if self._detections else 0
             if det_count > 0:
                 best = max(
@@ -339,12 +297,10 @@ class DetectionVisualizerNode(Node):
         self.get_logger().info("[清理] 可视化节点已停止")
         super().destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = DetectionVisualizerNode()
 
-    # ROS2 spin 在后台线程
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
 
@@ -354,7 +310,6 @@ def main(args=None):
         node._running = False
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

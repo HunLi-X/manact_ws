@@ -21,12 +21,10 @@ COLORS = [
     (246, 92, 139),    # Violet-500 BGR
 ]
 
-
 def get_color(class_id: str) -> Tuple[int, int, int]:
     """根据类别 ID 获取稳定颜色（相同 ID 始终返回相同颜色）。"""
     idx = hash(class_id) % len(COLORS)
     return COLORS[idx]
-
 
 def draw_detections_on_frame(frame: np.ndarray, detections) -> np.ndarray:
     """在图像上绘制检测框和标签（返回新图像，不修改原图）。
@@ -64,7 +62,6 @@ def draw_detections_on_frame(frame: np.ndarray, detections) -> np.ndarray:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
     return out
-
 
 def cv2_to_tk(frame: np.ndarray, width: int, height: int):
     """OpenCV BGR 图像 → tkinter PhotoImage（缩放适配目标尺寸）。

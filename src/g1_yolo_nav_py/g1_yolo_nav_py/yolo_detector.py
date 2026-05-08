@@ -1,8 +1,5 @@
 """YOLO 目标检测节点 — 订阅相机图像，运行 YOLO 推理，发布 2D 检测结果。"""
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import os  # 路径判断与 sys.path 修改
 import sys  # sys.path 修改
 from collections import deque  # 多帧投票缓冲区
@@ -16,9 +13,6 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy  # QoS 配置
@@ -37,14 +31,12 @@ except Exception as _e:
     print(f"[DEBUG] ultralytics import failed: {type(_e).__name__}: {_e}")
     YOLO = None
 
-
 class YoloDetectorNode(Node):
     """YOLO 目标检测节点。"""
 
     def __init__(self) -> None:
         super().__init__("g1_yolo_detector_node")
 
-        # ---- 参数 ----
         self.declare_parameter("model_path", "yolo_v11s_best.pt")
         self.declare_parameter("confidence_threshold", 0.25)
         self.declare_parameter("nms_threshold", 0.45)
@@ -68,10 +60,8 @@ class YoloDetectorNode(Node):
         self._clahe_enabled = bool(self.get_parameter("clahe_enabled").value)
         self._voting_window = int(self.get_parameter("voting_window").value)
 
-        # CLAHE 对比度增强器
         self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
-        # 多帧投票缓冲区：每帧的检测结果列表
         self._det_buffer: deque = deque(maxlen=max(self._voting_window, 1))
 
         self.get_logger().info(
@@ -80,7 +70,6 @@ class YoloDetectorNode(Node):
             f"CLAHE: {self._clahe_enabled}, 投票窗口: {self._voting_window}"
         )
 
-        # ---- 加载模型 ----
         if YOLO is None:
             self.get_logger().error("ultralytics 未安装，请执行: pip3 install ultralytics")
             raise RuntimeError("ultralytics package not found")
@@ -92,7 +81,6 @@ class YoloDetectorNode(Node):
             self.get_logger().error(f"模型加载失败: {e}")
             raise
 
-        # ---- 解析目标类别：支持名称或数字 ID ----
         # model.names: {0: "chair", 1: "table", ...}
         self._name_to_id = {v: int(k) for k, v in self._model.names.items()}
         self._target_class_ids: List[int] = []
@@ -106,17 +94,14 @@ class YoloDetectorNode(Node):
                 self.get_logger().warn(f"未知目标类别 '{t}'，可用类别: {list(self._name_to_id.keys())}")
         self.get_logger().info(f"目标类别 ID: {self._target_class_ids} ({raw_targets})")
 
-        # ---- CV Bridge ----
         self._bridge = CvBridge()
 
-        # ---- QoS ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=5,
         )
 
-        # ---- 话题 ----
         input_topic = self.get_parameter("input_image_topic").value
         output_topic = self.get_parameter("output_detection_topic").value
         self._sub = self.create_subscription(
@@ -126,7 +111,6 @@ class YoloDetectorNode(Node):
 
         self.get_logger().info(f"订阅图像: {input_topic}, 发布检测: {output_topic}")
 
-    # ------------------------------------------------------------------
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
         """CLAHE 对比度增强，改善低光/逆光场景检测。"""
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -135,7 +119,6 @@ class YoloDetectorNode(Node):
         lab = cv2.merge([l, a, b])
         return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
-    # ------------------------------------------------------------------
     def _image_callback(self, msg: Image) -> None:
         """图像回调：执行推理并发布检测结果。"""
         try:
@@ -144,14 +127,11 @@ class YoloDetectorNode(Node):
             self.get_logger().error(f"图像转换失败: {e}")
             return
 
-        # 保持原始尺寸用于坐标还原
         orig_h, orig_w = cv_image.shape[:2]
 
-        # CLAHE 预处理
         if self._clahe_enabled:
             cv_image = self._preprocess(cv_image)
 
-        # 推理参数
         infer_kwargs = dict(
             conf=self._conf_thresh,
             iou=self._nms_thresh,
@@ -164,7 +144,6 @@ class YoloDetectorNode(Node):
 
         results = self._model(cv_image, **infer_kwargs)
 
-        # 提取当前帧检测
         cur_dets = []
         if results and len(results) > 0:
             for box in results[0].boxes:
@@ -183,7 +162,6 @@ class YoloDetectorNode(Node):
         self._det_buffer.append(cur_dets)
         stable_dets = self._vote_detections() if len(self._det_buffer) >= self._voting_window else cur_dets
 
-        # 构造并发布
         det_array = Detection2DArray()
         det_array.header = msg.header
 
@@ -208,13 +186,11 @@ class YoloDetectorNode(Node):
 
         self._pub.publish(det_array)
 
-    # ------------------------------------------------------------------
     def _vote_detections(self) -> list:
         """多帧投票：IoU 匹配 + 出现次数计数，过滤单帧闪烁误检。"""
         from math import sqrt
 
         window = list(self._det_buffer)
-        # 收集最近一帧的检测作为基准
         latest = window[-1]
         if not latest:
             return []
@@ -234,14 +210,12 @@ class YoloDetectorNode(Node):
 
         return confirmed
 
-
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = YoloDetectorNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

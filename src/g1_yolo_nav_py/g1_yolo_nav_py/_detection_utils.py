@@ -8,7 +8,6 @@
 
 import numpy as np
 
-
 def find_best_detection(detections, target_class):
     """从检测结果中查找指定类别的最高置信度目标。
 
@@ -27,7 +26,6 @@ def find_best_detection(detections, target_class):
                 best_score = det.results[0].score
                 best_det = det
     return best_det, best_score
-
 
 def sample_depth_at_pixel(depth_image, u, v, radius=5):
     """在深度图上以归一化坐标为中心采样区域中位数。
@@ -55,7 +53,6 @@ def sample_depth_at_pixel(depth_image, u, v, radius=5):
     if len(valid) == 0:
         return None
     return float(np.median(valid))
-
 
 def depth_to_meters(value, encoding):
     """深度值单位转换。

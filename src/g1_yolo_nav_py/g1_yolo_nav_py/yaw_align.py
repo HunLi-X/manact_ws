@@ -18,27 +18,17 @@ grasp_task 也使用同一个 StepAligner，保证行为一致。
     ros2 run g1_yolo_nav_py yaw_align
 """
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import math
 import time
 from typing import Optional
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import rclpy
 from rclpy.node import Node
 from vision_msgs.msg import Detection2DArray
 from g1_yolo_nav_py._detection_utils import find_best_detection
 
-# ==================================================================
-# 3. 本项目导入
-# ==================================================================
 from g1_yolo_nav_py.sport_client import SportClient
 from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
-
 
 class YawAlignNode(Node):
     """偏航对齐节点 — 使用 StepAligner 步进式旋转。
@@ -50,7 +40,6 @@ class YawAlignNode(Node):
     def __init__(self) -> None:
         super().__init__("g1_yaw_align_node")
 
-        # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_class_id", "chair")
         self.declare_parameter("camera_fov_deg", 87.0)
@@ -69,22 +58,17 @@ class YawAlignNode(Node):
         self._lost_timeout = float(p("lost_timeout"))
         self._check_rate = float(p("check_rate"))
 
-        # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._last_detect_time: float = 0.0
         self._aligned_logged: bool = False
 
-        # ---- ROS2 订阅 ----
         self.create_subscription(Detection2DArray, self._det_topic,
                                  self._on_detection, 10)
 
-        # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
 
-        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
         self._sport.skip_init()
 
-        # ---- 步进式对齐器（核心逻辑，grasp_task 也使用同一个） ----
         self._aligner = StepAligner(
             move_fn=self._sport.move,
             logger=self.get_logger(),
@@ -95,10 +79,8 @@ class YawAlignNode(Node):
             max_consecutive_steps=int(p("max_consecutive_steps")),
         )
 
-        # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._check_rate, self._tick)
 
-        # ---- 延迟诊断 ----
         self._diag_done = False
         self._diag_timer = self.create_timer(3.0, self._diag_check)
 
@@ -108,9 +90,6 @@ class YawAlignNode(Node):
             f"等待={p('camera_settle_time')}s, 容差={p('center_tolerance')}"
         )
 
-    # ==================================================================
-    #  检测回调
-    # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标。"""
         best_det, best_score = find_best_detection(msg.detections, self._target_class)
@@ -125,9 +104,6 @@ class YawAlignNode(Node):
         else:
             self._target_u = None
 
-    # ==================================================================
-    #  诊断
-    # ==================================================================
     def _diag_check(self):
         """启动后延迟检查关键话题状态。"""
         if self._diag_done:
@@ -157,7 +133,6 @@ class YawAlignNode(Node):
                 "请确认 unitree SDK bridge 已启动。"
             )
 
-
     def _tick(self) -> None:
         """步进式对齐：委托给 StepAligner。"""
         if not self._sport.ready:
@@ -165,7 +140,6 @@ class YawAlignNode(Node):
 
         now = time.time()
 
-        # 目标丢失超时
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self._aligned_logged = False
 
@@ -183,7 +157,6 @@ class YawAlignNode(Node):
         self._sport.stop()
         super().destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = YawAlignNode()
@@ -196,7 +169,6 @@ def main(args=None):
         node._sport.stop()
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

@@ -23,14 +23,12 @@
 from enum import Enum, auto
 from typing import Optional, Callable, Tuple, Any
 
-
 class ApproachAction(Enum):
     """ForwardApproach.tick() 返回的动作类型。"""
     APPROACHING = auto()  # 正在前进
     ARRIVED = auto()      # 已到达目标
     DRIFTED = auto()      # 目标偏离过大，需重新对齐
     WAIT = auto()         # 等待中（目标丢失、未居中、未稳定）
-
 
 class ForwardApproach:
     """前进接近器 — 居中稳定后前进，到达后停止。
@@ -93,26 +91,22 @@ class ForwardApproach:
         import time
         now = time.time()
 
-        # ---- 1. 目标丢失 ----
         if target_u is None:
             self.stop()
             return ApproachAction.WAIT, ""
 
         error = abs(target_u - 0.5)
 
-        # ---- 2. 目标偏离中心 ----
         if error > self._center_tol:
             self.stop()
             return ApproachAction.WAIT, ""
 
-        # ---- 3. 居中稳定计时 ----
         if self._aligned_start is None:
             self._aligned_start = now
 
         if now - self._aligned_start < self._stable_time:
             return ApproachAction.WAIT, ""
 
-        # ---- 4. 到达判断（深度优先） ----
         if self._use_depth and target_distance is not None:
             if target_distance <= self._stop_dist:
                 self.stop()
@@ -120,7 +114,6 @@ class ForwardApproach:
                     f"到达目标 (深度={target_distance:.2f}m <= {self._stop_dist:.2f}m)"
                 )
 
-        # ---- 5. 到达判断（bbox fallback） ----
         bbox_max = max(bbox_size_x, bbox_size_y)
         if bbox_max >= self._arrive_ratio:
             self.stop()
@@ -128,12 +121,10 @@ class ForwardApproach:
                 f"到达目标 (bbox={bbox_max:.2f} >= {self._arrive_ratio})"
             )
 
-        # ---- 6. 目标偏离过大，需重新对齐 ----
         if error > self._center_tol * self._drifted_ratio:
             self.stop()
             return ApproachAction.DRIFTED, "目标偏离，需重新对齐"
 
-        # ---- 7. 前进 ----
         self._move_fn(vx=self._speed)
         self._approaching = True
         return ApproachAction.APPROACHING, ""

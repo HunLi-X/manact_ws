@@ -23,7 +23,6 @@ from rclpy.node import Node
 
 from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState
 
-
 class GraspTaskNode(Node, GraspStateMachineMixin):
     """G1 抓取任务主控节点 — 通过 SportClient (Loco API) 统一控制运动。"""
 
@@ -35,7 +34,6 @@ class GraspTaskNode(Node, GraspStateMachineMixin):
             start_state=GraspState.WORKING,
         )
 
-        # ---- 定时器（10Hz）----
         self._timer = self.create_timer(0.1, self._tick)
 
         self.get_logger().info("=" * 50)
@@ -45,34 +43,21 @@ class GraspTaskNode(Node, GraspStateMachineMixin):
         self.get_logger().info(f"armdown: {self._gs_armdown_script}")
         self.get_logger().info("=" * 50)
 
-    # ------------------------------------------------------------------
-    #  日志实现
-    # ------------------------------------------------------------------
     def _log_info(self, msg: str) -> None:
         self.get_logger().info(msg)
 
     def _log_error(self, msg: str) -> None:
         self.get_logger().error(msg)
 
-    # ------------------------------------------------------------------
-    #  状态变化回调
-    # ------------------------------------------------------------------
     def _on_state_changed(self, old_state: GraspState, new_state: GraspState) -> None:
         pass  # 终端模式无需额外 UI 更新
 
-    # ------------------------------------------------------------------
-    #  tick 转发
-    # ------------------------------------------------------------------
     def _tick(self) -> None:
         self._gs_tick()
 
-    # ------------------------------------------------------------------
-    #  清理
-    # ------------------------------------------------------------------
     def destroy_node(self) -> None:
         self._gs_destroy()
         super().destroy_node()
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -84,7 +69,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

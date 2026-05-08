@@ -28,13 +28,10 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
 from unitree_sdk2py.utils.thread import RecurrentThread
 
-# 从共享模块导入关节常量和限位
 from arm_common import G1JointIndex, ARM_JOINTS, JOINT_LIMITS
 
-# ---- 常量 ----
 kPi = 3.141592654
 kPi_2 = 1.57079632
-
 
 class Custom:
     """G1 手臂控制演示类。
@@ -62,7 +59,6 @@ class Custom:
         self.crc = CRC()
         self.done = False
 
-        # 手臂目标角度（单位：弧度）
         self.target_pos = [
             0.0,      kPi_2,  0.0,    kPi_2,  0.0,
             0.0,     -kPi_2,  0.0,    kPi_2,  0.0,

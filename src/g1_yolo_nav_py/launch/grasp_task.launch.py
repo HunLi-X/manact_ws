@@ -11,17 +11,13 @@ Launch 文件：G1 抓取任务一键全流程
     4. D455 相机静态 TF
 
 使用示例：
-    # 默认配置（检测 chair）
     ros2 launch g1_yolo_nav_py grasp_task.launch.py
 
-    # 检测瓶子
     ros2 launch g1_yolo_nav_py grasp_task.launch.py target_class:=bottle
 
-    # 指定网卡 + 降低速度
     ros2 launch g1_yolo_nav_py grasp_task.launch.py \\
         network_interface:=eth0 forward_speed:=0.15
 
-    # 不启动相机（相机已在其他地方启动）
     ros2 launch g1_yolo_nav_py grasp_task.launch.py start_camera:=false
 """
 
@@ -35,14 +31,10 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-
 def generate_launch_description() -> LaunchDescription:
     pkg_dir = get_package_share_directory("g1_yolo_nav_py")
     config_file = os.path.join(pkg_dir, "config", "yolo_nav.yaml")
 
-    # ==================================================================
-    # Launch 参数
-    # ==================================================================
     start_camera = DeclareLaunchArgument(
         name="start_camera",
         default_value="true",
@@ -81,9 +73,6 @@ def generate_launch_description() -> LaunchDescription:
         description="arm 脚本目录（armup.py / armdown.py 所在目录）",
     )
 
-    # ==================================================================
-    # 1. RealSense 相机驱动
-    # ==================================================================
     camera_launch = ExecuteProcess(
         cmd=[
             "ros2", "launch", "realsense2_camera", "rs_launch.py",
@@ -95,9 +84,7 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(LaunchConfiguration("start_camera")),
     )
 
-    # ==================================================================
     # 2. D455 相机静态 TF（torso_link → camera link）
-    # ==================================================================
     camera_pitch_deg = -42.0
     camera_pitch_rad = math.radians(camera_pitch_deg)
     q_x = math.sin(camera_pitch_rad / 2.0)
@@ -120,11 +107,8 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # ==================================================================
-    # 3. YOLO 目标检测节点
     #    aarch64 上需要 LD_PRELOAD，ros2 launch 的 Node 无法设置环境变量，
     #    因此用 ExecuteProcess 代替 Node，手动注入 LD_PRELOAD。
-    # ==================================================================
     # 检测是否为 aarch64（机器人端）
     import platform
     _is_aarch64 = platform.machine() == "aarch64"
@@ -159,9 +143,6 @@ def generate_launch_description() -> LaunchDescription:
             ],
         )
 
-    # ==================================================================
-    # 4. 抓取任务主控节点
-    # ==================================================================
     grasp_task_node = Node(
         package="g1_yolo_nav_py",
         executable="grasp_task",
@@ -179,11 +160,7 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # ==================================================================
-    # Launch 描述
-    # ==================================================================
     return LaunchDescription([
-        # 参数声明
         start_camera,
         target_class,
         model_path_arg,
@@ -191,11 +168,8 @@ def generate_launch_description() -> LaunchDescription:
         forward_speed,
         arrive_bbox_ratio,
         arm_script_dir,
-        # 相机
         camera_launch,
         camera_static_tf,
-        # 检测
         yolo_detector_cmd,
-        # 主控
         grasp_task_node,
     ])

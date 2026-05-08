@@ -14,16 +14,10 @@ grasp_task 也使用同一个 ForwardApproach，保证行为一致。
     ros2 run g1_yolo_nav_py loco_forward --ros-args -p forward_speed:=0.15
 """
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import math
 import time
 from typing import Optional
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -33,12 +27,8 @@ from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
-# ==================================================================
-# 3. 本项目导入
-# ==================================================================
 from g1_yolo_nav_py.sport_client import SportClient
 from g1_yolo_nav_py._forward_approach import ForwardApproach, ApproachAction
-
 
 class LocoForwardNode(Node):
     """前进节点 — 使用 ForwardApproach 前进到目标。"""
@@ -46,7 +36,6 @@ class LocoForwardNode(Node):
     def __init__(self) -> None:
         super().__init__("g1_loco_forward_node")
 
-        # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         self.declare_parameter("target_class_id", "chair")
@@ -71,7 +60,6 @@ class LocoForwardNode(Node):
         self._rate = float(p("check_rate"))
         self._sit_on_exit = bool(p("sit_on_exit"))
 
-        # ---- 内部状态 ----
         self._target_u: Optional[float] = None
         self._target_v: Optional[float] = None
         self._target_distance: Optional[float] = None
@@ -81,10 +69,8 @@ class LocoForwardNode(Node):
         self._bbox_size_y: float = 0.0
         self._last_detect_time: float = 0.0
 
-        # ---- CV Bridge ----
         self._bridge = CvBridge()
 
-        # ---- ROS2 订阅 ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST, depth=5,
@@ -96,13 +82,10 @@ class LocoForwardNode(Node):
                 Image, self._depth_topic, self._on_depth, sensor_qos
             )
 
-        # ---- 运动控制客户端 ----
         self._sport = SportClient(self)
 
-        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
         self._sport.skip_init()
 
-        # ---- 前进接近器（核心逻辑，grasp_task 也使用同一个） ----
         self._approach = ForwardApproach(
             move_fn=self._sport.move,
             stop_fn=self._sport.stop,
@@ -115,10 +98,8 @@ class LocoForwardNode(Node):
             arrive_bbox_ratio=float(p("arrive_bbox_ratio")),
         )
 
-        # ---- 定时器 ----
         self._timer = self.create_timer(1.0 / self._rate, self._tick)
 
-        # ---- 延迟诊断 ----
         self._diag_done = False
         self._diag_timer = self.create_timer(3.0, self._diag_check)
 
@@ -128,9 +109,6 @@ class LocoForwardNode(Node):
             f"bbox到达={p('arrive_bbox_ratio')}"
         )
 
-    # ==================================================================
-    #  诊断
-    # ==================================================================
     def _diag_check(self):
         if self._diag_done:
             return
@@ -159,9 +137,6 @@ class LocoForwardNode(Node):
                 "请确认 unitree SDK bridge 已启动。"
             )
 
-    # ==================================================================
-    #  检测回调
-    # ==================================================================
     def _on_detection(self, msg: Detection2DArray) -> None:
         best_det, best_score = find_best_detection(msg.detections, self._target_class)
         if best_det is not None:
@@ -177,9 +152,6 @@ class LocoForwardNode(Node):
             self._target_v = None
             self._target_distance = None
 
-    # ==================================================================
-    #  深度图回调
-    # ==================================================================
     def _on_depth(self, msg: Image) -> None:
         try:
             self._depth_image = self._bridge.imgmsg_to_cv2(
@@ -203,16 +175,13 @@ class LocoForwardNode(Node):
         if math.isfinite(distance) and distance > 0.0:
             self._target_distance = distance
 
-    # ==================================================================
     #  tick（委托给 ForwardApproach）
-    # ==================================================================
     def _tick(self) -> None:
         if not self._sport.ready:
             return
 
         now = time.time()
 
-        # 目标丢失超时
         if self._target_u is None or (now - self._last_detect_time > self._lost_timeout):
             self._approach.stop()
             return
@@ -237,7 +206,6 @@ class LocoForwardNode(Node):
             self.get_logger().info("退出: 仅停止运动 (sit_on_exit=false)")
         super().destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = LocoForwardNode()
@@ -248,7 +216,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

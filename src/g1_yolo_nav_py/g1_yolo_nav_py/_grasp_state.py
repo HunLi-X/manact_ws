@@ -40,10 +40,6 @@ from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at
 from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
 from g1_yolo_nav_py._forward_approach import ForwardApproach, ApproachAction
 
-
-# ==================================================================
-# 状态枚举
-# ==================================================================
 class GraspState(Enum):
     """抓取任务状态枚举。"""
     IDLE = auto()        # 控制面板专用：空闲等待
@@ -52,14 +48,8 @@ class GraspState(Enum):
     MENU = auto()        # 交互菜单
     DONE = auto()        # 任务完成（grasp_task 专用）
 
-
-# arm 脚本默认目录
 _DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm")
 
-
-# ==================================================================
-# 基类
-# ==================================================================
 class GraspStateMachineMixin:
     """抓取任务状态机混入类 — 提供共享的状态机逻辑。
 
@@ -70,9 +60,6 @@ class GraspStateMachineMixin:
                 self._init_grasp_state(...)
     """
 
-    # ------------------------------------------------------------------
-    #  初始化
-    # ------------------------------------------------------------------
     def _init_grasp_state(
         self,
         node: Node,
@@ -94,7 +81,6 @@ class GraspStateMachineMixin:
         self._gs_node = node
         self._gs_include_idle = include_idle
 
-        # ---- 声明公共参数 ----
         node.declare_parameter("network_interface", "")
         node.declare_parameter("detection_topic", "/g1/vision/detections")
         node.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
@@ -133,15 +119,12 @@ class GraspStateMachineMixin:
         # network_interface: 优先使用函数参数，否则从 ROS 参数读取
         self._gs_net_iface = network_interface or p("network_interface")
 
-        # arm 脚本路径
         arm_dir = p("arm_script_dir")
         self._gs_armup_script = Path(arm_dir) / "armup.py"
         self._gs_armdown_script = Path(arm_dir) / "armdown.py"
 
-        # ---- 运动控制客户端 ----
         self._sport = SportClient(node)
 
-        # ---- 步进式对齐器（与 yaw_align.py 共用同一份代码） ----
         self._gs_aligner = StepAligner(
             move_fn=self._sport.move,
             logger=node.get_logger(),
@@ -152,7 +135,6 @@ class GraspStateMachineMixin:
             max_consecutive_steps=int(p("max_consecutive_steps")),
         )
 
-        # ---- 前进接近器（与 loco_forward.py 共用同一份代码） ----
         self._gs_approach = ForwardApproach(
             move_fn=self._sport.move,
             stop_fn=self._sport.stop,
@@ -165,7 +147,6 @@ class GraspStateMachineMixin:
             arrive_bbox_ratio=float(p("arrive_bbox_ratio")),
         )
 
-        # ---- 内部状态 ----
         self._gs_target_u: Optional[float] = None
         self._gs_target_v: Optional[float] = None
         self._gs_target_distance: Optional[float] = None
@@ -177,7 +158,6 @@ class GraspStateMachineMixin:
         self._gs_state: GraspState = start_state
         self._gs_aligned: bool = False        # 目标已居中（用于对齐完成日志）
 
-        # ---- ROS2 订阅 ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -192,12 +172,8 @@ class GraspStateMachineMixin:
                 Image, self._gs_depth_topic, self._gs_on_depth, sensor_qos
             )
 
-        # ---- 跳过自动 FSM 初始化，由用户手动进入走跑模式 ----
         self._sport.skip_init()
 
-    # ------------------------------------------------------------------
-    #  属性
-    # ------------------------------------------------------------------
     @property
     def gs_state(self) -> GraspState:
         """当前状态机状态。"""
@@ -210,9 +186,6 @@ class GraspStateMachineMixin:
         self._gs_state = new_state
         self._on_state_changed(old_state, new_state)
 
-    # ------------------------------------------------------------------
-    #  子类需实现
-    # ------------------------------------------------------------------
     def _log_info(self, msg: str) -> None:
         """信息日志 — 子类必须实现。"""
         raise NotImplementedError
@@ -225,9 +198,6 @@ class GraspStateMachineMixin:
         """状态变化回调 — 子类可覆盖以更新 GUI/终端显示。"""
         pass
 
-    # ------------------------------------------------------------------
-    #  检测回调
-    # ------------------------------------------------------------------
     def _gs_on_detection(self, msg: Detection2DArray) -> None:
         """从检测结果中提取最佳目标的 u 坐标和 bbox 尺寸。"""
         best_det, best_score = find_best_detection(msg.detections, self._gs_target_class)
@@ -269,9 +239,6 @@ class GraspStateMachineMixin:
         if math.isfinite(distance) and distance > 0.0:
             self._gs_target_distance = distance
 
-    # ------------------------------------------------------------------
-    #  状态机 tick
-    # ------------------------------------------------------------------
     def _gs_tick(self) -> None:
         """状态机主 tick。"""
         if not self._sport.ready:
@@ -281,9 +248,7 @@ class GraspStateMachineMixin:
             self._gs_tick_working()
         # IDLE / GRABBING / MENU / DONE 不在 tick 中驱动
 
-    # ------------------------------------------------------------------
     #  统一工作循环（搜索 + 对齐 + 接近，无状态切换）
-    # ------------------------------------------------------------------
     def _gs_tick_working(self) -> None:
         """WORKING：搜索 → StepAligner 对齐 → ForwardApproach 接近。
 
@@ -293,7 +258,6 @@ class GraspStateMachineMixin:
         """
         now = time.time()
 
-        # ---- 1. 未检测到目标：原地旋转搜索 ----
         if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
             if self._gs_aligner.settling:
                 self._gs_aligner.stop()
@@ -304,7 +268,6 @@ class GraspStateMachineMixin:
             self._sport.move(vyaw=self._gs_search_speed)
             return
 
-        # ---- 2. 检测到目标，步进式对齐（委托给 StepAligner） ----
         action, extra = self._gs_aligner.tick(self._gs_target_u)
 
         if action == AlignAction.ROTATING:
@@ -320,7 +283,6 @@ class GraspStateMachineMixin:
                 self._log_info(f"[工作] {extra}")
             return
 
-        # ---- 3. 已居中，前进接近（委托给 ForwardApproach） ----
         if not self._gs_aligned:
             self._gs_aligned = True
             self._log_info(f"[工作] {extra}")
@@ -346,9 +308,6 @@ class GraspStateMachineMixin:
 
         # APPROACHING / WAIT → 继续等下一 tick
 
-    # ------------------------------------------------------------------
-    #  arm 脚本执行
-    # ------------------------------------------------------------------
     def _gs_run_grab(self) -> None:
         """执行 armup.py 抓取目标物。"""
         script = str(self._gs_armup_script)
@@ -416,9 +375,7 @@ class GraspStateMachineMixin:
         except Exception as e:
             self._log_error(f"[放下] armdown.py 异常: {e}")
 
-    # ------------------------------------------------------------------
     #  交互菜单（grasp_task 专用，control_panel 通过 GUI 交互）
-    # ------------------------------------------------------------------
     def _gs_show_menu(self) -> None:
         """显示交互菜单（在后台线程中运行，不阻塞 ROS2 spin）。
 
@@ -457,9 +414,6 @@ class GraspStateMachineMixin:
         t = threading.Thread(target=_menu_loop, daemon=True)
         t.start()
 
-    # ------------------------------------------------------------------
-    #  菜单操作
-    # ------------------------------------------------------------------
     def _gs_do_put_down(self) -> None:
         """放下目标物。"""
         self._gs_run_armdown()
@@ -504,7 +458,6 @@ class GraspStateMachineMixin:
                 print("  格式错误，请输入数字")
                 continue
 
-            # 安全限幅
             vx = max(-1.0, min(1.0, vx))
             vy = max(-0.5, min(0.5, vy))
             vyaw = max(-1.0, min(1.0, vyaw))
@@ -512,9 +465,6 @@ class GraspStateMachineMixin:
             self._log_info(f"[自定义] cmd: vx={vx}, vy={vy}, vyaw={vyaw}")
             self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
 
-    # ------------------------------------------------------------------
-    #  清理
-    # ------------------------------------------------------------------
     def _gs_destroy(self) -> None:
         """停止运动并清理。"""
         self._sport.stop()

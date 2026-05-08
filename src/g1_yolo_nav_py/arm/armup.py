@@ -24,10 +24,6 @@ import sys
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
 
-
-# ======================================================================
-# 抓取姿态定义
-# ======================================================================
 def _pose_arms_up():
     """抬起姿态"""
     return [
@@ -52,14 +48,11 @@ def _pose_reach_forward():
          0.0,   0.0,  0.0,
     ]
 
-
-# 抓取序列：伸出 → 抬起 → 夹紧保持
 POSE_SEQUENCE = [
     ("reach_forward",  _pose_reach_forward(),  3.0),
     ("arms_up",        _pose_arms_up(),        3.0),
     ("pray",           _pose_pray(),           3.0),
 ]
-
 
 class GrabController(BaseArmController):
     """G1 抓取控制器 — 伸手 → 抬起 → 夹紧保持。
@@ -80,7 +73,6 @@ class GrabController(BaseArmController):
         if not self.done:
             self.done = True
             print("\n  [抓取完成] 保持夹紧姿态，等待放下指令")
-
 
 if __name__ == '__main__':
     print("WARNING: 确保机器人周围无障碍物!")

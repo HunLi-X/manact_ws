@@ -24,10 +24,6 @@ import sys
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
 
-
-# ======================================================================
-# 放下姿态定义
-# ======================================================================
 def _pose_wave():
     """伸展下放姿态。"""
     return [
@@ -44,13 +40,11 @@ def _pose_wave_body():
          0.0,   0.0,   0.0,
     ]
 
-
 # 放下序列：伸展下放 → 自然下垂（之后归零释放）
 POSE_SEQUENCE = [
     ("wave",       _pose_wave(),       3.0),
     ("wave_body",  _pose_wave_body(),  3.0),
 ]
-
 
 class ReleaseController(BaseArmController):
     """G1 放下控制器 — 从夹紧姿态 → 下放 → 归零 → 释放 arm_sdk。
@@ -63,7 +57,6 @@ class ReleaseController(BaseArmController):
             self.poses, self.transition_time,
             include_init_zero=False, include_final_zero=True, include_release=True,
         )
-
 
 if __name__ == '__main__':
     print("WARNING: 确保机器人周围无障碍物!")

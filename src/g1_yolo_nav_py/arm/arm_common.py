@@ -19,10 +19,6 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
 from unitree_sdk2py.utils.thread import RecurrentThread
 
-
-# ======================================================================
-# 关节索引常量
-# ======================================================================
 class G1JointIndex:
     """G1 机器人关节索引常量，对应 LowCmd/LowState 的 motor_cmd 数组下标。"""
     # 左腿 (0-5)
@@ -46,7 +42,6 @@ class G1JointIndex:
     RightWristPitch = 27;  RightWristYaw = 28
     # 特殊索引
     kNotUsedJoint = 29
-
 
 # 受控关节列表（13 个：双臂 10 + 腰部 3）
 ARM_JOINTS = [
@@ -78,10 +73,6 @@ JOINT_LIMITS = {
     G1JointIndex.WaistPitch:         (-0.5, 0.5),
 }
 
-
-# ======================================================================
-# 手臂控制器基类
-# ======================================================================
 class BaseArmController:
     """手臂控制器基类 — DDS 通信 + 状态管理 + timeline 阶段调度。
 
@@ -97,12 +88,10 @@ class BaseArmController:
         self.kd = kd
         self.control_dt = 0.02  # 50Hz
 
-        # 运行时状态
         self.time = 0.0
         self.done = False
         self.first_low_state = False
 
-        # DDS 对象
         self._state_lock = threading.Lock()
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()
         self.low_state = None
@@ -110,9 +99,6 @@ class BaseArmController:
 
         self._build_timeline()
 
-    # ------------------------------------------------------------------
-    #  子类覆盖
-    # ------------------------------------------------------------------
     def _build_timeline(self):
         """构建阶段时间表。子类必须覆盖。
 
@@ -127,9 +113,6 @@ class BaseArmController:
         self.done = True
         self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 0
 
-    # ------------------------------------------------------------------
-    #  DDS 初始化
-    # ------------------------------------------------------------------
     def Init(self):
         """初始化 DDS 发布者和订阅者。"""
         self.pub = ChannelPublisher("rt/arm_sdk", LowCmd_)
@@ -149,9 +132,6 @@ class BaseArmController:
             time.sleep(0.1)
         self.thread.Start()
 
-    # ------------------------------------------------------------------
-    #  状态回调
-    # ------------------------------------------------------------------
     def _state_handler(self, msg):
         with self._state_lock:
             self.low_state = msg
@@ -165,9 +145,7 @@ class BaseArmController:
             return [0.0] * len(ARM_JOINTS)
         return [float(state.motor_state[j].q) for j in ARM_JOINTS]
 
-    # ------------------------------------------------------------------
     #  指令发送（含安全限位）
-    # ------------------------------------------------------------------
     def _send_joint_cmd(self, target_angles):
         """向所有受控关节发送 PD 位置控制指令（含角度限位）。"""
         self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1  # 启用 arm_sdk
@@ -179,9 +157,7 @@ class BaseArmController:
             self.low_cmd.motor_cmd[joint].kp = self.kp
             self.low_cmd.motor_cmd[joint].kd = self.kd
 
-    # ------------------------------------------------------------------
     #  50Hz 控制循环
-    # ------------------------------------------------------------------
     def _control_loop(self):
         with self._state_lock:
             if self.low_state is None:
@@ -189,14 +165,12 @@ class BaseArmController:
 
         self.time += self.control_dt
 
-        # timeline 执行完毕
         if self.time >= self.total_time:
             self._on_complete()
             self.low_cmd.crc = self.crc.Crc(self.low_cmd)
             self.pub.Write(self.low_cmd)
             return
 
-        # 查找当前阶段
         for t_start, t_end, ptype, pdata in self.timeline:
             if t_start <= self.time < t_end:
                 ratio = np.clip((self.time - t_start) / (t_end - t_start), 0.0, 1.0)
@@ -240,10 +214,6 @@ class BaseArmController:
         """打印姿态切换信息。子类可覆盖。"""
         print(f"\n  >>> {name}")
 
-
-# ======================================================================
-# 辅助：timeline 构建工具
-# ======================================================================
 def build_timeline(poses, transition_time, include_init_zero=True,
                    include_final_zero=True, include_release=True):
     """通用 timeline 构建器。

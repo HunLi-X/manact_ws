@@ -27,54 +27,41 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-
 def generate_launch_description() -> LaunchDescription:
     """生成 Launch 描述。"""
     pkg_dir = get_package_share_directory("g1_yolo_nav_py")
     config_file = os.path.join(pkg_dir, "config", "yolo_nav.yaml")
 
-    # ==================================================================
-    # Launch 参数声明
-    # ==================================================================
-
-    # 是否启动 RViz2 可视化
     use_rviz = DeclareLaunchArgument(
         name="use_rviz",
         default_value="false",
         description="是否启动 RViz2 可视化界面",
     )
 
-    # YOLO 模型文件路径
     model_path_arg = DeclareLaunchArgument(
         name="model_path",
         default_value="yolo_v11x_best.pt",
         description="YOLO 模型文件名（相对于 share/models/ 目录，或绝对路径）",
     )
 
-    # 是否使用深度传感器
     use_depth = DeclareLaunchArgument(
         name="use_depth_sensor",
         default_value="false",
         description="是否使用深度传感器（false 时使用默认距离）",
     )
 
-    # 目标检测类别
     target_class = DeclareLaunchArgument(
         name="target_class",
         default_value="chair",
         description="目标类别名称（如 chair, person，也支持数字 ID）",
     )
 
-    # 是否启用前进控制
     enable_approach = DeclareLaunchArgument(
         name="enable_approach",
         default_value="true",
         description="是否启用偏航对齐+前进接近",
     )
 
-    # ==================================================================
-    # D455 相机静态 TF
-    # ==================================================================
     camera_pitch_deg = -42.0
     camera_pitch_rad = math.radians(camera_pitch_deg)
     q_x = math.sin(camera_pitch_rad / 2.0)
@@ -97,11 +84,6 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # ==================================================================
-    # 节点定义
-    # ==================================================================
-
-    # YOLO 目标检测节点
     yolo_detector_node = Node(
         package="g1_yolo_nav_py",
         executable="yolo_detector",
@@ -113,7 +95,6 @@ def generate_launch_description() -> LaunchDescription:
         ],
     )
 
-    # 空间投影节点
     spatial_target_node = Node(
         package="g1_yolo_nav_py",
         executable="spatial_target",
@@ -142,7 +123,6 @@ def generate_launch_description() -> LaunchDescription:
         parameters=[config_file],
     )
 
-    # RViz2 可视化（可选）
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -152,19 +132,13 @@ def generate_launch_description() -> LaunchDescription:
         else [],
     )
 
-    # ==================================================================
-    # Launch 描述
-    # ==================================================================
     return LaunchDescription([
-        # 参数声明
         use_rviz,
         model_path_arg,
         use_depth,
         target_class,
         enable_approach,
-        # 静态 TF
         camera_static_tf,
-        # 功能节点
         yolo_detector_node,
         spatial_target_node,
         yaw_align_node,

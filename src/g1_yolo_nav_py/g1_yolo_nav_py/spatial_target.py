@@ -1,8 +1,5 @@
 """空间投影节点 — 将 2D 检测结果投影到 3D 空间，发布目标位姿。"""
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import os   # sys.path 修改
 import sys  # sys.path 修改
 import math  # 角度弧度转换
@@ -16,9 +13,6 @@ for _p in [
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import numpy as np  # 数值计算与矩阵运算
 import rclpy  # ROS2 Python 客户端库
 from rclpy.node import Node  # ROS2 节点基类
@@ -31,14 +25,12 @@ import tf2_ros  # TF2 坐标变换库
 from cv_bridge import CvBridge  # ROS2 图像消息与 OpenCV 格式互转
 import cv2  # OpenCV（仅深度图转换用）
 
-
 class SpatialTargetNode(Node):
     """将 2D 检测框投影到 odom 坐标系下的 3D 坐标。"""
 
     def __init__(self) -> None:
         super().__init__("g1_spatial_target_node")
 
-        # ---- 参数 ----
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         self.declare_parameter("camera_info_topic", "/D455_1/color/camera_info")
@@ -61,10 +53,8 @@ class SpatialTargetNode(Node):
         self._camera_frame = self.get_parameter("camera_frame").value
         self._publish_rate = float(self.get_parameter("publish_rate").value)
 
-        # ---- CV Bridge ----
         self._bridge = CvBridge()
 
-        # ---- 相机内参 ----
         self._camera_info: Optional[CameraInfo] = None
         self._depth_image: Optional[np.ndarray] = None
         self._fx = 0.0
@@ -72,21 +62,17 @@ class SpatialTargetNode(Node):
         self._cx = 0.0
         self._cy = 0.0
 
-        # ---- 最新检测结果缓存 ----
         self._latest_detection: Optional[Detection2DArray] = None
 
-        # ---- TF ----
         self._tf_buffer = tf2_ros.Buffer()
         self._tf_listener = tf2_ros.TransformListener(self._tf_buffer, self)
 
-        # ---- QoS ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=5,
         )
 
-        # ---- 订阅 ----
         det_topic = self.get_parameter("detection_topic").value
         self._det_sub = self.create_subscription(
             Detection2DArray, det_topic, self._detection_callback, 10
@@ -106,11 +92,9 @@ class SpatialTargetNode(Node):
                 sensor_qos,
             )
 
-        # ---- 发布 ----
         nav_topic = self.get_parameter("nav_target_topic").value
         self._target_pub = self.create_publisher(PoseStamped, nav_topic, 10)
 
-        # ---- 定时发布 ----
         self._timer = self.create_timer(1.0 / self._publish_rate, self._publish_target)
 
         self.get_logger().info(
@@ -118,7 +102,6 @@ class SpatialTargetNode(Node):
             f"使用深度={self._use_depth}, 默认深度={self._default_depth}m"
         )
 
-    # ------------------------------------------------------------------
     def _camera_info_callback(self, msg: CameraInfo) -> None:
         """缓存相机内参。"""
         self._camera_info = msg
@@ -127,7 +110,6 @@ class SpatialTargetNode(Node):
         self._cx = msg.k[2]
         self._cy = msg.k[5]
 
-    # ------------------------------------------------------------------
     def _depth_callback(self, msg: Image) -> None:
         """缓存深度图像。"""
         try:
@@ -135,18 +117,15 @@ class SpatialTargetNode(Node):
         except Exception as e:
             self.get_logger().warn(f"深度图像转换失败: {e}")
 
-    # ------------------------------------------------------------------
     def _detection_callback(self, msg: Detection2DArray) -> None:
         """缓存最新检测结果。"""
         self._latest_detection = msg
 
-    # ------------------------------------------------------------------
     def _get_depth_at_pixel(self, u: float, v: float, width: float, height: float) -> float:
         """获取像素 (u,v) 处的深度值。"""
         if self._depth_image is None:
             return self._default_depth
 
-        # 采样中心区域
         px = int(u * width)
         py = int(v * height)
         h, w = self._depth_image.shape[:2]
@@ -161,7 +140,6 @@ class SpatialTargetNode(Node):
             return float(np.median(valid)) / 1000.0  # mm → m
         return self._default_depth
 
-    # ------------------------------------------------------------------
     def _pixel_to_camera_point(self, u: float, v: float, depth: float) -> np.ndarray:
         """将归一化像素坐标 + 深度 → 相机坐标系下的 3D 点。"""
         if self._fx == 0.0:
@@ -175,7 +153,6 @@ class SpatialTargetNode(Node):
         y = (py - self._cy) * z / self._fy
         return np.array([x, y, z])
 
-    # ------------------------------------------------------------------
     def _publish_target(self) -> None:
         """定时发布目标位姿到 odom 坐标系。"""
         if self._latest_detection is None or len(self._latest_detection.detections) == 0:
@@ -184,7 +161,6 @@ class SpatialTargetNode(Node):
         if self._fx == 0.0:
             return
 
-        # 过滤目标类别
         best_det = None
         best_score = 0.0
         for det in self._latest_detection.detections:
@@ -200,17 +176,14 @@ class SpatialTargetNode(Node):
         u = best_det.bbox.center.x
         v = best_det.bbox.center.y + best_det.bbox.size_y / 2.0
 
-        # 获取深度
         depth = self._get_depth_at_pixel(
             u, v,
             self._camera_info.width,
             self._camera_info.height,
         )
 
-        # 像素 → 相机坐标系
         camera_point = self._pixel_to_camera_point(u, v, depth)
 
-        # 相机坐标系 → odom 坐标系
         try:
             transform = self._tf_buffer.lookup_transform(
                 self._target_frame,
@@ -222,7 +195,6 @@ class SpatialTargetNode(Node):
             self.get_logger().debug(f"TF 查询失败: {e}")
             return
 
-        # 平移变换
         q = transform.transform.rotation
         rot = _quaternion_to_rotation_matrix(q.x, q.y, q.z, q.w)
         odom_point = rot @ camera_point + np.array([
@@ -231,7 +203,6 @@ class SpatialTargetNode(Node):
             transform.transform.translation.z,
         ])
 
-        # 获取机器人当前朝向
         base_tf = None
         try:
             base_tf = self._tf_buffer.lookup_transform(
@@ -258,7 +229,6 @@ class SpatialTargetNode(Node):
         target_x = odom_point[0] - self._approach_dist * math.cos(yaw)
         target_y = odom_point[1] - self._approach_dist * math.sin(yaw)
 
-        # 发布目标位姿
         pose_msg = PoseStamped()
         pose_msg.header = Header(
             stamp=self.get_clock().now().to_msg(),
@@ -267,7 +237,6 @@ class SpatialTargetNode(Node):
         pose_msg.pose.position.x = float(target_x)
         pose_msg.pose.position.y = float(target_y)
         pose_msg.pose.position.z = 0.0
-        # 朝向目标
         angle_to_target = math.atan2(
             odom_point[1] - base_tf.transform.translation.y,
             odom_point[0] - base_tf.transform.translation.x,
@@ -284,11 +253,6 @@ class SpatialTargetNode(Node):
             f"置信度: {best_score:.2f}, 深度: {depth:.2f}m"
         )
 
-
-# ======================================================================
-# 辅助函数
-# ======================================================================
-
 def _quaternion_to_rotation_matrix(x: float, y: float, z: float, w: float) -> np.ndarray:
     """四元数 → 3x3 旋转矩阵。"""
     R = np.array([
@@ -298,19 +262,16 @@ def _quaternion_to_rotation_matrix(x: float, y: float, z: float, w: float) -> np
     ])
     return R
 
-
 def _quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
     """四元数 → yaw 角 (弧度)。"""
     siny_cosp = 2.0 * (w * z + x * y)
     cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
     return math.atan2(siny_cosp, cosy_cosp)
 
-
 def _yaw_to_quaternion(yaw: float) -> tuple:
     """yaw 角 (弧度) → 四元数 (x, y, z, w)。"""
     half = yaw / 2.0
     return (0.0, 0.0, math.sin(half), math.cos(half))
-
 
 def main(args=None) -> None:
     rclpy.init(args=args)
@@ -322,7 +283,6 @@ def main(args=None) -> None:
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

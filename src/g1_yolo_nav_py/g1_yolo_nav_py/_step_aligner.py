@@ -23,14 +23,12 @@
 from enum import Enum, auto
 from typing import Optional, Callable, Tuple, Any
 
-
 class AlignAction(Enum):
     """StepAligner.tick() 返回的动作类型。"""
     ROTATING = auto()   # 已发送旋转指令，正在等待相机更新
     ALIGNED = auto()    # 目标已居中（误差 < 容差）
     LOST = auto()       # 目标丢失或超时
     WAIT = auto()       # 等待中（settling 或目标居中稳定）
-
 
 class StepAligner:
     """步进式旋转对齐器 — 每次移动一小步，等相机更新后再决定下一步。
@@ -95,27 +93,22 @@ class StepAligner:
         self._target_u = target_u
         now = time.time()
 
-        # ---- 1. 目标丢失 ----
         if target_u is None:
             if self._settling:
-                # 等待中丢失目标，停止
                 self._move_fn(0.0, None)
                 self._settling = False
                 self._step_count = 0
                 return AlignAction.LOST, "等待中目标丢失，停止旋转"
             return AlignAction.WAIT, ""
 
-        # ---- 2. 正在等待相机更新 ----
         if self._settling:
             elapsed = now - self._settle_start
             if elapsed < self._settle_time:
                 return AlignAction.WAIT, ""
-            # 等待结束
             self._settling = False
 
         error = target_u - 0.5
 
-        # ---- 3. 已居中 ----
         if abs(error) < self._center_tol:
             self._move_fn(0.0, None)
             return AlignAction.ALIGNED, (
@@ -123,7 +116,6 @@ class StepAligner:
                 f"误差={error:.3f} < 容差={self._center_tol}"
             )
 
-        # ---- 4. 发送一步旋转 ----
         vyaw = -self._step_speed if error > 0 else self._step_speed
         self._move_fn(vyaw, self._step_dur)
         self._step_count += 1
@@ -135,11 +127,9 @@ class StepAligner:
             f"等待{self._settle_time}s..."
         )
 
-        # ---- 5. 进入等待状态 ----
         self._settling = True
         self._settle_start = now
 
-        # 超过最大步数保护
         if self._step_count >= self._max_steps:
             msg += f" (已连续{self._step_count}步，重置计数器)"
             self._step_count = 0

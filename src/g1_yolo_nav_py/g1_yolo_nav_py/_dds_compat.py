@@ -44,9 +44,7 @@ _CYCLONEDDS_XML_TEMPLATE = """<?xml version="1.0" encoding="UTF-8" ?>
 </CycloneDDS>
 """
 
-# 标记是否已初始化
 _dds_initialized = False
-
 
 def init_unitree_dds_before_ros2(iface: str = "") -> bool:
     """

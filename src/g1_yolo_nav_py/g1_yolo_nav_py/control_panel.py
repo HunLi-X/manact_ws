@@ -22,9 +22,6 @@ G1 NavGrasp 控制面板 (tkinter)
     pip install pillow  (PIL 用于图像缩放显示)
 """
 
-# ==================================================================
-# 1. 标准库导入
-# ==================================================================
 import os
 import sys
 import subprocess
@@ -35,9 +32,6 @@ from pathlib import Path
 from typing import Optional
 from enum import Enum, auto
 
-# ==================================================================
-# 2. 第三方库与 ROS2 导入
-# ==================================================================
 import tkinter as tk
 import numpy as np
 import cv2
@@ -55,17 +49,9 @@ from cv_bridge import CvBridge
 # 导致 ROS2 订阅收不到任何数据（原始图像加载不出来）。
 # 所有运动控制通过 SportClient 统一封装（Loco API），无需 LocoClient / DDS。
 
-# ==================================================================
-# 3. 本项目导入
-# ==================================================================
 from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState  # 共享状态机
 from g1_yolo_nav_py._vis_utils import draw_detections_on_frame, cv2_to_tk  # 共享绘制和转换
 
-# ==================================================================
-# 4. 常量与配置
-# ==================================================================
-
-# 状态中文显示
 _STATE_LABELS = {
     GraspState.IDLE: "空闲",
     GraspState.WORKING: "执行中",
@@ -73,10 +59,7 @@ _STATE_LABELS = {
     GraspState.MENU: "操作菜单",
 }
 
-# ==================================================================
 # 设计系统 — 现代清新浅色 (Modern Light Teal)
-# ==================================================================
-# 主色调
 _BG_DEEP       = "#F0FDFA"   # 窗口底色 (Teal-50)
 _BG_PRIMARY     = "#FFFFFF"   # 卡片背景 (White)
 _BG_SECONDARY   = "#0891B2"   # 标题栏 (Teal-600 渐变起点)
@@ -84,19 +67,16 @@ _BG_TERTIARY    = "#E0F2FE"   # 次级区域 (Sky-100)
 _BORDER_COLOR   = "#D1E7E4"   # 边框 (Teal-muted)
 _BORDER_ACTIVE  = "#0891B2"   # 激活边框 (Teal-600)
 
-# 功能色
 _ACCENT_CYAN    = "#0891B2"   # 主强调色 (Teal-600 信息/对齐)
 _ACCENT_GREEN   = "#10B981"   # 正向/成功/CTA (Emerald-500)
 _ACCENT_ORANGE  = "#F59E0B"   # 搜索/警告 (Amber-500)
 _ACCENT_RED     = "#EF4444"   # 危险/停止/抓取 (Red-500)
 _ACCENT_BLUE    = "#3B82F6"   # 前进/导航 (Blue-500)
 
-# 文字色
 _TEXT_PRIMARY    = "#134E4A"   # 主文字 (Teal-900 对比 8.8:1)
 _TEXT_SECONDARY  = "#5F7A78"   # 次级文字
 _TEXT_MUTED      = "#94A3B8"   # 弱化文字 (Slate-400)
 
-# 状态对应颜色
 _STATE_COLORS = {
     GraspState.IDLE:     _TEXT_SECONDARY,
     GraspState.WORKING:  _ACCENT_CYAN,
@@ -104,14 +84,12 @@ _STATE_COLORS = {
     GraspState.MENU:     _ACCENT_GREEN,
 }
 
-
 class ControlPanelNode(Node, GraspStateMachineMixin):
     """G1 控制面板节点 — tkinter GUI + ROS2 通信 + 抓取任务状态机。"""
 
     def __init__(self) -> None:
         Node.__init__(self, "g1_control_panel_node")
 
-        # ---- 控制面板专用参数 ----
         self.declare_parameter("image_topic", "/D455_1/color/image_raw")
         self.declare_parameter("network_interface", "")  # 传递给 arm 脚本子进程
         self.declare_parameter("display_width", 400)
@@ -123,7 +101,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._disp_w = int(p("display_width"))
         self._disp_h = int(p("display_height"))
 
-        # ---- 初始化共享状态机 ----
         self._init_grasp_state(
             self,
             include_idle=True,
@@ -131,25 +108,20 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             network_interface=self._net_iface,
         )
 
-        # ---- CV Bridge ----
         self._bridge = CvBridge()
 
-        # ---- QoS ----
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST, depth=5,
         )
 
-        # ---- ROS2 订阅（图像，检测已在基类中订阅）----
         self._img_sub = self.create_subscription(
             Image, self._img_topic, self._image_cb, sensor_qos
         )
 
-        # ---- 延迟诊断（2秒后检查订阅状态，只执行一次）----
         self._diag_done = False
         self._diag_timer = self.create_timer(2.0, self._diag_check)
 
-        # ---- 缓存 ----
         self._raw_image: Optional[np.ndarray] = None
         self._detections: Optional[Detection2DArray] = None
         self._det_count = 0
@@ -164,10 +136,8 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._manual_vyaw = 0.0   # 偏航角速度，对应 SportClient.move(vyaw=...)
         self._manual_active = False
 
-        # ---- tkinter GUI ----
         self._build_gui()
 
-        # ---- GUI 刷新 ----
         self._update_loop()
 
         self.get_logger().info("=" * 50)
@@ -178,25 +148,17 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self.get_logger().info(f"armdown: {self._gs_armdown_script}")
         self.get_logger().info("=" * 50)
 
-    # ==================================================================
     #  日志实现（GraspStateMachineMixin 抽象方法）
-    # ==================================================================
     def _log_info(self, msg: str) -> None:
         self._append_log(msg)
 
     def _log_error(self, msg: str) -> None:
         self._append_log(msg)
 
-    # ==================================================================
-    #  状态变化回调（更新 GUI 显示）
-    # ==================================================================
     def _on_state_changed(self, old_state: GraspState, new_state: GraspState) -> None:
         """状态变化时更新 GUI。"""
         self._update_state_display()
 
-    # ==================================================================
-    #  诊断
-    # ==================================================================
     def _diag_check(self):
         """启动后延迟检查订阅状态，帮助定位无法接收图像的问题。"""
         if self._diag_done:
@@ -235,9 +197,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             except Exception:
                 pass
 
-    # ==================================================================
-    #  GUI 构建
-    # ==================================================================
     def _build_gui(self):
         self.root = tk.Tk()
         self.root.title("G1 NavGrasp 控制面板")
@@ -246,7 +205,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self.root.minsize(720, 520)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # ---- 顶部标题栏 ----
         title_frame = tk.Frame(self.root, bg=_BG_SECONDARY, height=42)
         title_frame.pack(fill=tk.X, padx=0, pady=0)
         title_frame.pack_propagate(False)
@@ -278,7 +236,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         )
         self._fps_label.pack(side=tk.RIGHT, padx=12, pady=8)
 
-        # ---- 图像区域 ----
         img_frame = tk.Frame(self.root, bg=_BG_DEEP)
         img_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(6, 4))
 
@@ -316,7 +273,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         )
         self._det_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=(0, 1))
 
-        # ---- 状态信息栏 ----
         info_frame = tk.Frame(self.root, bg=_BG_PRIMARY, height=30, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         info_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
         info_frame.pack_propagate(False)
@@ -332,7 +288,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         )
         self._det_info_label.pack(side=tk.RIGHT, padx=10)
 
-        # ---- 控制按钮栏 ----
         btn_frame = tk.Frame(self.root, bg=_BG_DEEP)
         btn_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
 
@@ -420,7 +375,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         )
         speed_scale.pack(side=tk.LEFT)
 
-        # ---- 日志栏 ----
         log_card = tk.Frame(self.root, bg=_BG_PRIMARY, highlightbackground=_BORDER_COLOR, highlightthickness=1)
         log_card.pack(fill=tk.X, padx=8, pady=(0, 6))
 
@@ -451,9 +405,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 0))
         self._log_textbox.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
-    # ==================================================================
-    #  GUI 日志
-    # ==================================================================
     def _append_log(self, text: str):
         """向日志栏追加一行文本。"""
         def _update():
@@ -477,9 +428,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._state_label.config(text=label, fg=color)
         self._state_dot.itemconfigure(self._state_dot_dot, fill=color)
 
-    # ==================================================================
-    #  ROS2 回调
-    # ==================================================================
     def _image_cb(self, msg: Image):
         try:
             self._raw_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -501,9 +449,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         # 转发给基类的检测处理（更新 target_u / bbox 等）
         self._gs_on_detection(msg)
 
-    # ==================================================================
-    #  图像绘制
-    # ==================================================================
     def _draw_detections(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
         if self._detections is None:
@@ -511,7 +456,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         out = draw_detections_on_frame(frame, self._detections)
         h, w = out.shape[:2]
 
-        # 绘制十字准心
         if self._gs_target_u is not None and self._gs_state == GraspState.WORKING:
             cx = int(self._gs_target_u * w)
             cy = h // 2
@@ -528,9 +472,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             cw, ch = self._disp_w, self._disp_h
         return cv2_to_tk(frame, cw, ch)
 
-    # ==================================================================
-    #  手动控制
-    # ==================================================================
     def _manual_cmd(self, vx: float, vy: float, vyaw: float):
         """手动方向控制（持续发布模式，点击后持续运动直到按停止）。"""
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
@@ -565,9 +506,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._append_log("[FSM] 开始初始化状态机...")
         self._sport.init_fsm()
 
-    # ==================================================================
-    #  任务操作
-    # ==================================================================
     def _do_start_search(self):
         """开始搜索目标。"""
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
@@ -616,9 +554,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         t = threading.Thread(target=_worker, daemon=True)
         t.start()
 
-    # ==================================================================
     #  覆盖基类的抓取/放下 — 添加 GUI 状态更新
-    # ==================================================================
     def _gs_run_grab(self) -> None:
         """执行 armup.py — 覆盖基类以添加 GUI 更新。"""
         script = str(self._gs_armup_script)
@@ -704,9 +640,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         t.start()
         self._append_log(f"[放下] 子线程已启动 tid={t.ident}")
 
-    # ==================================================================
     #  状态机 tick（转发到基类 + 手动控制）
-    # ==================================================================
     def _tick(self) -> None:
         # 手动控制持续发布（SET_VELOCITY duration=1.0 需要持续发送保持运动）
         if self._manual_active and self._gs_state in (GraspState.IDLE, GraspState.MENU):
@@ -714,9 +648,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
 
         self._gs_tick()
 
-    # ==================================================================
-    #  GUI 主循环
-    # ==================================================================
     def _update_loop(self):
         """定时刷新 GUI + 状态机 tick（约 60Hz+）。"""
         if not self._running:
@@ -829,7 +760,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._gs_destroy()
         super().destroy_node()
 
-
 def main(args=None):
     """
     控制面板主入口函数
@@ -854,7 +784,6 @@ def main(args=None):
         node._running = False
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

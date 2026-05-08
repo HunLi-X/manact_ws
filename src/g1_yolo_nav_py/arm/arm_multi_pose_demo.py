@@ -25,10 +25,6 @@ import sys
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
 
-
-# ======================================================================
-# 预设姿态定义
-# ======================================================================
 def _pose_zeros():
     """零位：所有受控关节归零。"""
     return [0.0] * 13
@@ -73,7 +69,6 @@ def _pose_wave_body():
          0.0,   0.0,  0.0,
     ]
 
-
 # 姿态列表：名称 + 角度数组 + 保持时间(秒)
 POSE_SEQUENCE = [
     ("1",  _pose_arms_up(),         2.0),
@@ -82,7 +77,6 @@ POSE_SEQUENCE = [
     ("4",  _pose_wave(),            3.0),
     ("5",  _pose_wave_body(),       3.0),
 ]
-
 
 class MultiPoseController(BaseArmController):
     """G1 手臂多姿态循环控制器。
@@ -99,10 +93,6 @@ class MultiPoseController(BaseArmController):
     def _log_pose(self, name):
         print(f"\n  >>> {name}")
 
-
-# ======================================================================
-# 主入口
-# ======================================================================
 if __name__ == '__main__':
     input("Press Enter to continue...")
 
