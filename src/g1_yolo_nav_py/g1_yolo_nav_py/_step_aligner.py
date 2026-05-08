@@ -131,8 +131,10 @@ class StepAligner:
         self._settle_start = now
 
         if self._step_count >= self._max_steps:
-            msg += f" (已连续{self._step_count}步，重置计数器)"
+            self._move_fn(0.0, None)
+            self._settling = False
             self._step_count = 0
+            return AlignAction.LOST, f"已连续旋转 {self._max_steps} 步仍未居中，停止"
 
         return AlignAction.ROTATING, msg
 

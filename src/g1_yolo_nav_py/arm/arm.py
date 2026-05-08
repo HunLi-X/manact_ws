@@ -62,7 +62,7 @@ class Custom:
         self.target_pos = [
             0.0,      kPi_2,  0.0,    kPi_2,  0.0,
             0.0,     -kPi_2,  0.0,    kPi_2,  0.0,
-            0.0,      0.0,
+            0.0,      0.0,    0.0,
         ]
 
     def _clip_joint(self, joint, value):
@@ -81,18 +81,17 @@ class Custom:
             interval=self.control_dt_, target=self.LowCmdWrite, name="control"
         )
         _t0 = time.time()
-        while self.first_update_low_state == False:
+        while not self.first_update_low_state:
             if time.time() - _t0 > 10.0:
                 raise TimeoutError("未收到关节状态消息，请检查 DDS 通信和网络接口")
             time.sleep(0.1)
 
-        if self.first_update_low_state == True:
-            self.lowCmdWriteThreadPtr.Start()
+        self.lowCmdWriteThreadPtr.Start()
 
     def LowStateHandler(self, msg: LowState_):
         with self._state_lock:
             self.low_state = msg
-        if self.first_update_low_state == False:
+        if not self.first_update_low_state:
             self.first_update_low_state = True
 
     def LowCmdWrite(self):
@@ -137,9 +136,8 @@ class Custom:
                 self.low_cmd.motor_cmd[joint].kd = self.kd
 
         elif self.time_ < self.duration_ * 7:
-            for i, joint in enumerate(ARM_JOINTS):
-                ratio = np.clip((self.time_ - self.duration_*6) / (self.duration_), 0.0, 1.0)
-                self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = (1 - ratio)
+            ratio = np.clip((self.time_ - self.duration_*6) / self.duration_, 0.0, 1.0)
+            self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = (1 - ratio)
 
         else:
             self.done = True

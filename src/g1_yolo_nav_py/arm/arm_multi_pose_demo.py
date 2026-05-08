@@ -5,11 +5,7 @@ G1 人形机器人手臂多姿态演示
 ===========================
 在 arm_common.py 基础上，支持定义多个目标姿态，手臂在姿态之间平滑循环切换。
 
-预设姿态：
-  1. 双臂抬起（T-pose 变体）
-  2. 双手合十（祈祷姿势）
-  3. 挥手（右臂举起左右摆动）
-  4. 双臂下垂归零
+预设姿态：见 POSE_SEQUENCE（5 个姿态循环切换）
 
 运行方式：
     python3 arm_multi_pose_demo.py              # 自动检测网络接口
@@ -24,10 +20,6 @@ import sys
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
-
-def _pose_zeros():
-    """零位：所有受控关节归零。"""
-    return [0.0] * 13
 
 def _pose_arms_up():
     """姿态 1：预备姿势"1" """
@@ -90,11 +82,8 @@ class MultiPoseController(BaseArmController):
             include_init_zero=True, include_final_zero=True, include_release=True,
         )
 
-    def _log_pose(self, name):
-        print(f"\n  >>> {name}")
-
 if __name__ == '__main__':
-    input("Press Enter to continue...")
+    input("按 Enter 继续...")
 
     if len(sys.argv) > 1:
         ChannelFactoryInitialize(0, sys.argv[1])

@@ -7,13 +7,12 @@
     BaseArmController — 手臂控制器基类（DDS 通信 + 状态管理 + timeline 调度）
 """
 
-import sys
 import time
 import threading
 
 import numpy as np
 
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize, ChannelSubscriber
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.crc import CRC
@@ -145,10 +144,10 @@ class BaseArmController:
             return [0.0] * len(ARM_JOINTS)
         return [float(state.motor_state[j].q) for j in ARM_JOINTS]
 
-    #  指令发送（含安全限位）
-    def _send_joint_cmd(self, target_angles):
+    def _send_joint_cmd(self, target_angles, enable_sdk=True):
         """向所有受控关节发送 PD 位置控制指令（含角度限位）。"""
-        self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1  # 启用 arm_sdk
+        if enable_sdk:
+            self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1
         for i, joint in enumerate(ARM_JOINTS):
             lo, hi = JOINT_LIMITS.get(joint, (-3.14, 3.14))
             self.low_cmd.motor_cmd[joint].q = float(np.clip(target_angles[i], lo, hi))
@@ -201,7 +200,7 @@ class BaseArmController:
                 elif ptype == "release":
                     enable = 1.0 - ratio
                     self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = enable
-                    self._send_joint_cmd(current)
+                    self._send_joint_cmd(current, enable_sdk=False)
                     if abs(self.time - t_start) < self.control_dt * 1.5:
                         print("\n  [释放 arm_sdk]")
 

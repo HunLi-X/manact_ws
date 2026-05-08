@@ -22,20 +22,17 @@ G1 NavGrasp 控制面板 (tkinter)
     pip install pillow  (PIL 用于图像缩放显示)
 """
 
-import os
 import sys
 import subprocess
 import threading
 import time
-import math
 from pathlib import Path
 from typing import Optional
-from enum import Enum, auto
 
 import tkinter as tk
 import numpy as np
 import cv2
-from PIL import Image as PILImage, ImageTk
+from PIL import ImageTk
 
 import rclpy
 from rclpy.node import Node
@@ -181,7 +178,6 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
                 f"(用 ros2 topic list 查看)"
             )
             try:
-                import subprocess
                 result = subprocess.run(
                     ["ros2", "topic", "list"],
                     capture_output=True, text=True, timeout=3
@@ -442,12 +438,11 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         except Exception as e:
             self.get_logger().warn(f"[图像] 转换失败: {e}")
 
-    def _detection_cb(self, msg: Detection2DArray):
-        """检测回调 — 更新 GUI 显示 + 转发给基类。"""
+    def _gs_on_detection(self, msg: Detection2DArray) -> None:
+        """检测回调 — 存储原始检测结果用于 GUI 绘制，同时转发给基类。"""
         self._detections = msg
         self._det_count = len(msg.detections)
-        # 转发给基类的检测处理（更新 target_u / bbox 等）
-        self._gs_on_detection(msg)
+        super()._gs_on_detection(msg)
 
     def _draw_detections(self, frame: np.ndarray) -> np.ndarray:
         """在图像上绘制检测框（返回新图像，不修改传入的 frame）。"""
@@ -491,7 +486,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         self._manual_vyaw = 0.0
 
         prev = self._gs_state
-        self._gs_state = GraspState.IDLE
+        self.gs_state = GraspState.IDLE
         self._sport.stop()
         self._gs_aligner.reset()
         self._gs_approach.reset()
@@ -511,7 +506,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._gs_state = GraspState.WORKING
+        self.gs_state = GraspState.WORKING
         self._gs_aligned = False
         self._gs_aligner.reset()
         self._gs_approach.reset()
@@ -524,7 +519,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             self._append_log("[提示] 请先停止当前任务")
             return
-        self._gs_state = GraspState.GRABBING
+        self.gs_state = GraspState.GRABBING
         self._sport.stop()
         self._gs_run_grab()
         self._update_state_display()
@@ -560,8 +555,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         script = str(self._gs_armup_script)
         if not Path(script).exists():
             self._append_log(f"[错误] armup.py 不存在: {script}")
-            self._gs_state = GraspState.IDLE
-            self._update_state_display()
+            self.gs_state = GraspState.IDLE
             return
 
         self._append_log(f"[抓取] 执行 armup.py ... (python={sys.executable}, iface={self._net_iface})")

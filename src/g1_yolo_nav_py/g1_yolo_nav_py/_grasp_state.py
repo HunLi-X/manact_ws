@@ -88,7 +88,6 @@ class GraspStateMachineMixin:
         node.declare_parameter("use_depth_distance", True)
         node.declare_parameter("stop_distance", 0.5)
         node.declare_parameter("depth_sample_radius", 5)
-        node.declare_parameter("camera_fov_deg", 87.0)
         node.declare_parameter("center_tolerance", 0.08)
         node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
         node.declare_parameter("step_duration", 0.3)           # 步进式对齐：每步持续时间

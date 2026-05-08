@@ -63,7 +63,6 @@ import time
 import threading
 from typing import Optional, Callable
 
-import rclpy
 from rclpy.node import Node
 from unitree_api.msg import Request
 

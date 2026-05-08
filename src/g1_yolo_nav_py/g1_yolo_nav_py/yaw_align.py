@@ -18,7 +18,6 @@ grasp_task 也使用同一个 StepAligner，保证行为一致。
     ros2 run g1_yolo_nav_py yaw_align
 """
 
-import math
 import time
 from typing import Optional
 
@@ -42,7 +41,6 @@ class YawAlignNode(Node):
 
         self.declare_parameter("detection_topic", "/g1/vision/detections")
         self.declare_parameter("target_class_id", "chair")
-        self.declare_parameter("camera_fov_deg", 87.0)
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("step_yaw_speed", 0.3)
         self.declare_parameter("step_duration", 0.8)
@@ -54,7 +52,6 @@ class YawAlignNode(Node):
         p = lambda n: self.get_parameter(n).value
         self._det_topic = p("detection_topic")
         self._target_class = p("target_class_id")
-        self._fov_rad = math.radians(float(p("camera_fov_deg")))
         self._lost_timeout = float(p("lost_timeout"))
         self._check_rate = float(p("check_rate"))
 

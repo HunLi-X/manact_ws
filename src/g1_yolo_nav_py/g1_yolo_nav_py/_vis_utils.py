@@ -6,7 +6,7 @@
     cv2_to_tk              — OpenCV BGR 图像 → tkinter PhotoImage
 """
 
-from typing import Tuple, Optional  # 类型注解
+from typing import Tuple
 
 import cv2
 import numpy as np
