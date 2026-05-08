@@ -7,6 +7,7 @@
     BaseArmController — 手臂控制器基类（DDS 通信 + 状态管理 + timeline 调度）
 """
 
+import math
 import time
 import threading
 
@@ -149,7 +150,7 @@ class BaseArmController:
         if enable_sdk:
             self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 1
         for i, joint in enumerate(ARM_JOINTS):
-            lo, hi = JOINT_LIMITS.get(joint, (-3.14, 3.14))
+            lo, hi = JOINT_LIMITS.get(joint, (-math.pi, math.pi))
             self.low_cmd.motor_cmd[joint].q = float(np.clip(target_angles[i], lo, hi))
             self.low_cmd.motor_cmd[joint].dq = 0.0
             self.low_cmd.motor_cmd[joint].tau = 0.0

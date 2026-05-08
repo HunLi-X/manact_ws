@@ -23,7 +23,6 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Header
 import tf2_ros
 from cv_bridge import CvBridge
-import cv2
 
 class SpatialTargetNode(Node):
     """将 2D 检测框投影到 odom 坐标系下的 3D 坐标。"""
