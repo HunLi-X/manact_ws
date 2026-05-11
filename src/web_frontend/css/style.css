@@ -1,0 +1,61 @@
+/* G1 NavGrasp Web 控制面板 — 样式表 */
+
+html, body {
+  background: linear-gradient(135deg, #F0FDFA 0%, #E0F2FE 100%);
+  min-height: 100vh;
+}
+
+.stream-img {
+  background: #0F172A;
+  border-radius: 8px;
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+
+.btn {
+  transition: all 0.15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-weight: 500;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary { background-color: #0891B2; color: white; }
+.btn-primary:hover { background-color: #0F766E; }
+
+.btn-success { background-color: #10B981; color: white; }
+.btn-success:hover { background-color: #059669; }
+
+.btn-warning { background-color: #F59E0B; color: white; }
+.btn-warning:hover { background-color: #D97706; }
+
+.btn-danger { background-color: #EF4444; color: white; }
+.btn-danger:hover { background-color: #DC2626; }
+
+.btn-neutral { background-color: #3B82F6; color: white; }
+.btn-neutral:hover { background-color: #2563EB; }
+
+.state-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.log-line {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.log-info  { color: #059669; }
+.log-warn  { color: #D97706; }
+.log-error { color: #DC2626; }
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+}

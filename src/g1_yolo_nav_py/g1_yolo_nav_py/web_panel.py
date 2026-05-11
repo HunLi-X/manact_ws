@@ -49,7 +49,7 @@ from vision_msgs.msg import Detection2DArray
 from cv_bridge import CvBridge
 
 try:
-    from flask import Flask, Response, request, jsonify, render_template_string
+    from flask import Flask, Response, request, jsonify, send_from_directory
 except ImportError:
     print("ERROR: Flask 未安装。请运行: pip install flask", file=sys.stderr)
     sys.exit(1)
@@ -60,244 +60,55 @@ from g1_yolo_nav_py._vis_utils import draw_detections_on_frame
 
 
 # ======================================================================
-# 前端 HTML（Tailwind CDN + 原生 JS，单文件零构建）
+# 前端目录解析
 # ======================================================================
-INDEX_HTML = r"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>G1 NavGrasp · Web 控制面板</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          teal: { 50:'#F0FDFA', 100:'#CCFBF1', 500:'#14B8A6', 600:'#0D9488', 700:'#0F766E', 900:'#134E4A' },
-          brand: '#0891B2',
-        },
-        fontFamily: {
-          sans: ['"Inter"','"PingFang SC"','"Microsoft YaHei UI"','sans-serif'],
-          mono: ['"JetBrains Mono"','"Consolas"','monospace'],
-        },
-        boxShadow: {
-          soft: '0 2px 8px rgba(15, 118, 110, 0.08)',
-          card: '0 4px 16px rgba(15, 118, 110, 0.10)',
-        }
-      }
-    }
-  }
-</script>
-<style>
-  html, body { background: linear-gradient(135deg, #F0FDFA 0%, #E0F2FE 100%); min-height: 100vh; }
-  .stream-img { background: #0F172A; border-radius: 8px; object-fit: contain; width: 100%; height: 100%; }
-  .btn { transition: all 0.15s; user-select: none; -webkit-tap-highlight-color: transparent; }
-  .btn:hover { transform: translateY(-1px); }
-  .btn:active { transform: translateY(0); }
-  .btn-primary { @apply bg-brand text-white hover:bg-teal-700 shadow-soft; }
-  .btn-success { @apply bg-emerald-500 text-white hover:bg-emerald-600 shadow-soft; }
-  .btn-warning { @apply bg-amber-500 text-white hover:bg-amber-600 shadow-soft; }
-  .btn-danger  { @apply bg-red-500 text-white hover:bg-red-600 shadow-soft; }
-  .btn-neutral { @apply bg-blue-500 text-white hover:bg-blue-600 shadow-soft; }
-  .state-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .log-line { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; line-height: 1.5; }
-  .log-info  { color: #059669; }
-  .log-warn  { color: #D97706; }
-  .log-error { color: #DC2626; }
-  .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(15,118,110,0.08); }
-</style>
-</head>
-<body class="font-sans text-teal-900 antialiased">
+def _resolve_frontend_dir() -> Path:
+    """按优先级查找 web_frontend/ 目录：
 
-<header class="bg-gradient-to-r from-brand to-teal-700 text-white shadow-card">
-  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold">G1</div>
-      <div>
-        <h1 class="text-xl font-bold tracking-tight">G1 NavGrasp</h1>
-        <p class="text-xs text-teal-100">Web Dashboard · 远程控制</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5">
-        <span id="state-dot" class="state-dot bg-slate-400"></span>
-        <span id="state-label" class="font-mono text-sm font-medium">连接中</span>
-      </div>
-      <div class="text-xs text-teal-100 font-mono">
-        <span id="fps-label">FPS —</span> · <span id="det-label">检测 —</span>
-      </div>
-    </div>
-  </div>
-</header>
+    1. 环境变量 G1_WEB_FRONTEND_DIR（开发/手动覆盖）
+    2. 安装目录：share/g1_yolo_nav_py/web_frontend/（colcon install 后）
+    3. 开发源码树：src/web_frontend/（相对当前文件向上查找）
 
-<main class="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
+    Returns:
+        web_frontend 目录的绝对路径。
 
-  <section class="lg:col-span-2 space-y-5">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-teal-900">原始图像</h3>
-          <span class="text-xs text-slate-400 font-mono">raw</span>
-        </div>
-        <div class="aspect-[4/3]">
-          <img src="/stream/raw" class="stream-img" alt="raw" />
-        </div>
-      </div>
-      <div class="card">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-teal-900">检测结果</h3>
-          <span class="text-xs text-slate-400 font-mono">annotated</span>
-        </div>
-        <div class="aspect-[4/3]">
-          <img src="/stream/detection" class="stream-img" alt="detection" />
-        </div>
-      </div>
-    </div>
+    Raises:
+        FileNotFoundError: 所有候选位置都没找到。
+    """
+    candidates = []
 
-    <div class="card">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-teal-900">手动控制</h3>
-        <div class="flex items-center gap-2 text-xs text-slate-500">
-          <label>速度</label>
-          <input id="speed-slider" type="range" min="0.05" max="0.5" step="0.05" value="0.2"
-                 class="w-32 accent-brand" />
-          <span id="speed-value" class="font-mono text-brand font-semibold w-10">0.20</span>
-        </div>
-      </div>
-      <div class="grid grid-cols-5 gap-2">
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="forward">↑ 前进</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="backward">↓ 后退</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="left">↺ 左转</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="right">↻ 右转</button>
-        <button class="btn btn-danger py-3 rounded-lg" data-cmd="stop">■ 停止</button>
-      </div>
-    </div>
+    env_dir = os.environ.get("G1_WEB_FRONTEND_DIR")
+    if env_dir:
+        candidates.append(Path(env_dir))
 
-    <div class="card">
-      <h3 class="text-sm font-semibold text-teal-900 mb-3">任务控制</h3>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <button class="btn btn-warning py-3 rounded-lg" data-cmd="search">🔍 搜索目标</button>
-        <button class="btn btn-danger py-3 rounded-lg" data-cmd="grab">🤖 抓取</button>
-        <button class="btn btn-success py-3 rounded-lg" data-cmd="putdown">📥 放下</button>
-        <button class="btn btn-success py-3 rounded-lg" data-cmd="turn_putdown">↪ 右转放下</button>
-      </div>
-    </div>
-  </section>
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share = Path(get_package_share_directory("g1_yolo_nav_py"))
+        candidates.append(share / "web_frontend")
+    except Exception:
+        pass
 
-  <aside class="space-y-5">
-    <div class="card">
-      <h3 class="text-sm font-semibold text-teal-900 mb-3">状态信息</h3>
-      <dl class="space-y-2 text-sm">
-        <div class="flex justify-between"><dt class="text-slate-500">任务状态</dt><dd id="info-state" class="font-mono font-semibold">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">目标类别</dt><dd id="info-target" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">目标位置 u</dt><dd id="info-u" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">BBox 大小</dt><dd id="info-bbox" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">深度距离</dt><dd id="info-dist" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">检测数量</dt><dd id="info-count" class="font-mono">—</dd></div>
-      </dl>
-    </div>
+    # 开发模式：从 src/g1_yolo_nav_py/g1_yolo_nav_py/web_panel.py 向上找 src/web_frontend
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "web_frontend"
+        if candidate.is_dir():
+            candidates.append(candidate)
+            break
+        if parent.name == "src":
+            candidates.append(parent / "web_frontend")
+            break
 
-    <div class="card">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-teal-900">日志</h3>
-        <button onclick="clearLog()" class="text-xs text-slate-400 hover:text-slate-600">清空</button>
-      </div>
-      <div id="log-box" class="bg-slate-50 rounded-lg p-3 h-80 overflow-y-auto border border-slate-200"></div>
-    </div>
-  </aside>
-</main>
+    for c in candidates:
+        if c and c.is_dir() and (c / "index.html").is_file():
+            return c
 
-<script>
-const STATE_COLORS = {
-  IDLE:     { dot:'bg-slate-400',   text:'空闲' },
-  WORKING:  { dot:'bg-cyan-500',    text:'执行中' },
-  GRABBING: { dot:'bg-red-500',     text:'抓取中' },
-  MENU:     { dot:'bg-emerald-500', text:'可放下' },
-};
+    raise FileNotFoundError(
+        f"未找到 web_frontend 目录。已查找: {[str(c) for c in candidates]}\n"
+        f"请检查：1) colcon build 已完成  2) src/web_frontend/ 存在"
+    )
 
-const speedSlider = document.getElementById('speed-slider');
-const speedValue = document.getElementById('speed-value');
-speedSlider.addEventListener('input', () => speedValue.textContent = (+speedSlider.value).toFixed(2));
 
-function getSpeed() { return parseFloat(speedSlider.value); }
-
-async function postCmd(path, body={}) {
-  try {
-    const r = await fetch(path, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    const data = await r.json();
-    if (!r.ok) appendLog(data.error || 'error', 'error');
-  } catch (e) { appendLog('网络错误: ' + e.message, 'error'); }
-}
-
-document.querySelectorAll('button[data-cmd]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const cmd = btn.dataset.cmd;
-    const v = getSpeed();
-    const vyaw = v * 2.0;   // 转向速度按线速度的 2 倍
-    switch (cmd) {
-      case 'forward':  postCmd('/api/cmd/manual', {vx:  v,   vy:0, vyaw:0}); break;
-      case 'backward': postCmd('/api/cmd/manual', {vx: -v,   vy:0, vyaw:0}); break;
-      case 'left':     postCmd('/api/cmd/manual', {vx:0, vy:0, vyaw:  vyaw}); break;
-      case 'right':    postCmd('/api/cmd/manual', {vx:0, vy:0, vyaw: -vyaw}); break;
-      case 'stop':     postCmd('/api/cmd/stop'); break;
-      case 'search':   postCmd('/api/cmd/search'); break;
-      case 'grab':     postCmd('/api/cmd/grab'); break;
-      case 'putdown':  postCmd('/api/cmd/putdown'); break;
-      case 'turn_putdown': postCmd('/api/cmd/turn_putdown'); break;
-    }
-  });
-});
-
-function appendLog(msg, level='info') {
-  const box = document.getElementById('log-box');
-  const line = document.createElement('div');
-  const ts = new Date().toLocaleTimeString('zh-CN', {hour12:false});
-  line.className = `log-line log-${level}`;
-  line.textContent = `[${ts}] ${msg}`;
-  box.appendChild(line);
-  if (box.children.length > 300) box.removeChild(box.firstChild);
-  box.scrollTop = box.scrollHeight;
-}
-
-function clearLog() { document.getElementById('log-box').innerHTML = ''; }
-
-let lastLogIdx = 0;
-async function pollState() {
-  try {
-    const r = await fetch('/api/state?since=' + lastLogIdx);
-    if (!r.ok) return;
-    const s = await r.json();
-
-    const st = STATE_COLORS[s.state] || { dot:'bg-slate-400', text:s.state };
-    document.getElementById('state-dot').className = 'state-dot ' + st.dot;
-    document.getElementById('state-label').textContent = st.text;
-
-    document.getElementById('fps-label').textContent = 'FPS ' + (s.fps || 0).toFixed(0);
-    document.getElementById('det-label').textContent = '检测 ' + (s.det_count || 0);
-
-    document.getElementById('info-state').textContent = s.state;
-    document.getElementById('info-target').textContent = s.target_class || '—';
-    document.getElementById('info-u').textContent = s.target_u != null ? s.target_u.toFixed(3) : '—';
-    document.getElementById('info-bbox').textContent = s.bbox_max != null ? s.bbox_max.toFixed(2) : '—';
-    document.getElementById('info-dist').textContent = s.distance != null ? s.distance.toFixed(2) + ' m' : '—';
-    document.getElementById('info-count').textContent = s.det_count != null ? s.det_count : '—';
-
-    if (s.logs && s.logs.length > 0) {
-      for (const entry of s.logs) appendLog(entry.msg, entry.level);
-      lastLogIdx = s.log_idx;
-    }
-  } catch (e) { /* 暂时忽略网络异常 */ }
-}
-setInterval(pollState, 500);
-pollState();
-appendLog('Web 面板已连接', 'info');
-</script>
-</body>
-</html>"""
 
 
 # ======================================================================
@@ -542,14 +353,21 @@ class WebPanelNode(Node, GraspStateMachineMixin):
 # Flask App 工厂
 # ======================================================================
 def create_app(node: WebPanelNode) -> Flask:
-    app = Flask(__name__)
+    frontend_dir = _resolve_frontend_dir()
+    node.get_logger().info(f"[Web] 前端目录: {frontend_dir}")
+
+    app = Flask(
+        __name__,
+        static_folder=str(frontend_dir),
+        static_url_path="/static",
+    )
     # 关闭 Flask 自身 log 的噪声
     import logging
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
     @app.route("/")
     def index():
-        return render_template_string(INDEX_HTML)
+        return send_from_directory(str(frontend_dir), "index.html")
 
     @app.route("/stream/raw")
     def stream_raw():

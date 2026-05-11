@@ -1,7 +1,34 @@
 import glob
+import os
 from setuptools import find_packages, setup
 
 package_name = "g1_yolo_nav_py"
+
+
+def _collect_web_frontend():
+    """收集 src/web_frontend/ 下所有文件，保留目录结构打包到 share/。
+
+    源目录约定在 ../web_frontend 相对于本 setup.py。
+    输出格式：[(share_subdir, [file_paths]), ...]
+    """
+    # setup.py 位于 src/g1_yolo_nav_py/，前端在 src/web_frontend/
+    here = os.path.dirname(os.path.abspath(__file__))
+    frontend_src = os.path.normpath(os.path.join(here, "..", "web_frontend"))
+    if not os.path.isdir(frontend_src):
+        return []
+
+    share_base = "share/" + package_name + "/web_frontend"
+    result = []
+    for root, _dirs, files in os.walk(frontend_src):
+        if not files:
+            continue
+        # 相对路径作为 share 子目录后缀
+        rel = os.path.relpath(root, frontend_src)
+        sub = share_base if rel == "." else share_base + "/" + rel.replace(os.sep, "/")
+        paths = [os.path.join(root, f).replace(os.sep, "/") for f in files]
+        result.append((sub, paths))
+    return result
+
 
 setup(
     name=package_name,
@@ -13,7 +40,7 @@ setup(
         ("share/" + package_name + "/launch", glob.glob("launch/*.launch.py")),
         ("share/" + package_name + "/config", glob.glob("config/*.yaml")),
         ("share/" + package_name + "/models", glob.glob("*.pt")),
-    ],
+    ] + _collect_web_frontend(),
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="developer",
