@@ -10,8 +10,11 @@
     theme: {
       extend: {
         colors: {
-          teal: { 50:'#F0FDFA', 100:'#CCFBF1', 500:'#14B8A6', 600:'#0D9488', 700:'#0F766E', 900:'#134E4A' },
-          brand: '#0891B2',
+          brand: {
+            50:'#F0FDFA', 100:'#CCFBF1', 500:'#14B8A6',
+            600:'#0D9488', 700:'#0F766E', 900:'#134E4A',
+            DEFAULT:'#0891B2',
+          },
         },
         fontFamily: {
           sans: ['"Inter"','"PingFang SC"','"Microsoft YaHei UI"','sans-serif'],
@@ -20,112 +23,313 @@
         boxShadow: {
           soft: '0 2px 8px rgba(15, 118, 110, 0.08)',
           card: '0 4px 16px rgba(15, 118, 110, 0.10)',
-        }
-      }
-    }
-  }
+        },
+      },
+    },
+  };
 </script>
 <link rel="stylesheet" href="/static/css/style.css" />
 </head>
-<body class="font-sans text-teal-900 antialiased">
+<body class="font-sans text-brand-900 antialiased">
 
-<header class="bg-gradient-to-r from-brand to-teal-700 text-white shadow-card">
-  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold">G1</div>
-      <div>
-        <h1 class="text-xl font-bold tracking-tight">G1 NavGrasp</h1>
-        <p class="text-xs text-teal-100">Web Dashboard · 远程控制</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5">
-        <span id="state-dot" class="state-dot bg-slate-400"></span>
-        <span id="state-label" class="font-mono text-sm font-medium">连接中</span>
-      </div>
-      <div class="text-xs text-teal-100 font-mono">
-        <span id="fps-label">FPS —</span> · <span id="det-label">检测 —</span>
-      </div>
-    </div>
-  </div>
-</header>
+<div class="app-layout">
 
-<main class="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-  <section class="lg:col-span-2 space-y-5">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-teal-900">原始图像</h3>
-          <span class="text-xs text-slate-400 font-mono">raw</span>
-        </div>
-        <div class="aspect-[4/3]">
-          <img src="/stream/raw" class="stream-img" alt="raw" />
-        </div>
-      </div>
-      <div class="card">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-teal-900">检测结果</h3>
-          <span class="text-xs text-slate-400 font-mono">annotated</span>
-        </div>
-        <div class="aspect-[4/3]">
-          <img src="/stream/detection" class="stream-img" alt="detection" />
-        </div>
+  <!-- ========== 左侧导航栏 ========== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo">G1</div>
+      <div class="brand-text">
+        <div class="brand-title">NavGrasp</div>
+        <div class="brand-sub">Web Dashboard</div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-teal-900">手动控制</h3>
-        <div class="flex items-center gap-2 text-xs text-slate-500">
-          <label>速度</label>
-          <input id="speed-slider" type="range" min="0.05" max="0.5" step="0.05" value="0.2"
-                 class="w-32 accent-brand" />
-          <span id="speed-value" class="font-mono text-brand font-semibold w-10">0.20</span>
-        </div>
-      </div>
-      <div class="grid grid-cols-5 gap-2">
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="forward">↑ 前进</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="backward">↓ 后退</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="left">↺ 左转</button>
-        <button class="btn btn-neutral py-3 rounded-lg" data-cmd="right">↻ 右转</button>
-        <button class="btn btn-danger py-3 rounded-lg" data-cmd="stop">■ 停止</button>
-      </div>
-    </div>
+    <nav class="sidebar-nav">
+      <a href="#grasp" class="nav-item" data-view="grasp">
+        <span class="nav-icon">🎯</span>
+        <span class="nav-label">目标抓取</span>
+        <span class="nav-badge">主</span>
+      </a>
+      <a href="#detect" class="nav-item" data-view="detect">
+        <span class="nav-icon">🔍</span>
+        <span class="nav-label">目标识别</span>
+      </a>
+      <a href="#control" class="nav-item" data-view="control">
+        <span class="nav-icon">🕹️</span>
+        <span class="nav-label">运动控制</span>
+      </a>
+      <a href="#status" class="nav-item" data-view="status">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">系统状态</span>
+      </a>
+      <div class="nav-divider"></div>
+      <a href="#coming" class="nav-item nav-muted" data-view="coming">
+        <span class="nav-icon">✨</span>
+        <span class="nav-label">更多模块</span>
+        <span class="nav-badge nav-badge-muted">待定</span>
+      </a>
+    </nav>
 
-    <div class="card">
-      <h3 class="text-sm font-semibold text-teal-900 mb-3">任务控制</h3>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <button class="btn btn-warning py-3 rounded-lg" data-cmd="search">🔍 搜索目标</button>
-        <button class="btn btn-danger py-3 rounded-lg" data-cmd="grab">🤖 抓取</button>
-        <button class="btn btn-success py-3 rounded-lg" data-cmd="putdown">📥 放下</button>
-        <button class="btn btn-success py-3 rounded-lg" data-cmd="turn_putdown">↪ 右转放下</button>
-      </div>
-    </div>
-  </section>
-
-  <aside class="space-y-5">
-    <div class="card">
-      <h3 class="text-sm font-semibold text-teal-900 mb-3">状态信息</h3>
-      <dl class="space-y-2 text-sm">
-        <div class="flex justify-between"><dt class="text-slate-500">任务状态</dt><dd id="info-state" class="font-mono font-semibold">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">目标类别</dt><dd id="info-target" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">目标位置 u</dt><dd id="info-u" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">BBox 大小</dt><dd id="info-bbox" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">深度距离</dt><dd id="info-dist" class="font-mono">—</dd></div>
-        <div class="flex justify-between"><dt class="text-slate-500">检测数量</dt><dd id="info-count" class="font-mono">—</dd></div>
-      </dl>
-    </div>
-
-    <div class="card">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-teal-900">日志</h3>
-        <button onclick="clearLog()" class="text-xs text-slate-400 hover:text-slate-600">清空</button>
-      </div>
-      <div id="log-box" class="bg-slate-50 rounded-lg p-3 h-80 overflow-y-auto border border-slate-200"></div>
+    <div class="sidebar-footer">
+      <div class="text-xs text-slate-400 px-4 pb-2 font-mono">v0.1 · ROS2 Foxy</div>
     </div>
   </aside>
-</main>
+
+  <!-- ========== 主内容区 ========== -->
+  <main class="main-wrap">
+
+    <!-- 顶部栏：模块标题 + 全局状态 -->
+    <header class="topbar">
+      <div>
+        <h2 id="page-title" class="text-lg font-bold text-brand-900">目标抓取</h2>
+        <p id="page-subtitle" class="text-xs text-slate-500 mt-0.5">完整抓取任务流程</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="pill">
+          <span id="state-dot" class="state-dot bg-slate-400"></span>
+          <span id="state-label" class="font-mono text-sm font-medium">连接中</span>
+        </div>
+        <div class="text-xs text-slate-500 font-mono">
+          <span id="fps-label">FPS —</span> · <span id="det-label">检测 —</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ 模块 1：目标抓取 ============ -->
+    <section class="view" data-view="grasp">
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+
+        <div class="xl:col-span-2 space-y-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">原始图像</h3>
+                <span class="card-tag">raw</span>
+              </div>
+              <div class="aspect-[4/3]">
+                <img src="/stream/raw" class="stream-img" alt="raw" />
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">检测结果</h3>
+                <span class="card-tag">annotated</span>
+              </div>
+              <div class="aspect-[4/3]">
+                <img src="/stream/detection" class="stream-img" alt="detection" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="card-title">任务控制</h3>
+              <span class="text-xs text-slate-400">一键抓取全流程</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <button class="btn btn-warning" data-cmd="search">🔍 搜索目标</button>
+              <button class="btn btn-danger" data-cmd="grab">🤖 抓取</button>
+              <button class="btn btn-success" data-cmd="putdown">📥 放下</button>
+              <button class="btn btn-success" data-cmd="turn_putdown">↪ 右转放下</button>
+            </div>
+            <div class="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+              <button class="btn btn-outline-danger flex-1" data-cmd="stop">■ 停止当前任务</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="space-y-5">
+          <div class="card">
+            <h3 class="card-title mb-3">实时状态</h3>
+            <dl class="info-list">
+              <div><dt>任务状态</dt><dd id="g-info-state">—</dd></div>
+              <div><dt>目标类别</dt><dd id="g-info-target">—</dd></div>
+              <div><dt>目标位置 u</dt><dd id="g-info-u">—</dd></div>
+              <div><dt>BBox 大小</dt><dd id="g-info-bbox">—</dd></div>
+              <div><dt>深度距离</dt><dd id="g-info-dist">—</dd></div>
+              <div><dt>检测数量</dt><dd id="g-info-count">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="card">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="card-title">日志</h3>
+              <button onclick="clearLog()" class="text-xs text-slate-400 hover:text-brand-600">清空</button>
+            </div>
+            <div id="log-box" class="log-box"></div>
+          </div>
+        </aside>
+
+      </div>
+    </section>
+
+    <!-- ============ 模块 2：目标识别 ============ -->
+    <section class="view hidden" data-view="detect">
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div class="xl:col-span-2">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">检测标注视频流</h3>
+              <span class="card-tag">YOLO Detection2DArray</span>
+            </div>
+            <div class="aspect-video">
+              <img src="/stream/detection" class="stream-img" alt="detection" />
+            </div>
+          </div>
+        </div>
+
+        <aside class="space-y-5">
+          <div class="card">
+            <h3 class="card-title mb-3">检测概览</h3>
+            <dl class="info-list">
+              <div><dt>当前 FPS</dt><dd id="d-fps">—</dd></div>
+              <div><dt>目标类别</dt><dd id="d-target">—</dd></div>
+              <div><dt>检测总数</dt><dd id="d-count">—</dd></div>
+              <div><dt>最佳目标 u</dt><dd id="d-u">—</dd></div>
+              <div><dt>BBox 大小</dt><dd id="d-bbox">—</dd></div>
+              <div><dt>深度距离</dt><dd id="d-dist">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title mb-2">说明</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              本页仅显示视觉检测结果，不触发任何运动控制。<br/>
+              切换到 <b>目标抓取</b> 或 <b>运动控制</b> 模块可驱动机器人。
+            </p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ 模块 3：运动控制 ============ -->
+    <section class="view hidden" data-view="control">
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div class="xl:col-span-2 space-y-5">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">原始图像</h3>
+              <span class="card-tag">raw</span>
+            </div>
+            <div class="aspect-video">
+              <img src="/stream/raw" class="stream-img" alt="raw" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="card-title">方向控制</h3>
+              <div class="flex items-center gap-2 text-xs text-slate-500">
+                <label>速度</label>
+                <input id="c-speed-slider" type="range" min="0.05" max="0.5" step="0.05" value="0.2" class="w-32 accent-brand" />
+                <span id="c-speed-value" class="font-mono text-brand font-semibold w-10">0.20</span>
+              </div>
+            </div>
+
+            <!-- 十字形方向盘布局 -->
+            <div class="dpad">
+              <div></div>
+              <button class="btn btn-neutral dpad-btn" data-dcmd="forward">↑</button>
+              <div></div>
+              <button class="btn btn-neutral dpad-btn" data-dcmd="left">↺</button>
+              <button class="btn btn-danger dpad-btn" data-dcmd="stop">■</button>
+              <button class="btn btn-neutral dpad-btn" data-dcmd="right">↻</button>
+              <div></div>
+              <button class="btn btn-neutral dpad-btn" data-dcmd="backward">↓</button>
+              <div></div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 leading-relaxed">
+              点击按钮后机器人持续运动，点击 <b>■</b> 停止。<br/>
+              速度滑块影响线速度 (v) 和角速度 (vyaw = 2v)。
+            </div>
+          </div>
+        </div>
+
+        <aside class="space-y-5">
+          <div class="card">
+            <h3 class="card-title mb-3">运动状态</h3>
+            <dl class="info-list">
+              <div><dt>任务状态</dt><dd id="c-info-state">—</dd></div>
+              <div><dt>当前模式</dt><dd id="c-info-mode">手动</dd></div>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title mb-3">安全提示</h3>
+            <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
+              <li>• 请确认机器人周围无障碍物</li>
+              <li>• 首次调试建议速度 ≤ 0.2 m/s</li>
+              <li>• 遥控器急停始终可用</li>
+              <li>• WALK_RUN 模式下才能运动</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ 模块 4：系统状态 ============ -->
+    <section class="view hidden" data-view="status">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div class="card">
+          <h3 class="card-title mb-3">视觉子系统</h3>
+          <dl class="info-list">
+            <div><dt>图像 FPS</dt><dd id="s-fps">—</dd></div>
+            <div><dt>检测数量</dt><dd id="s-det-count">—</dd></div>
+            <div><dt>目标类别</dt><dd id="s-target">—</dd></div>
+            <div><dt>目标 u</dt><dd id="s-u">—</dd></div>
+            <div><dt>BBox</dt><dd id="s-bbox">—</dd></div>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title mb-3">深度感知</h3>
+          <dl class="info-list">
+            <div><dt>深度距离</dt><dd id="s-dist">—</dd></div>
+            <div><dt>检测状态</dt><dd id="s-det-status" class="text-emerald-500">正常</dd></div>
+          </dl>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title mb-3">任务状态</h3>
+          <dl class="info-list">
+            <div><dt>状态机</dt><dd id="s-state">—</dd></div>
+            <div><dt>WebSocket</dt><dd class="text-emerald-500">polling</dd></div>
+          </dl>
+        </div>
+
+        <div class="card md:col-span-2 xl:col-span-3">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="card-title">系统日志</h3>
+            <button onclick="clearLog()" class="text-xs text-slate-400 hover:text-brand-600">清空</button>
+          </div>
+          <div id="s-log-box" class="log-box log-box-tall"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 模块 5：敬请期待 ============ -->
+    <section class="view hidden" data-view="coming">
+      <div class="coming-soon">
+        <div class="coming-icon">✨</div>
+        <h2 class="text-2xl font-bold text-brand-900 mb-2">敬请期待</h2>
+        <p class="text-sm text-slate-500 max-w-md text-center leading-relaxed">
+          更多功能模块开发中…<br/>
+          包括语音交互、多目标调度、路径规划可视化、点云视图等。
+        </p>
+        <div class="mt-6 grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl w-full">
+          <div class="coming-tile">🎙️ 语音交互</div>
+          <div class="coming-tile">🗺️ 路径规划</div>
+          <div class="coming-tile">☁️ 点云视图</div>
+          <div class="coming-tile">🤝 多目标调度</div>
+          <div class="coming-tile">📸 数据采集</div>
+          <div class="coming-tile">🔧 参数调优</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
 
 <script src="/static/js/app.js"></script>
 </body>
