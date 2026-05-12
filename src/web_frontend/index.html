@@ -58,6 +58,10 @@
         <span class="nav-icon">📊</span>
         <span class="nav-label">系统状态</span>
       </a>
+      <a href="#settings" class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">系统设置</span>
+      </a>
       <div class="nav-divider"></div>
       <a href="#coming" class="nav-item nav-muted" data-view="coming">
         <span class="nav-icon">✨</span>
@@ -461,7 +465,198 @@
     </section>
 
     <!-- ======================================================= -->
-    <!-- 视图 5：敬请期待 — 英雄区                                    -->
+    <!-- 视图 5：系统设置 — 分组卡片式表单                            -->
+    <!-- ======================================================= -->
+    <section class="view hidden" data-view="settings">
+      <div class="settings-wrap">
+
+        <!-- 顶部提示条 -->
+        <div class="settings-banner">
+          <div class="banner-icon">💡</div>
+          <div class="banner-body">
+            <div class="banner-title">配置热更新</div>
+            <div class="banner-desc">下列参数可在机器人运行时实时调整，无需重启节点。修改后点击对应分组的「保存」立即生效。</div>
+          </div>
+          <button class="btn btn-outline-brand" onclick="reloadSettings()">↻ 重新加载</button>
+        </div>
+
+        <div class="settings-grid">
+
+          <!-- 检测识别 -->
+          <div class="settings-group">
+            <div class="settings-group-head">
+              <div class="group-icon" style="background:#FEE2E2">🔍</div>
+              <div>
+                <div class="group-title">检测识别</div>
+                <div class="group-sub">目标类别、深度距离判断</div>
+              </div>
+            </div>
+            <form class="settings-form" data-settings-group="detect">
+              <label>
+                <span class="field-label">目标类别 (target_class_id)</span>
+                <input type="text" data-key="target_class_id" />
+                <span class="field-help">YOLO 识别的类别名称，如 chair/bottle/person</span>
+              </label>
+              <label class="field-inline">
+                <span class="field-label">启用深度距离判断</span>
+                <label class="toggle">
+                  <input type="checkbox" data-key="use_depth_distance" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <label>
+                <span class="field-label">停止距离 stop_distance (m)</span>
+                <input type="number" step="0.05" min="0.1" max="3" data-key="stop_distance" />
+                <span class="field-help">深度距离 ≤ 该值时进入抓取</span>
+              </label>
+              <label>
+                <span class="field-label">深度采样半径 (px)</span>
+                <input type="number" step="1" min="1" max="50" data-key="depth_sample_radius" />
+              </label>
+              <label>
+                <span class="field-label">丢失超时 lost_timeout (s)</span>
+                <input type="number" step="0.5" min="0.5" max="30" data-key="lost_timeout" />
+              </label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" data-save="detect">保存</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 对齐控制 -->
+          <div class="settings-group">
+            <div class="settings-group-head">
+              <div class="group-icon" style="background:#FEF3C7">🎯</div>
+              <div>
+                <div class="group-title">对齐控制</div>
+                <div class="group-sub">步进式偏航对齐参数</div>
+              </div>
+            </div>
+            <form class="settings-form" data-settings-group="align">
+              <label>
+                <span class="field-label">每步旋转速度 (rad/s)</span>
+                <input type="number" step="0.05" min="0.05" max="1" data-key="step_yaw_speed" />
+              </label>
+              <label>
+                <span class="field-label">每步持续时间 (s)</span>
+                <input type="number" step="0.05" min="0.05" max="2" data-key="step_duration" />
+              </label>
+              <label>
+                <span class="field-label">相机等待时间 (s)</span>
+                <input type="number" step="0.5" min="0.5" max="15" data-key="camera_settle_time" />
+                <span class="field-help">旋转后等待相机帧刷新</span>
+              </label>
+              <label>
+                <span class="field-label">最大连续步数</span>
+                <input type="number" step="1" min="1" max="30" data-key="max_consecutive_steps" />
+              </label>
+              <label>
+                <span class="field-label">居中容差 center_tolerance</span>
+                <input type="number" step="0.01" min="0.01" max="0.3" data-key="align_center_tolerance" />
+                <span class="field-help">归一化，越小越严格</span>
+              </label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" data-save="align">保存</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 运动控制 -->
+          <div class="settings-group">
+            <div class="settings-group-head">
+              <div class="group-icon" style="background:#DBEAFE">🕹️</div>
+              <div>
+                <div class="group-title">运动控制</div>
+                <div class="group-sub">前进、搜索、转身速度</div>
+              </div>
+            </div>
+            <form class="settings-form" data-settings-group="motion">
+              <label>
+                <span class="field-label">前进速度 forward_speed (m/s)</span>
+                <input type="number" step="0.05" min="0.05" max="1" data-key="forward_speed" />
+              </label>
+              <label>
+                <span class="field-label">到达 BBox 阈值</span>
+                <input type="number" step="0.05" min="0.1" max="0.95" data-key="arrive_bbox_ratio" />
+                <span class="field-help">深度不可用时的 fallback</span>
+              </label>
+              <label>
+                <span class="field-label">居中稳定时长 (s)</span>
+                <input type="number" step="0.1" min="0.1" max="5" data-key="align_stable_time" />
+              </label>
+              <label>
+                <span class="field-label">搜索旋转速度 (rad/s)</span>
+                <input type="number" step="0.05" min="0.05" max="1" data-key="search_yaw_speed" />
+              </label>
+              <label>
+                <span class="field-label">转身速度 (rad/s)</span>
+                <input type="number" step="0.05" min="0.05" max="1" data-key="turn_yaw_speed" />
+              </label>
+              <label>
+                <span class="field-label">转身时长 (s)</span>
+                <input type="number" step="0.1" min="0.5" max="10" data-key="turn_duration" />
+                <span class="field-help">右转 90° 所需时间</span>
+              </label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" data-save="motion">保存</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 视频流 + 外观 -->
+          <div class="settings-group">
+            <div class="settings-group-head">
+              <div class="group-icon" style="background:#D1FAE5">🎨</div>
+              <div>
+                <div class="group-title">界面偏好</div>
+                <div class="group-sub">视频流 + UI 外观 (本地保存)</div>
+              </div>
+            </div>
+            <form class="settings-form" data-settings-group="ui">
+              <label>
+                <span class="field-label">视频流 JPEG 质量 (1-100)</span>
+                <input type="number" step="1" min="10" max="100" data-key="stream_quality" />
+                <span class="field-help">越低带宽越省，画质越差</span>
+              </label>
+              <label>
+                <span class="field-label">默认启动视图</span>
+                <select data-key="default_view" data-local="true">
+                  <option value="grasp">目标抓取</option>
+                  <option value="detect">目标识别</option>
+                  <option value="control">运动控制</option>
+                  <option value="status">系统状态</option>
+                </select>
+                <span class="field-help">保存在浏览器本地</span>
+              </label>
+              <label class="field-inline">
+                <span class="field-label">显示实时日志气泡</span>
+                <label class="toggle">
+                  <input type="checkbox" data-key="log_toast" data-local="true" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <label>
+                <span class="field-label">状态轮询间隔 (ms)</span>
+                <input type="number" step="100" min="200" max="5000" data-key="poll_interval" data-local="true" />
+                <span class="field-help">保存在浏览器本地，刷新生效</span>
+              </label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" data-save="ui">保存</button>
+                <button type="button" class="btn btn-outline-danger" onclick="resetLocalPrefs()">重置本地</button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- 保存状态提示 -->
+        <div id="settings-toast" class="settings-toast hidden"></div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- 视图 6：敬请期待 — 英雄区                                    -->
     <!-- ======================================================= -->
     <section class="view hidden" data-view="coming">
       <div class="coming-soon">

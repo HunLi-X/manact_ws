@@ -227,6 +227,95 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             self._sport.move(vx=self._manual_vx, vy=self._manual_vy, vyaw=self._manual_vyaw)
         self._gs_tick()
 
+    # --- 配置管理（热更新）---
+    # 可热更新的参数映射：前端字段名 → (GraspStateMachineMixin 属性 / aligner / approach 的属性, 类型, 描述)
+    _CONFIG_SCHEMA = {
+        "target_class_id": ("_gs_target_class", str, "目标类别"),
+        "use_depth_distance": ("_gs_use_depth", bool, "启用深度距离判断"),
+        "stop_distance": ("_gs_stop_distance", float, "停止距离 (m)"),
+        "depth_sample_radius": ("_gs_depth_radius", int, "深度采样半径"),
+        "lost_timeout": ("_gs_lost_timeout", float, "目标丢失超时 (s)"),
+        "search_yaw_speed": ("_gs_search_speed", float, "搜索旋转速度 (rad/s)"),
+        "turn_yaw_speed": ("_gs_turn_speed", float, "转身速度 (rad/s)"),
+        "turn_duration": ("_gs_turn_duration", float, "转身时长 (s)"),
+        # StepAligner 属性
+        "step_yaw_speed":       ("aligner.step_yaw_speed",      float, "每步旋转速度 (rad/s)"),
+        "step_duration":        ("aligner.step_duration",       float, "每步持续时间 (s)"),
+        "camera_settle_time":   ("aligner.camera_settle_time",  float, "相机等待时间 (s)"),
+        "max_consecutive_steps":("aligner.max_consecutive_steps", int, "单次最大连续步数"),
+        "align_center_tolerance": ("aligner.center_tolerance",  float, "对齐居中容差"),
+        # ForwardApproach 属性
+        "forward_speed":      ("approach.forward_speed",       float, "前进速度 (m/s)"),
+        "arrive_bbox_ratio":  ("approach.arrive_bbox_ratio",   float, "到达 BBox 阈值（深度 fallback）"),
+        "align_stable_time":  ("approach.align_stable_time",   float, "居中稳定时长 (s)"),
+        # 流编码参数
+        "stream_quality": ("_sq", int, "JPEG 质量 (1-100)"),
+    }
+
+    def get_config(self) -> dict:
+        """读取当前配置值。"""
+        out = {}
+        for key, (attr_path, typ, _desc) in self._CONFIG_SCHEMA.items():
+            try:
+                val = self._resolve_attr(attr_path)
+                out[key] = val
+            except Exception:
+                out[key] = None
+        return out
+
+    def get_config_schema(self) -> list:
+        """返回字段元数据，供前端渲染表单使用。"""
+        return [
+            {"key": k, "type": t.__name__, "desc": d}
+            for k, (_, t, d) in self._CONFIG_SCHEMA.items()
+        ]
+
+    def set_config(self, updates: dict) -> dict:
+        """批量更新配置。返回 {updated: [...], skipped: [...]}。"""
+        updated, skipped = [], []
+        for key, val in updates.items():
+            if key not in self._CONFIG_SCHEMA:
+                skipped.append({"key": key, "reason": "unknown key"})
+                continue
+            attr_path, typ, _desc = self._CONFIG_SCHEMA[key]
+            try:
+                cast = self._cast_value(val, typ)
+                self._assign_attr(attr_path, cast)
+                updated.append({"key": key, "value": cast})
+            except Exception as e:
+                skipped.append({"key": key, "reason": str(e)})
+
+        if updated:
+            kv = ", ".join(f"{u['key']}={u['value']}" for u in updated)
+            self._log_info(f"[配置] 已更新: {kv}")
+        return {"updated": updated, "skipped": skipped}
+
+    def _resolve_attr(self, path: str):
+        """按 'root.sub' 解析属性路径，root 是 aligner/approach 或 self 的属性。"""
+        if "." in path:
+            root_name, attr = path.split(".", 1)
+            root_obj = {"aligner": self._gs_aligner, "approach": self._gs_approach}[root_name]
+            return getattr(root_obj, attr)
+        return getattr(self, path)
+
+    def _assign_attr(self, path: str, value) -> None:
+        if "." in path:
+            root_name, attr = path.split(".", 1)
+            root_obj = {"aligner": self._gs_aligner, "approach": self._gs_approach}[root_name]
+            setattr(root_obj, attr, value)
+        else:
+            setattr(self, path, value)
+
+    @staticmethod
+    def _cast_value(val, typ):
+        if typ is bool:
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.strip().lower() in ("true", "1", "yes", "on")
+            return bool(val)
+        return typ(val)
+
     # --- MJPEG 编码帧（原始 / 标注）---
     def _encode_jpeg(self, frame: np.ndarray) -> Optional[bytes]:
         try:
@@ -381,6 +470,19 @@ def create_app(node: WebPanelNode) -> Flask:
     def api_state():
         since = int(request.args.get("since", 0))
         return jsonify(node.get_state_snapshot(since))
+
+    @app.route("/api/config", methods=["GET"])
+    def api_config_get():
+        return jsonify({
+            "values": node.get_config(),
+            "schema": node.get_config_schema(),
+        })
+
+    @app.route("/api/config", methods=["POST"])
+    def api_config_set():
+        data = request.get_json(force=True, silent=True) or {}
+        result = node.set_config(data)
+        return jsonify({"ok": True, **result})
 
     def _cmd_route(fn):
         try:

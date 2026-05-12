@@ -14,11 +14,12 @@ const STATE_COLORS = {
 };
 
 const VIEW_META = {
-  grasp:   { title: '目标抓取',   subtitle: '完整抓取任务流程' },
-  detect:  { title: '目标识别',   subtitle: '仅显示视觉检测，不触发运动' },
-  control: { title: '运动控制',   subtitle: '手动遥控机器人' },
-  status:  { title: '系统状态',   subtitle: '话题健康与日志总览' },
-  coming:  { title: '更多模块',   subtitle: '敬请期待' },
+  grasp:    { title: '目标抓取',   subtitle: '完整抓取任务流程' },
+  detect:   { title: '目标识别',   subtitle: '仅显示视觉检测，不触发运动' },
+  control:  { title: '运动控制',   subtitle: '手动遥控机器人' },
+  status:   { title: '系统状态',   subtitle: '话题健康与日志总览' },
+  settings: { title: '系统设置',   subtitle: '运行时参数热更新 + 界面偏好' },
+  coming:   { title: '更多模块',   subtitle: '敬请期待' },
 };
 
 // ======================================================================
@@ -340,6 +341,166 @@ function updateConnIndicator(ok) {
   }
 }
 
-setInterval(pollState, 500);
+setInterval(pollState, getLocalPref('poll_interval', 500));
 pollState();
 appendLog('Web 面板已连接', 'info');
+
+
+// ======================================================================
+// 系统设置模块
+// ======================================================================
+// 本地偏好（存 localStorage）默认值
+const LOCAL_PREF_DEFAULTS = {
+  default_view: 'grasp',
+  log_toast: false,
+  poll_interval: 500,
+};
+
+function getLocalPref(key, fallback) {
+  try {
+    const v = localStorage.getItem('g1_pref_' + key);
+    if (v == null) return fallback != null ? fallback : LOCAL_PREF_DEFAULTS[key];
+    return JSON.parse(v);
+  } catch (e) {
+    return fallback != null ? fallback : LOCAL_PREF_DEFAULTS[key];
+  }
+}
+
+function setLocalPref(key, value) {
+  localStorage.setItem('g1_pref_' + key, JSON.stringify(value));
+}
+
+function resetLocalPrefs() {
+  Object.keys(LOCAL_PREF_DEFAULTS).forEach(k => localStorage.removeItem('g1_pref_' + k));
+  showToast('已重置本地偏好，刷新后生效', 'info');
+  // 立刻把表单值刷回默认
+  document.querySelectorAll('[data-local="true"]').forEach(el => {
+    applyValueToInput(el, LOCAL_PREF_DEFAULTS[el.dataset.key]);
+  });
+}
+
+function applyValueToInput(el, val) {
+  if (el.type === 'checkbox') el.checked = !!val;
+  else el.value = val == null ? '' : val;
+}
+
+function readValueFromInput(el) {
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'number') return el.value === '' ? null : parseFloat(el.value);
+  return el.value;
+}
+
+// 加载配置：从后端拉取 + 本地偏好填充
+async function reloadSettings() {
+  // 1. 本地偏好
+  document.querySelectorAll('[data-local="true"]').forEach(el => {
+    applyValueToInput(el, getLocalPref(el.dataset.key));
+  });
+
+  // 2. 后端参数
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const values = data.values || {};
+    document.querySelectorAll('[data-key]').forEach(el => {
+      if (el.dataset.local === 'true') return;
+      const key = el.dataset.key;
+      if (key in values && values[key] != null) {
+        applyValueToInput(el, values[key]);
+      }
+    });
+    showToast('配置已加载', 'info');
+  } catch (e) {
+    showToast('加载配置失败: ' + e.message, 'error');
+  }
+}
+
+// 保存某一分组
+async function saveSettingsGroup(groupName) {
+  const form = document.querySelector(`[data-settings-group="${groupName}"]`);
+  if (!form) return;
+
+  const backendUpdates = {};
+  let localUpdateCount = 0;
+
+  form.querySelectorAll('[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const val = readValueFromInput(el);
+    if (el.dataset.local === 'true') {
+      setLocalPref(key, val);
+      localUpdateCount++;
+    } else if (val !== null && val !== '') {
+      backendUpdates[key] = val;
+    }
+  });
+
+  // 后端更新
+  if (Object.keys(backendUpdates).length > 0) {
+    try {
+      const r = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backendUpdates),
+      });
+      const data = await r.json();
+      if (!r.ok || data.ok === false) throw new Error(data.error || 'save failed');
+      const updated = data.updated || [];
+      const skipped = data.skipped || [];
+      if (skipped.length > 0) {
+        showToast(`已保存 ${updated.length} 项，${skipped.length} 项跳过`, 'error');
+        for (const s of skipped) appendLog(`[配置] ${s.key} 跳过: ${s.reason}`, 'warn');
+      } else {
+        showToast(`已保存 ${updated.length} 项配置`, 'info');
+      }
+    } catch (e) {
+      showToast('保存失败: ' + e.message, 'error');
+      return;
+    }
+  } else if (localUpdateCount > 0) {
+    showToast(`已保存 ${localUpdateCount} 项本地偏好`, 'info');
+  } else {
+    showToast('没有需要保存的更改', 'info');
+  }
+}
+
+// 保存按钮事件绑定
+document.querySelectorAll('[data-save]').forEach(btn => {
+  btn.addEventListener('click', () => saveSettingsGroup(btn.dataset.save));
+});
+
+// Toast 提示
+let toastTimer = null;
+function showToast(msg, level = 'info') {
+  const el = document.getElementById('settings-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden', 'error');
+  if (level === 'error') el.classList.add('error');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 2500);
+}
+
+// 初次进入设置页时懒加载
+let settingsLoaded = false;
+const origSwitchView = switchView;
+switchView = function(name) {
+  origSwitchView(name);
+  if (name === 'settings' && !settingsLoaded) {
+    settingsLoaded = true;
+    reloadSettings();
+  }
+};
+
+// 如果 hash 初始就是 settings，立即加载
+if (location.hash === '#settings') {
+  settingsLoaded = true;
+  reloadSettings();
+}
+
+// 应用启动视图偏好（若未指定 hash）
+if (!location.hash) {
+  const defaultView = getLocalPref('default_view', 'grasp');
+  if (defaultView && defaultView !== 'grasp') switchView(defaultView);
+}
+
