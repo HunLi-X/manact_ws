@@ -122,6 +122,7 @@ class MockState:
             "fps": self.fps,
             "logs": new_logs,
             "log_idx": cur_idx,
+            "mock": True,
         }
 
     # ---- 配置 ----

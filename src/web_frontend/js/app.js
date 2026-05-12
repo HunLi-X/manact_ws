@@ -257,7 +257,7 @@ async function pollState() {
     connFailCount = 0;
     const s = await r.json();
 
-    updateConnIndicator(true);
+    updateConnIndicator(true, s.mock === true);
 
     // ----- 顶部全局状态 -----
     const st = STATE_COLORS[s.state] || { dot: 'bg-slate-400', text: s.state };
@@ -329,15 +329,24 @@ async function pollState() {
 }
 
 // 连接指示器（侧边栏底部）
-function updateConnIndicator(ok) {
+function updateConnIndicator(ok, isMock = false) {
   const label = document.getElementById('conn-label');
+  const dot = document.querySelector('.footer-pulse .pulse-dot');
   if (!label) return;
   if (ok) {
-    label.textContent = '已连接';
-    label.style.color = '#059669';
+    if (isMock) {
+      label.textContent = '本地预览';
+      label.style.color = '#D97706';
+      if (dot) dot.style.background = '#F59E0B';
+    } else {
+      label.textContent = '已连接';
+      label.style.color = '#059669';
+      if (dot) dot.style.background = '#10B981';
+    }
   } else if (connFailCount > 3) {
     label.textContent = '连接断开';
     label.style.color = '#DC2626';
+    if (dot) dot.style.background = '#EF4444';
   }
 }
 
