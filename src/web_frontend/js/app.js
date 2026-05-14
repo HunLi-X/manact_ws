@@ -90,6 +90,8 @@ function switchView(name) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.view === name);
   });
+  // body 加标记类，让顶栏 TOC 仅在 settings 视图显示
+  document.body.classList.toggle('settings-active', name === 'settings');
 
   const meta = VIEW_META[name];
   document.getElementById('page-title').textContent = meta.title;
@@ -937,7 +939,7 @@ document.querySelectorAll('.toc-link').forEach(a => {
 function updateTocActive() {
   const groups = document.querySelectorAll('.settings-group[id]');
   if (!groups.length) return;
-  const offset = 180;  // fixed topbar 98 + sticky header ~56 + 余量
+  const offset = 120;  // fixed topbar (~98) + 余量
   let active = null;
   for (const g of groups) {
     const rect = g.getBoundingClientRect();

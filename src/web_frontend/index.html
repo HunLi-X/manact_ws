@@ -89,10 +89,40 @@
   <main class="main-wrap">
 
     <header class="topbar">
-      <div>
+      <div class="topbar-left">
         <h2 id="page-title" class="page-title">目标抓取</h2>
         <p id="page-subtitle" class="page-subtitle">完整抓取任务流程</p>
       </div>
+
+      <!-- 设置页 TOC（嵌入 topbar 中段，仅 settings 视图显示） -->
+      <nav class="topbar-toc" id="topbar-toc">
+        <div class="toc-title" data-icon="lightbulb" title="目录"></div>
+        <a href="#sg-detect" class="toc-link" data-toc="sg-detect">
+          <span class="toc-icon group-icon-red" data-icon="search"></span>
+          <span class="toc-label">检测</span>
+        </a>
+        <a href="#sg-align" class="toc-link" data-toc="sg-align">
+          <span class="toc-icon group-icon-amber" data-icon="crosshair"></span>
+          <span class="toc-label">对齐</span>
+        </a>
+        <a href="#sg-motion" class="toc-link" data-toc="sg-motion">
+          <span class="toc-icon group-icon-blue" data-icon="gamepad"></span>
+          <span class="toc-label">运动</span>
+        </a>
+        <a href="#sg-camera" class="toc-link" data-toc="sg-camera">
+          <span class="toc-icon group-icon-blue" data-icon="camera"></span>
+          <span class="toc-label">相机</span>
+        </a>
+        <a href="#sg-ui" class="toc-link" data-toc="sg-ui">
+          <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
+          <span class="toc-label">偏好</span>
+        </a>
+        <a href="#sg-bg" class="toc-link" data-toc="sg-bg">
+          <span class="toc-icon group-icon-blue" data-icon="image"></span>
+          <span class="toc-label">背景</span>
+        </a>
+      </nav>
+
       <div class="topbar-right">
         <div class="pill">
           <span id="state-dot" class="state-dot"></span>
@@ -562,41 +592,19 @@
     </section>
 
     <!-- ======================================================= -->
-    <!-- 视图 5：系统设置 — 统一头部 + 分组卡片                       -->
+    <!-- 视图 5：系统设置 — banner + 分组卡片（TOC 在顶栏中段）        -->
     <!-- ======================================================= -->
     <section class="view hidden" data-view="settings">
       <div class="settings-wrap">
 
-        <!-- 统一头部：TOC + 重新加载按钮（标题已在顶栏显示，避免重复） -->
-        <div class="settings-header">
-          <nav class="settings-toc">
-            <div class="toc-title" data-icon="lightbulb"></div>
-            <a href="#sg-detect" class="toc-link" data-toc="sg-detect">
-              <span class="toc-icon group-icon-red" data-icon="search"></span>
-              <span>检测识别</span>
-            </a>
-            <a href="#sg-align" class="toc-link" data-toc="sg-align">
-              <span class="toc-icon group-icon-amber" data-icon="crosshair"></span>
-              <span>对齐控制</span>
-            </a>
-            <a href="#sg-motion" class="toc-link" data-toc="sg-motion">
-              <span class="toc-icon group-icon-blue" data-icon="gamepad"></span>
-              <span>运动控制</span>
-            </a>
-            <a href="#sg-camera" class="toc-link" data-toc="sg-camera">
-              <span class="toc-icon group-icon-blue" data-icon="camera"></span>
-              <span>相机驱动</span>
-            </a>
-            <a href="#sg-ui" class="toc-link" data-toc="sg-ui">
-              <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
-              <span>界面偏好</span>
-            </a>
-            <a href="#sg-bg" class="toc-link" data-toc="sg-bg">
-              <span class="toc-icon group-icon-blue" data-icon="image"></span>
-              <span>动态背景</span>
-            </a>
-          </nav>
-          <button class="btn btn-outline-brand settings-reload-btn" onclick="reloadSettings()" title="重新加载配置">
+        <!-- 顶部提示卡 -->
+        <div class="settings-banner">
+          <div class="banner-icon" data-icon="lightbulb"></div>
+          <div class="banner-body">
+            <div class="banner-title">系统设置 · 配置热更新</div>
+            <div class="banner-desc">运行时参数实时调整 + 界面偏好（本地保存），修改后点对应分组的「保存」立即生效。</div>
+          </div>
+          <button class="btn btn-outline-brand" onclick="reloadSettings()">
             <span data-icon="refresh-cw" class="btn-icon"></span>
             <span>重新加载</span>
           </button>
