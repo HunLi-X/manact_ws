@@ -24,18 +24,19 @@ def _collect_web_frontend():
     for root, _dirs, files in os.walk(frontend_src):
         if not files:
             continue
-        # 跳过 __pycache__ 等无用目录
-        skip = any(seg.startswith(("__pycache__", ".")) for seg in os.path.relpath(root, frontend_src).split(os.sep))
-        if skip:
-            continue
-        # share 子目录（保留层级）
         rel = os.path.relpath(root, frontend_src)
+        # 跳过 __pycache__ / 隐藏目录（注意 rel == "." 是根目录，不能跳）
+        if rel != ".":
+            segs = rel.split(os.sep)
+            if any(s.startswith("__pycache__") or s.startswith(".") for s in segs):
+                continue
+        # share 子目录（保留层级）
         sub = share_base if rel == "." else share_base + "/" + rel.replace(os.sep, "/")
         # 源路径：相对于 setup.py 所在目录（here），形如 "../web_frontend/index.html"
         paths = []
         for f in files:
-            # 跳过 .pyc / dev_server 临时产物
-            if f.endswith((".pyc",)) or f == "__pycache__":
+            # 跳过 .pyc 等编译产物
+            if f.endswith(".pyc"):
                 continue
             abs_path = os.path.join(root, f)
             rel_path = os.path.relpath(abs_path, here).replace(os.sep, "/")
