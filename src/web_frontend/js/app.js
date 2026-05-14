@@ -43,6 +43,7 @@ const ICONS = {
   'camera':       '<svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
   'sliders':      '<svg viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>',
   'image':        '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
+  'server':       '<svg viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>',
 };
 
 function renderIcons(root = document) {
@@ -74,6 +75,7 @@ const VIEW_META = {
   detect:   { title: '目标识别',   subtitle: '仅显示视觉检测，不触发运动' },
   control:  { title: '运动控制',   subtitle: '手动遥控机器人' },
   status:   { title: '系统状态',   subtitle: '话题健康与日志总览' },
+  nodes:    { title: '节点管理',   subtitle: 'ROS2 子进程启动 / 停止 / 参数' },
   settings: { title: '系统设置',   subtitle: '运行时参数热更新 + 界面偏好' },
   coming:   { title: '更多模块',   subtitle: '敬请期待' },
 };
@@ -705,14 +707,63 @@ async function refreshProcStatus(name) {
   } catch (e) { /* ignore */ }
 }
 
-// 切到 status 视图时刷新所有进程
+// 切到 nodes 视图时刷新所有进程状态 + 把参数写入表单
 const _origSwitchViewForCam = switchView;
 switchView = function(name) {
   _origSwitchViewForCam(name);
-  if (name === 'status') {
-    PROC_NAMES.forEach(refreshProcStatus);
+  if (name === 'nodes') {
+    PROC_NAMES.forEach(n => {
+      refreshProcStatus(n);
+      loadProcParamsForm(n);
+    });
   }
 };
+
+// 把当前进程参数填回表单（从 /api/process/<n>/status 拉取）
+async function loadProcParamsForm(name) {
+  try {
+    const r = await fetch(`/api/process/${name}/status`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const params = data.params || {};
+    const form = document.querySelector(`[data-proc-form="${name}"]`);
+    if (!form) return;
+    form.querySelectorAll('[data-pkey]').forEach(el => {
+      const key = el.dataset.pkey;
+      if (!(key in params)) return;
+      const v = params[key];
+      if (el.type === 'checkbox') el.checked = String(v).toLowerCase() === 'true';
+      else el.value = v;
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// 保存表单参数 → POST /api/process/<n>/params
+async function saveProcParams(name) {
+  const form = document.querySelector(`[data-proc-form="${name}"]`);
+  if (!form) return;
+  const updates = {};
+  form.querySelectorAll('[data-pkey]').forEach(el => {
+    const key = el.dataset.pkey;
+    if (el.type === 'checkbox') updates[key] = el.checked ? 'true' : 'false';
+    else if (el.value !== '') updates[key] = el.value;
+  });
+  try {
+    const r = await fetch(`/api/process/${name}/params`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || 'save failed');
+    appendLog(`[${PROC_LABELS[name] || name}] 参数已保存（下次启动生效）`, 'info');
+    // 刷新 cmd 预览
+    refreshProcStatus(name);
+  } catch (e) {
+    appendLog(`[${PROC_LABELS[name] || name}] 保存失败: ` + e.message, 'error');
+  }
+}
+
 
 
 // ======================================================================

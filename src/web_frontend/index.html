@@ -558,6 +558,199 @@
     </section>
 
     <!-- ======================================================= -->
+    <!-- 视图 5：节点管理 — ROS2 子进程启动器                          -->
+    <!-- ======================================================= -->
+    <section class="view hidden" data-view="nodes">
+      <div class="nodes-wrap">
+
+        <!-- 顶部说明卡 -->
+        <div class="nodes-banner">
+          <div class="banner-icon" data-icon="server"></div>
+          <div class="banner-body">
+            <div class="banner-title">ROS2 节点管理</div>
+            <div class="banner-desc">通过 subprocess 启动 / 停止 ROS2 节点。修改参数后需先停止再启动才能生效。</div>
+          </div>
+        </div>
+
+        <!-- 进程卡片列表（垂直堆叠，每张大卡） -->
+        <div class="node-cards">
+
+          <!-- 相机驱动 -->
+          <div class="node-card" data-proc="camera">
+            <div class="node-head">
+              <div class="node-head-main">
+                <div class="node-icon launcher-icon-blue" data-icon="camera"></div>
+                <div class="node-info">
+                  <div class="node-title">RealSense 相机驱动</div>
+                  <div class="node-cmd" data-bind="cmd">ros2 launch realsense2_camera rs_launch.py</div>
+                </div>
+              </div>
+              <div class="node-actions">
+                <span class="cam-pill cam-pill-off" data-bind="state-pill">
+                  <span class="cam-dot"></span>
+                  <span data-bind="state-label">未启动</span>
+                </span>
+                <button class="btn btn-primary" data-bind="start-btn" onclick="procStart('camera')">
+                  <span data-icon="chevron-right" class="btn-icon"></span>
+                  <span>启动</span>
+                </button>
+                <button class="btn btn-outline-danger" data-bind="stop-btn" onclick="procStop('camera')" disabled>
+                  <span data-icon="square" class="btn-icon"></span>
+                  <span>停止</span>
+                </button>
+              </div>
+            </div>
+            <div class="node-body">
+              <div class="node-meta">
+                <div><dt>PID</dt><dd data-bind="pid">—</dd></div>
+                <div><dt>运行时长</dt><dd data-bind="uptime">—</dd></div>
+                <div><dt>模式</dt><dd>ros2 launch</dd></div>
+              </div>
+              <form class="node-params" data-proc-form="camera">
+                <div class="params-title">参数（修改后下次启动生效）</div>
+                <label>
+                  <span>camera_namespace</span>
+                  <input type="text" data-pkey="camera_namespace" placeholder="robot1" />
+                </label>
+                <label>
+                  <span>camera_name</span>
+                  <input type="text" data-pkey="camera_name" placeholder="D455_1" />
+                </label>
+                <label class="param-inline">
+                  <span>align_depth.enable</span>
+                  <label class="toggle">
+                    <input type="checkbox" data-pkey="align_depth.enable" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </label>
+                <button type="button" class="btn btn-outline-brand btn-mini" onclick="saveProcParams('camera')">
+                  保存参数
+                </button>
+              </form>
+            </div>
+            <details class="node-logs">
+              <summary>子进程日志（最近 80 行）</summary>
+              <div data-bind="log-box" class="log-box log-box-tall"></div>
+            </details>
+          </div>
+
+          <!-- YOLO 检测器 -->
+          <div class="node-card" data-proc="yolo">
+            <div class="node-head">
+              <div class="node-head-main">
+                <div class="node-icon launcher-icon-red" data-icon="search"></div>
+                <div class="node-info">
+                  <div class="node-title">YOLO 目标检测器</div>
+                  <div class="node-cmd" data-bind="cmd">ros2 run g1_yolo_nav_py yolo_detector</div>
+                </div>
+              </div>
+              <div class="node-actions">
+                <span class="cam-pill cam-pill-off" data-bind="state-pill">
+                  <span class="cam-dot"></span>
+                  <span data-bind="state-label">未启动</span>
+                </span>
+                <button class="btn btn-primary" data-bind="start-btn" onclick="procStart('yolo')">
+                  <span data-icon="chevron-right" class="btn-icon"></span>
+                  <span>启动</span>
+                </button>
+                <button class="btn btn-outline-danger" data-bind="stop-btn" onclick="procStop('yolo')" disabled>
+                  <span data-icon="square" class="btn-icon"></span>
+                  <span>停止</span>
+                </button>
+              </div>
+            </div>
+            <div class="node-body">
+              <div class="node-meta">
+                <div><dt>PID</dt><dd data-bind="pid">—</dd></div>
+                <div><dt>运行时长</dt><dd data-bind="uptime">—</dd></div>
+                <div><dt>模式</dt><dd>ros2 run</dd></div>
+              </div>
+              <form class="node-params" data-proc-form="yolo">
+                <div class="params-title">参数（修改后下次启动生效）</div>
+                <label>
+                  <span>image_topic</span>
+                  <input type="text" data-pkey="image_topic" placeholder="/D455_1/color/image_raw" />
+                </label>
+                <label>
+                  <span>conf_threshold</span>
+                  <input type="number" step="0.05" min="0.1" max="0.95" data-pkey="conf_threshold" placeholder="0.5" />
+                </label>
+                <button type="button" class="btn btn-outline-brand btn-mini" onclick="saveProcParams('yolo')">
+                  保存参数
+                </button>
+              </form>
+            </div>
+            <details class="node-logs">
+              <summary>子进程日志（最近 80 行）</summary>
+              <div data-bind="log-box" class="log-box log-box-tall"></div>
+            </details>
+          </div>
+
+          <!-- RGBD 数据采集 -->
+          <div class="node-card" data-proc="rgbd">
+            <div class="node-head">
+              <div class="node-head-main">
+                <div class="node-icon launcher-icon-emerald" data-icon="package"></div>
+                <div class="node-info">
+                  <div class="node-title">RGBD 数据采集</div>
+                  <div class="node-cmd" data-bind="cmd">ros2 run g1_yolo_nav_py rgbd_capture</div>
+                </div>
+              </div>
+              <div class="node-actions">
+                <span class="cam-pill cam-pill-off" data-bind="state-pill">
+                  <span class="cam-dot"></span>
+                  <span data-bind="state-label">未启动</span>
+                </span>
+                <button class="btn btn-primary" data-bind="start-btn" onclick="procStart('rgbd')">
+                  <span data-icon="chevron-right" class="btn-icon"></span>
+                  <span>启动</span>
+                </button>
+                <button class="btn btn-outline-danger" data-bind="stop-btn" onclick="procStop('rgbd')" disabled>
+                  <span data-icon="square" class="btn-icon"></span>
+                  <span>停止</span>
+                </button>
+              </div>
+            </div>
+            <div class="node-body">
+              <div class="node-meta">
+                <div><dt>PID</dt><dd data-bind="pid">—</dd></div>
+                <div><dt>运行时长</dt><dd data-bind="uptime">—</dd></div>
+                <div><dt>模式</dt><dd>ros2 run</dd></div>
+              </div>
+              <form class="node-params" data-proc-form="rgbd">
+                <div class="params-title">参数（修改后下次启动生效）</div>
+                <label>
+                  <span>color_topic</span>
+                  <input type="text" data-pkey="color_topic" placeholder="/D455_1/color/image_raw" />
+                </label>
+                <label>
+                  <span>depth_topic</span>
+                  <input type="text" data-pkey="depth_topic" placeholder="/D455_1/depth/image_rect_raw" />
+                </label>
+                <label>
+                  <span>interval_sec（采集间隔，秒）</span>
+                  <input type="number" step="0.5" min="0.5" max="60" data-pkey="interval_sec" placeholder="5.0" />
+                </label>
+                <label>
+                  <span>duration_sec（持续时间，秒）</span>
+                  <input type="number" step="5" min="5" max="3600" data-pkey="duration_sec" placeholder="60.0" />
+                </label>
+                <button type="button" class="btn btn-outline-brand btn-mini" onclick="saveProcParams('rgbd')">
+                  保存参数
+                </button>
+              </form>
+            </div>
+            <details class="node-logs">
+              <summary>子进程日志（最近 80 行）</summary>
+              <div data-bind="log-box" class="log-box log-box-tall"></div>
+            </details>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
     <!-- 视图 5：系统设置 — banner + 分组卡片（TOC 在顶栏中段）        -->
     <!-- ======================================================= -->
     <section class="view hidden" data-view="settings">
