@@ -27,6 +27,61 @@
 - 2D 检测结果到 3D 空间坐标投影
 - Nav2 路径规划与自主导航
 - 紧急停止与安全限速保护
+- **Web 控制面板**：浏览器/手机/平板远程控制全套功能（推荐）
+
+---
+
+## ⚡ 快速启动（Web 控制面板，推荐）
+
+**一条命令启动 Web 面板，所有功能在浏览器里点几下即可：**
+
+```bash
+# 一次性环境（首次）
+python3 -m venv ~/g1act_venv --system-site-packages
+source ~/g1act_venv/bin/activate
+cd ~/g1act_ws
+pip install -r requirements.txt
+colcon build --packages-select g1_yolo_nav_py
+. install/setup.bash
+
+# 每次启动
+source ~/g1act_venv/bin/activate
+cd ~/g1act_ws && . install/setup.bash
+ros2 run g1_yolo_nav_py web_panel
+```
+
+打开浏览器访问 `http://<机器人IP>:8080`（同局域网手机/平板/电脑均可）。
+
+### Web 面板功能模块
+
+| 页面 | 功能 |
+|---|---|
+| 🎯 **目标抓取** | 完整抓取流水线：搜索 → 对齐 → 接近 → 抓取 → 放下（含右转放下/左移放下）|
+| 🔍 **目标识别** | 大屏沉浸式 YOLO 检测视频流 + 实时检测信息 |
+| 🕹️ **运动控制** | 手动遥控 D-Pad（前进/后退/左转/右转/急停）+ 速度滑块 |
+| 📊 **系统状态** | 仪表盘（FPS/检测数/距离/u 位置/健康度环）+ 实时日志 |
+| 📦 **节点管理** | 一键启停 RealSense 相机 / YOLO 检测器 / RGBD 采集，内联参数编辑 |
+| ⚙️ **系统设置** | 19 个运行时参数热更新（无需重启）+ 动态背景 + 界面偏好 |
+
+**优势：**
+- 🌐 跨设备 — 手机、平板、电脑浏览器都能访问，多人同时观察
+- 🚫 零终端 — 不用 ssh 开 4 个终端，一个面板搞定所有节点启动
+- 🎨 现代界面 — 液态玻璃风设计 + 实时状态可视化
+- 🔌 SSH 友好 — 不依赖 X11，纯 Web，机器人无显示器也能用
+
+### 本地开发预览（无需 ROS2）
+
+想改前端 UI 但不想登机器人？
+
+```bash
+cd src/web_frontend
+pip install flask pillow
+python dev_server.py   # 浏览器 http://localhost:8080
+```
+
+`dev_server.py` 是纯 Flask mock 后端，模拟所有 API 和 MJPEG 视频流，改 HTML/CSS/JS 后刷新浏览器即时生效。
+
+---
 
 ### 项目结构
 
@@ -38,10 +93,16 @@ g1act_ws/
 ├── requirements.txt             # Python 依赖列表
 ├── src/
 │   ├── D455.md                 # D455 相机说明文档
+│   ├── web_frontend/          # Web 控制面板前端（HTML/CSS/JS + 本地 dev server）
+│   │   ├── index.html              # 主页面（6 个视图模块）
+│   │   ├── css/
+│   │   │   ├── style.css           # 液态玻璃风样式
+│   │   │   └── lggc.css            # LGGC 玻璃 utility class
+│   │   ├── js/app.js              # 路由 / 状态轮询 / 进程管理 / 背景
+│   │   └── dev_server.py          # 本地 mock 后端（无 ROS2 依赖）
 │   ├── g1_yolo_nav_py/        # 主 ROS2 Python 包
 │   │   ├── setup.py                # 包设置（entry_points 定义）
 │   │   ├── package.xml            # ROS2 包描述
-│   │   ├── setup.cfg              # 包配置
 │   │   ├── yolo_v11x_best.pt     # YOLOv11x 自定义训练模型
 │   │   ├── config/                # 参数配置文件
 │   │   │   └── yolo_nav.yaml
@@ -54,11 +115,18 @@ g1act_ws/
 │   │   │   ├── armup.py            # 抓取动作：伸手→抬起→夹紧保持
 │   │   │   └── armdown.py          # 放下动作：伸展→下垂→归零释放
 │   │   └── g1_yolo_nav_py/       # Python 模块代码
-│   │       ├── __init__.py
-│   │       ├── _dds_compat.py      # DDS 兼容层
+│   │       ├── web_panel.py         # Web 控制面板节点（Flask + ROS2）★ 推荐入口
+│   │       ├── control_panel.py     # tkinter GUI 控制面板（旧版）
+│   │       ├── yolo_detector.py     # YOLO 检测节点
+│   │       ├── yaw_align.py         # 步进式偏航对齐
+│   │       ├── loco_forward.py      # 前进控制 + 深度距离停止
+│   │       ├── grasp_task.py        # 终端版抓取任务
+│   │       ├── rgbd_capture.py      # RGBD 数据采集
+│   │       ├── spatial_target.py    # 2D→3D 空间投影
+│   │       ├── detection_visualizer.py  # 检测可视化
+│   │       ├── _grasp_state.py      # 抓取状态机 Mixin
 │   │       ├── _detection_utils.py  # 检测工具函数
-│   │       ├── _grasp_state.py     # 抓取状态机Mixin
-│   │       └── 其他功能节点
+│   │       └── _dds_compat.py       # DDS 兼容层
 │   └── base/                   # 参考包（不直接调用）
 │       ├── ctrl_keyboard/        # Loco API 参考实现
 │       └── g1_description/      # URDF 模型（12/23/29 dof）
@@ -266,7 +334,87 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_approach:=true
 
 ---
 
-## 控制面板（GUI 集成控制）
+## Web 控制面板（推荐）
+
+基于 Flask 的浏览器控制面板，**单进程启动整套机器人能力**，无需多个终端开 ssh。
+
+```bash
+# 启动（首次需 pip install flask pillow）
+ros2 run g1_yolo_nav_py web_panel
+# 浏览器打开 http://<机器人IP>:8080
+```
+
+### 节点管理
+
+进入「📦 节点管理」页面，**3 张大卡分别管理**：
+
+| 进程 | 命令模式 | 用途 |
+|---|---|---|
+| 📷 RealSense 相机驱动 | `ros2 launch realsense2_camera rs_launch.py` | 视觉前置 |
+| 🔍 YOLO 目标检测器 | `ros2 run g1_yolo_nav_py yolo_detector` | 目标识别 |
+| 📦 RGBD 数据采集 | `ros2 run g1_yolo_nav_py rgbd_capture` | 定时存彩色+深度图 |
+
+每张卡都有：
+- **启动 / 停止按钮** — subprocess.Popen + 独立 process group，停止时 SIGINT → SIGKILL 整树清理
+- **状态胶囊** — 运行中绿色脉冲 + PID + 运行时长
+- **内联参数表单** — 直接改 `camera_namespace` / `image_topic` / `interval_sec` 等参数，点保存写入后端
+- **子进程日志** — 折叠展开看最近 80 行 ros2 stdout
+
+### 完整 API（13 个端点）
+
+```
+GET  /                          → 主页（HTML）
+GET  /stream/raw                → MJPEG 原始视频流
+GET  /stream/detection          → MJPEG 检测标注流
+GET  /api/state                 → 全局状态轮询（含 3 个进程状态）
+GET  /api/config                → 读取热更新配置（19 个字段）
+POST /api/config                → 批量热更新配置
+POST /api/cmd/manual            → 手动遥控（vx, vy, vyaw 钳位）
+POST /api/cmd/stop              → 急停（清状态机 + sport.stop）
+POST /api/cmd/search            → 进入搜索状态
+POST /api/cmd/grab              → 立即抓取（armup.py）
+POST /api/cmd/putdown           → 放下（armdown.py）
+POST /api/cmd/turn_putdown      → 右转 90° 后放下
+POST /api/cmd/left_putdown      → 左移侧步后放下
+POST /api/process/<n>/start     → 启动子进程（n = camera/yolo/rgbd）
+POST /api/process/<n>/stop      → 停止子进程
+GET  /api/process/<n>/status    → 完整状态 + 80 行日志
+POST /api/process/<n>/params    → 更新参数（下次启动生效）
+```
+
+### 系统设置（界面热更新 19 个参数）
+
+不用改 yaml 不用 source bash，浏览器里直接调：
+
+| 分组 | 参数 |
+|---|---|
+| 🔍 检测识别 | target_class_id / use_depth_distance / stop_distance / depth_sample_radius / lost_timeout |
+| 🎯 对齐控制 | step_yaw_speed / step_duration / camera_settle_time / max_consecutive_steps / center_tolerance |
+| 🕹 运动控制 | forward_speed / arrive_bbox_ratio / align_stable_time / search_yaw_speed / turn_yaw_speed / turn_duration / side_step_speed / side_step_duration |
+| 🎨 界面偏好 | stream_quality / default_view / log_toast / poll_interval（3 个本地存 localStorage） |
+| 🖼 动态背景 | 背景类型（默认渐变 / Bing 每日 / Picsum / 自定义 URL）+ 蒙版 + 模糊 |
+
+### 自定义参数（启动时固定）
+
+```bash
+# 自定义端口
+ros2 run g1_yolo_nav_py web_panel --ros-args -p http_port:=9090
+
+# 自定义目标类别 + 视频流质量
+ros2 run g1_yolo_nav_py web_panel --ros-args \
+  -p target_class_id:=bottle \
+  -p stream_quality:=50
+
+# 改图像话题（如果命名空间不同）
+ros2 run g1_yolo_nav_py web_panel --ros-args \
+  -p image_topic:=/camera/color/image_raw
+```
+
+> **依赖：** `pip install flask pillow`（首次安装）
+
+---
+
+## tkinter 控制面板（旧版本，可选）
 
 基于 tkinter 的图形化控制界面，集成检测可视化 + 手动遥控 + 一键抓取任务全流程。
 

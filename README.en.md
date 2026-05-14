@@ -27,10 +27,62 @@ Unitree G1 humanoid robot **YOLO object detection and path planning navigation**
 - 2D detection to 3D spatial coordinate projection
 - Nav2 path planning and autonomous navigation
 - Emergency stop and speed limiting safety protection
+- **Web Control Panel**: full robot control from any browser/phone/tablet (recommended)
 
-### Project Structure
+---
 
+## ⚡ Quick Start (Web Control Panel — Recommended)
+
+**One command, control everything from a browser:**
+
+```bash
+# One-time setup (first run)
+python3 -m venv ~/g1act_venv --system-site-packages
+source ~/g1act_venv/bin/activate
+cd ~/g1act_ws
+pip install -r requirements.txt
+colcon build --packages-select g1_yolo_nav_py
+. install/setup.bash
+
+# Every session
+source ~/g1act_venv/bin/activate
+cd ~/g1act_ws && . install/setup.bash
+ros2 run g1_yolo_nav_py web_panel
 ```
+
+Open `http://<robot_ip>:8080` from any phone/tablet/laptop on the same network.
+
+### Web Panel Modules
+
+| Page | Functionality |
+|---|---|
+| 🎯 **Grasp Task** | Full pipeline: search → align → approach → grab → release (incl. turn-release / left-step-release) |
+| 🔍 **Detection View** | Immersive YOLO detection video stream with realtime stats |
+| 🕹️ **Manual Control** | D-Pad joystick (forward/back/left/right/stop) + speed slider |
+| 📊 **System Status** | Dashboard (FPS / detections / distance / u position / health ring) + log stream |
+| 📦 **Node Manager** | Start/stop RealSense camera / YOLO detector / RGBD capture with inline param editor |
+| ⚙️ **Settings** | 19 hot-reloadable runtime params + dynamic background + UI prefs |
+
+**Advantages:**
+- 🌐 Cross-device — works on phones/tablets/laptops, multi-user observation
+- 🚫 Zero terminals — no need to ssh into 4 separate windows
+- 🎨 Modern UI — liquid glass design + realtime visualizations
+- 🔌 SSH-friendly — pure web, no X11 dependency, headless robots welcome
+
+### Local Frontend Preview (no ROS2 required)
+
+Want to tweak the frontend without logging into the robot?
+
+```bash
+cd src/web_frontend
+pip install flask pillow
+python dev_server.py   # browse http://localhost:8080
+```
+
+`dev_server.py` is a pure-Flask mock backend that simulates all APIs and a synthetic MJPEG stream. Edit HTML/CSS/JS and refresh.
+
+---
+
 ### Project Structure
 
 ```
@@ -41,10 +93,16 @@ g1act_ws/
 ├── requirements.txt             # Python dependencies
 ├── src/
 │   ├── D455.md                 # D455 camera documentation
+│   ├── web_frontend/          # Web control panel frontend (HTML/CSS/JS + local dev server)
+│   │   ├── index.html              # Main page (6 view modules)
+│   │   ├── css/
+│   │   │   ├── style.css           # Liquid glass styles
+│   │   │   └── lggc.css            # LGGC glass utility class
+│   │   ├── js/app.js              # Routing / state polling / process mgmt / background
+│   │   └── dev_server.py          # Local mock backend (no ROS2 required)
 │   ├── g1_yolo_nav_py/        # Main ROS2 Python package
-│   │   ├── setup.py                # Package setup (entry_points definition)
+│   │   ├── setup.py                # Package setup (entry_points)
 │   │   ├── package.xml            # ROS2 package description
-│   │   ├── setup.cfg              # Package configuration
 │   │   ├── yolo_v11x_best.pt     # YOLOv11x custom trained model
 │   │   ├── config/                # Parameter configuration files
 │   │   │   └── yolo_nav.yaml
@@ -52,16 +110,23 @@ g1act_ws/
 │   │   │   ├── grasp_task.launch.py
 │   │   │   └── yolo_nav.launch.py
 │   │   ├── arm/                   # Arm control scripts (unitree_sdk2py, separate process)
-│   │   │   ├── arm_common.py        # Shared module: joint constants, BaseArmController base class
-│   │   │   ├── arm.py              # Arm control demo (zero→lift→lower)
-│   │   │   ├── armup.py            # Grab action: reach→lift→grip hold
-│   │   │   └── armdown.py          # Release action: extend→lower→zero release
+│   │   │   ├── arm_common.py        # Shared module: joint constants, base class
+│   │   │   ├── arm.py              # Arm control demo
+│   │   │   ├── armup.py            # Grab action
+│   │   │   └── armdown.py          # Release action
 │   │   └── g1_yolo_nav_py/       # Python module code
-│   │       ├── __init__.py
-│   │       ├── _dds_compat.py      # DDS compatibility layer
-│   │       ├── _detection_utils.py  # Detection utility functions
-│   │       ├── _grasp_state.py     # Grasp state machine mixin
-│   │       └── other functions
+│   │       ├── web_panel.py         # Web control panel node (Flask + ROS2) ★ recommended
+│   │       ├── control_panel.py     # tkinter GUI control panel (legacy)
+│   │       ├── yolo_detector.py     # YOLO detection node
+│   │       ├── yaw_align.py         # Step-wise yaw alignment
+│   │       ├── loco_forward.py      # Forward motion + depth-based stop
+│   │       ├── grasp_task.py        # Terminal grasp task
+│   │       ├── rgbd_capture.py      # RGBD data capture
+│   │       ├── spatial_target.py    # 2D→3D spatial projection
+│   │       ├── detection_visualizer.py  # Detection visualization
+│   │       ├── _grasp_state.py      # Grasp state machine mixin
+│   │       ├── _detection_utils.py  # Detection utilities
+│   │       └── _dds_compat.py       # DDS compatibility layer
 │   └── base/                   # Reference packages (not directly called)
 │       ├── ctrl_keyboard/        # Loco API reference implementation
 │       └── g1_description/      # URDF models (12/23/29 dof)
@@ -262,7 +327,87 @@ ros2 launch g1_yolo_nav_py yolo_nav.launch.py enable_approach:=true
 
 ---
 
-## Control Panel (GUI Integrated Control)
+## Web Control Panel (Recommended)
+
+Flask-based browser control panel that **starts the entire robot stack from one process** — no need for multiple ssh terminals.
+
+```bash
+# Start (first time: pip install flask pillow)
+ros2 run g1_yolo_nav_py web_panel
+# Open http://<robot_ip>:8080 in your browser
+```
+
+### Node Manager
+
+The "📦 Node Manager" page hosts **3 large cards**:
+
+| Process | Mode | Purpose |
+|---|---|---|
+| 📷 RealSense camera driver | `ros2 launch realsense2_camera rs_launch.py` | Vision frontend |
+| 🔍 YOLO detector | `ros2 run g1_yolo_nav_py yolo_detector` | Object detection |
+| 📦 RGBD capture | `ros2 run g1_yolo_nav_py rgbd_capture` | Periodic color+depth save |
+
+Each card features:
+- **Start / Stop buttons** — subprocess.Popen + isolated process group, SIGINT → SIGKILL tree cleanup
+- **Status pill** — green pulse when running + PID + uptime
+- **Inline parameter form** — edit `camera_namespace` / `image_topic` / `interval_sec` etc., click save to write to backend
+- **Subprocess logs** — collapsible, last 80 lines of ros2 stdout
+
+### Full API (13 endpoints)
+
+```
+GET  /                          → Main page (HTML)
+GET  /stream/raw                → MJPEG raw video stream
+GET  /stream/detection          → MJPEG annotated detection stream
+GET  /api/state                 → Global state polling (incl. 3 process statuses)
+GET  /api/config                → Read hot-reloadable config (19 fields)
+POST /api/config                → Bulk hot-reload
+POST /api/cmd/manual            → Manual teleop (vx, vy, vyaw clamped)
+POST /api/cmd/stop              → E-stop (clear FSM + sport.stop)
+POST /api/cmd/search            → Enter search state
+POST /api/cmd/grab              → Grab now (armup.py)
+POST /api/cmd/putdown           → Release (armdown.py)
+POST /api/cmd/turn_putdown      → Turn 90° then release
+POST /api/cmd/left_putdown      → Side-step left then release
+POST /api/process/<n>/start     → Start subprocess (n = camera/yolo/rgbd)
+POST /api/process/<n>/stop      → Stop subprocess
+GET  /api/process/<n>/status    → Full status + 80 log lines
+POST /api/process/<n>/params    → Update params (effective on next start)
+```
+
+### Settings (19 hot-reloadable params)
+
+No yaml editing or bash sourcing — tune directly in the browser:
+
+| Group | Parameters |
+|---|---|
+| 🔍 Detection | target_class_id / use_depth_distance / stop_distance / depth_sample_radius / lost_timeout |
+| 🎯 Alignment | step_yaw_speed / step_duration / camera_settle_time / max_consecutive_steps / center_tolerance |
+| 🕹 Motion | forward_speed / arrive_bbox_ratio / align_stable_time / search_yaw_speed / turn_yaw_speed / turn_duration / side_step_speed / side_step_duration |
+| 🎨 UI Prefs | stream_quality / default_view / log_toast / poll_interval (3 stored in localStorage) |
+| 🖼 Background | Background type (default gradient / Bing daily / Picsum / custom URL) + mask + blur |
+
+### Custom Launch Parameters
+
+```bash
+# Custom port
+ros2 run g1_yolo_nav_py web_panel --ros-args -p http_port:=9090
+
+# Custom target class + stream quality
+ros2 run g1_yolo_nav_py web_panel --ros-args \
+  -p target_class_id:=bottle \
+  -p stream_quality:=50
+
+# Custom image topic (different camera namespace)
+ros2 run g1_yolo_nav_py web_panel --ros-args \
+  -p image_topic:=/camera/color/image_raw
+```
+
+> **Dependencies:** `pip install flask pillow` (first time)
+
+---
+
+## tkinter Control Panel (Legacy, optional)
 
 tkinter-based GUI integrating detection visualization + manual teleop + one-click grasp task.
 
