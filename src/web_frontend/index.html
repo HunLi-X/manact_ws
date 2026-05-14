@@ -25,11 +25,13 @@
 </head>
 <body class="font-sans antialiased">
 
-<!-- 背景装饰层（液态玻璃风：径向光晕 + 三色渐变 + 浮动光斑） -->
-<div class="bg-canvas" aria-hidden="true">
+<!-- 背景装饰层（液态玻璃风：径向光晕 + 三色渐变 + 浮动光斑 + 可选自定义图片） -->
+<div class="bg-canvas" id="bg-canvas" aria-hidden="true">
+  <div class="bg-image" id="bg-image"></div>
   <div class="bg-blob bg-blob-1"></div>
   <div class="bg-blob bg-blob-2"></div>
   <div class="bg-blob bg-blob-3"></div>
+  <div class="bg-mask" id="bg-mask"></div>
 </div>
 
 <div class="app-layout">
@@ -560,28 +562,52 @@
     </section>
 
     <!-- ======================================================= -->
-    <!-- 视图 5：系统设置 — 分组卡片式表单                            -->
+    <!-- 视图 5：系统设置 — 统一头部 + 分组卡片                       -->
     <!-- ======================================================= -->
     <section class="view hidden" data-view="settings">
       <div class="settings-wrap">
 
-        <!-- 顶部提示条 -->
-        <div class="settings-banner">
-          <div class="banner-icon" data-icon="lightbulb"></div>
-          <div class="banner-body">
-            <div class="banner-title">配置热更新</div>
-            <div class="banner-desc">下列参数可在机器人运行时实时调整，无需重启节点。修改后点击对应分组的「保存」立即生效。</div>
-          </div>
-          <button class="btn btn-outline-brand" onclick="reloadSettings()">
+        <!-- 统一头部：TOC + 重新加载按钮（标题已在顶栏显示，避免重复） -->
+        <div class="settings-header">
+          <nav class="settings-toc">
+            <div class="toc-title" data-icon="lightbulb"></div>
+            <a href="#sg-detect" class="toc-link" data-toc="sg-detect">
+              <span class="toc-icon group-icon-red" data-icon="search"></span>
+              <span>检测识别</span>
+            </a>
+            <a href="#sg-align" class="toc-link" data-toc="sg-align">
+              <span class="toc-icon group-icon-amber" data-icon="crosshair"></span>
+              <span>对齐控制</span>
+            </a>
+            <a href="#sg-motion" class="toc-link" data-toc="sg-motion">
+              <span class="toc-icon group-icon-blue" data-icon="gamepad"></span>
+              <span>运动控制</span>
+            </a>
+            <a href="#sg-camera" class="toc-link" data-toc="sg-camera">
+              <span class="toc-icon group-icon-blue" data-icon="camera"></span>
+              <span>相机驱动</span>
+            </a>
+            <a href="#sg-ui" class="toc-link" data-toc="sg-ui">
+              <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
+              <span>界面偏好</span>
+            </a>
+            <a href="#sg-bg" class="toc-link" data-toc="sg-bg">
+              <span class="toc-icon group-icon-blue" data-icon="image"></span>
+              <span>动态背景</span>
+            </a>
+          </nav>
+          <button class="btn btn-outline-brand settings-reload-btn" onclick="reloadSettings()" title="重新加载配置">
             <span data-icon="refresh-cw" class="btn-icon"></span>
             <span>重新加载</span>
           </button>
         </div>
 
-        <div class="settings-grid">
+        <div class="settings-layout">
+
+          <div class="settings-grid">
 
           <!-- 检测识别 -->
-          <div class="settings-group">
+          <div class="settings-group" id="sg-detect">
             <div class="settings-group-head">
               <div class="group-icon group-icon-red" data-icon="search"></div>
               <div>
@@ -589,13 +615,13 @@
                 <div class="group-sub">目标类别、深度距离判断</div>
               </div>
             </div>
-            <form class="settings-form" data-settings-group="detect">
-              <label>
+            <form class="settings-form form-2col" data-settings-group="detect">
+              <label class="field-full">
                 <span class="field-label">目标类别 (target_class_id)</span>
                 <input type="text" data-key="target_class_id" />
                 <span class="field-help">YOLO 识别的类别名称，如 chair/bottle/person</span>
               </label>
-              <label class="field-inline">
+              <label class="field-inline field-full">
                 <span class="field-label">启用深度距离判断</span>
                 <label class="toggle">
                   <input type="checkbox" data-key="use_depth_distance" />
@@ -615,14 +641,14 @@
                 <span class="field-label">丢失超时 lost_timeout (s)</span>
                 <input type="number" step="0.5" min="0.5" max="30" data-key="lost_timeout" />
               </label>
-              <div class="form-actions">
+              <div class="form-actions field-full">
                 <button type="button" class="btn btn-primary" data-save="detect">保存</button>
               </div>
             </form>
           </div>
 
           <!-- 对齐控制 -->
-          <div class="settings-group">
+          <div class="settings-group" id="sg-align">
             <div class="settings-group-head">
               <div class="group-icon group-icon-amber" data-icon="crosshair"></div>
               <div>
@@ -630,7 +656,7 @@
                 <div class="group-sub">步进式偏航对齐参数</div>
               </div>
             </div>
-            <form class="settings-form" data-settings-group="align">
+            <form class="settings-form form-2col" data-settings-group="align">
               <label>
                 <span class="field-label">每步旋转速度 (rad/s)</span>
                 <input type="number" step="0.05" min="0.05" max="1" data-key="step_yaw_speed" />
@@ -648,27 +674,27 @@
                 <span class="field-label">最大连续步数</span>
                 <input type="number" step="1" min="1" max="30" data-key="max_consecutive_steps" />
               </label>
-              <label>
+              <label class="field-full">
                 <span class="field-label">居中容差 center_tolerance</span>
                 <input type="number" step="0.01" min="0.01" max="0.3" data-key="align_center_tolerance" />
                 <span class="field-help">归一化，越小越严格</span>
               </label>
-              <div class="form-actions">
+              <div class="form-actions field-full">
                 <button type="button" class="btn btn-primary" data-save="align">保存</button>
               </div>
             </form>
           </div>
 
           <!-- 运动控制 -->
-          <div class="settings-group">
+          <div class="settings-group" id="sg-motion">
             <div class="settings-group-head">
               <div class="group-icon group-icon-blue" data-icon="gamepad"></div>
               <div>
                 <div class="group-title">运动控制</div>
-                <div class="group-sub">前进、搜索、转身速度</div>
+                <div class="group-sub">前进、搜索、转身、左移</div>
               </div>
             </div>
-            <form class="settings-form" data-settings-group="motion">
+            <form class="settings-form form-2col" data-settings-group="motion">
               <label>
                 <span class="field-label">前进速度 forward_speed (m/s)</span>
                 <input type="number" step="0.05" min="0.05" max="1" data-key="forward_speed" />
@@ -696,31 +722,69 @@
                 <span class="field-help">右转 90° 所需时间</span>
               </label>
               <label>
-                <span class="field-label">左移放下速度 side_step_speed (m/s)</span>
+                <span class="field-label">左移速度 side_step_speed (m/s)</span>
                 <input type="number" step="0.05" min="0.05" max="0.5" data-key="side_step_speed" />
                 <span class="field-help">vy>0 表示向左侧移</span>
               </label>
               <label>
-                <span class="field-label">左移放下时长 side_step_duration (s)</span>
+                <span class="field-label">左移时长 side_step_duration (s)</span>
                 <input type="number" step="0.1" min="0.1" max="10" data-key="side_step_duration" />
                 <span class="field-help">侧移持续时间，决定平移距离</span>
               </label>
-              <div class="form-actions">
+              <div class="form-actions field-full">
                 <button type="button" class="btn btn-primary" data-save="motion">保存</button>
               </div>
             </form>
           </div>
 
-          <!-- 视频流 + 外观 -->
-          <div class="settings-group">
+          <!-- 相机驱动参数 -->
+          <div class="settings-group" id="sg-camera">
+            <div class="settings-group-head">
+              <div class="group-icon group-icon-blue" data-icon="camera"></div>
+              <div>
+                <div class="group-title">相机驱动</div>
+                <div class="group-sub">RealSense ros2 launch 参数</div>
+              </div>
+            </div>
+            <form class="settings-form form-2col" data-settings-group="camera">
+              <label>
+                <span class="field-label">camera_namespace</span>
+                <input type="text" data-camera-key="camera_namespace" />
+                <span class="field-help">话题前缀，如 robot1</span>
+              </label>
+              <label>
+                <span class="field-label">camera_name</span>
+                <input type="text" data-camera-key="camera_name" />
+                <span class="field-help">设备名称，如 D455_1</span>
+              </label>
+              <label class="field-inline field-full">
+                <span class="field-label">align_depth.enable</span>
+                <label class="toggle">
+                  <input type="checkbox" data-camera-key="align_depth.enable" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <div class="field-help field-full">提示：参数仅在「下次启动」时生效。修改后需先停止再启动。</div>
+              <div class="form-actions field-full">
+                <button type="button" class="btn btn-primary" onclick="saveCameraParams()">保存参数</button>
+                <button type="button" class="btn btn-outline-brand" onclick="reloadCameraParams()">
+                  <span data-icon="refresh-cw" class="btn-icon"></span>
+                  <span>读取当前</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 界面偏好 -->
+          <div class="settings-group" id="sg-ui">
             <div class="settings-group-head">
               <div class="group-icon group-icon-emerald" data-icon="palette"></div>
               <div>
                 <div class="group-title">界面偏好</div>
-                <div class="group-sub">视频流 + UI 外观 (本地保存)</div>
+                <div class="group-sub">视频流 + UI 外观（本地保存）</div>
               </div>
             </div>
-            <form class="settings-form" data-settings-group="ui">
+            <form class="settings-form form-2col" data-settings-group="ui">
               <label>
                 <span class="field-label">视频流 JPEG 质量 (1-100)</span>
                 <input type="number" step="1" min="10" max="100" data-key="stream_quality" />
@@ -736,7 +800,7 @@
                 </select>
                 <span class="field-help">保存在浏览器本地</span>
               </label>
-              <label class="field-inline">
+              <label class="field-inline field-full">
                 <span class="field-label">显示实时日志气泡</span>
                 <label class="toggle">
                   <input type="checkbox" data-key="log_toast" data-local="true" />
@@ -748,52 +812,66 @@
                 <input type="number" step="100" min="200" max="5000" data-key="poll_interval" data-local="true" />
                 <span class="field-help">保存在浏览器本地，刷新生效</span>
               </label>
-              <div class="form-actions">
+              <div class="form-actions field-full">
                 <button type="button" class="btn btn-primary" data-save="ui">保存</button>
                 <button type="button" class="btn btn-outline-danger" onclick="resetLocalPrefs()">重置本地</button>
               </div>
             </form>
           </div>
 
-          <!-- 相机驱动参数 -->
-          <div class="settings-group">
+          <!-- 动态背景 -->
+          <div class="settings-group" id="sg-bg">
             <div class="settings-group-head">
-              <div class="group-icon group-icon-blue" data-icon="camera"></div>
+              <div class="group-icon group-icon-blue" data-icon="image"></div>
               <div>
-                <div class="group-title">相机驱动</div>
-                <div class="group-sub">RealSense ros2 launch 参数</div>
+                <div class="group-title">动态背景</div>
+                <div class="group-sub">自定义壁纸 / 在线壁纸源（本地保存）</div>
               </div>
             </div>
-            <form class="settings-form" data-settings-group="camera">
-              <label>
-                <span class="field-label">camera_namespace</span>
-                <input type="text" data-camera-key="camera_namespace" />
-                <span class="field-help">话题前缀，如 robot1</span>
+            <form class="settings-form form-2col" data-settings-group="bg">
+              <label class="field-full">
+                <span class="field-label">背景类型</span>
+                <select id="bg-type-select" data-local="true">
+                  <option value="default">默认液态玻璃（蓝米粉渐变 + 浮动光斑）</option>
+                  <option value="url">自定义图片 URL</option>
+                  <option value="bing">Bing 每日壁纸（每日更新）</option>
+                  <option value="unsplash">Unsplash 随机风景（每次刷新切换）</option>
+                  <option value="picsum">Picsum 随机图（艺术摄影）</option>
+                </select>
+              </label>
+              <label class="field-full">
+                <span class="field-label">图片 URL（仅类型为「自定义图片 URL」时生效）</span>
+                <input type="text" id="bg-url-input" placeholder="https://example.com/wallpaper.jpg" />
+                <span class="field-help">支持 https 直链，可粘贴 Unsplash/Pexels 等图床地址</span>
               </label>
               <label>
-                <span class="field-label">camera_name</span>
-                <input type="text" data-camera-key="camera_name" />
-                <span class="field-help">设备名称，如 D455_1</span>
+                <span class="field-label">白色蒙版（0=纯图片，100=纯白）</span>
+                <input type="range" min="0" max="100" step="5" id="bg-mask-input" value="0" />
+                <span class="field-help" id="bg-mask-value">0%</span>
               </label>
-              <label class="field-inline">
-                <span class="field-label">align_depth.enable</span>
-                <label class="toggle">
-                  <input type="checkbox" data-camera-key="align_depth.enable" />
-                  <span class="toggle-slider"></span>
-                </label>
+              <label>
+                <span class="field-label">背景模糊（0-30 px）</span>
+                <input type="range" min="0" max="30" step="1" id="bg-blur-input" value="0" />
+                <span class="field-help" id="bg-blur-value">0 px</span>
               </label>
-              <div class="field-help">提示：参数仅在「下次启动」时生效。修改后需先停止再启动。</div>
-              <div class="form-actions">
-                <button type="button" class="btn btn-primary" onclick="saveCameraParams()">保存参数</button>
-                <button type="button" class="btn btn-outline-brand" onclick="reloadCameraParams()">
-                  <span data-icon="refresh-cw" class="btn-icon"></span>
-                  <span>读取当前</span>
-                </button>
+              <div class="bg-presets field-full">
+                <span class="field-label">快速预设：</span>
+                <button type="button" class="bg-preset" data-preset="default">液态玻璃</button>
+                <button type="button" class="bg-preset" data-preset="bing">Bing 每日</button>
+                <button type="button" class="bg-preset" data-preset="unsplash-nature">Unsplash 自然</button>
+                <button type="button" class="bg-preset" data-preset="unsplash-tech">Unsplash 科技</button>
+                <button type="button" class="bg-preset" data-preset="picsum">Picsum 摄影</button>
+              </div>
+              <div class="form-actions field-full">
+                <button type="button" class="btn btn-primary" onclick="applyBgFromForm()">应用并保存</button>
+                <button type="button" class="btn btn-outline-brand" onclick="previewBgFromForm()">仅预览</button>
+                <button type="button" class="btn btn-outline-danger" onclick="resetBg()">恢复默认</button>
               </div>
             </form>
           </div>
 
-        </div>
+          </div><!-- /settings-grid -->
+        </div><!-- /settings-layout -->
 
         <!-- 保存状态提示 -->
         <div id="settings-toast" class="settings-toast hidden"></div>

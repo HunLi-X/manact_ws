@@ -8,15 +8,13 @@ html, body {
   margin: 0;
   min-height: 100vh;
   color: #0F172A;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.85), transparent 35%),
-    linear-gradient(135deg, #A5C8F6 0%, #F2F6E2 50%, #FDCECE 100%);
-  background-attachment: fixed;
+  background: transparent;
   font-family: "Inter", "PingFang SC", "Microsoft YaHei UI", sans-serif;
 }
 
 /* ====================================================================== */
-/* 背景装饰层（浮动光斑 — 增强液态感）                                       */
+/* 背景装饰层（默认渐变 + 浮动光斑 + 自定义图片支持）                          */
+/* 位于 z-index: -1，由 .bg-canvas 自身承载渐变（避免 body 背景遮挡）          */
 /* ====================================================================== */
 .bg-canvas {
   position: fixed;
@@ -24,7 +22,31 @@ html, body {
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.85), transparent 35%),
+    linear-gradient(135deg, #A5C8F6 0%, #F2F6E2 50%, #FDCECE 100%);
 }
+/* 自定义图片背景层（由 JS 设置 background-image） */
+.bg-canvas .bg-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.bg-canvas.has-image .bg-image { opacity: 1; }
+/* 蒙版（仅在有自定义图片时由 JS 设置 alpha；无图片时透明） */
+.bg-canvas .bg-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0);
+  transition: background 0.4s ease;
+}
+/* 有自定义图片时隐藏渐变光斑 */
+.bg-canvas.has-image .bg-blob { opacity: 0; transition: opacity 0.6s ease; }
+
 .bg-blob {
   position: absolute;
   border-radius: 50%;
@@ -146,7 +168,8 @@ html, body {
 }
 
 .main-wrap {
-  padding: 0 24px 24px;
+  /* 顶部留出 fixed topbar 的空间：14 (顶) + ~76 (高) + 22 (间距) ≈ 112px */
+  padding: 112px 24px 24px;
   overflow-x: hidden;
 }
 
@@ -267,9 +290,12 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 18px 22px;
-  margin: 18px 0 22px;
-  position: sticky;
+  /* fixed 真正固定在视口顶端，不受父容器 transform 影响 */
+  position: fixed;
   top: 14px;
+  /* 配合 sidebar 240px + main-wrap padding-x 24px：left=264, right=24 */
+  left: calc(240px + 24px);
+  right: 24px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(20px) saturate(180%);
@@ -278,7 +304,10 @@ html, body {
   box-shadow:
     inset 1px 1px 1px rgba(255, 255, 255, 0.7),
     0 8px 24px rgba(15, 23, 42, 0.06);
-  z-index: 10;
+  z-index: 20;
+}
+@media (max-width: 900px) {
+  .topbar { left: calc(64px + 24px); }
 }
 
 .page-title { font-size: 19px; font-weight: 700; color: #0F172A; margin: 0; line-height: 1.2; }
@@ -1314,19 +1343,29 @@ html, body {
 /* ====================================================================== */
 .settings-wrap { display: flex; flex-direction: column; gap: 16px; }
 
-.settings-banner {
+/* 统一 sticky 头部：TOC chips + 重新加载按钮 单行排列 */
+.settings-header {
+  position: sticky;
+  top: 98px;
+  z-index: 9;
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 14px;
-  background: linear-gradient(135deg, rgba(255, 237, 213, 0.85) 0%, rgba(254, 215, 170, 0.7) 100%);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border-radius: 16px;
-  padding: 16px 20px;
-  border: 1px solid rgba(254, 215, 170, 0.7);
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow:
-    inset 1px 1px 1px rgba(255, 255, 255, 0.6),
-    0 4px 14px rgba(249, 115, 22, 0.10);
+    inset 1px 1px 1px rgba(255, 255, 255, 0.85),
+    0 6px 20px rgba(15, 23, 42, 0.06);
+}
+
+.settings-reload-btn {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .banner-icon {
   width: 44px; height: 44px;
@@ -1349,6 +1388,90 @@ html, body {
   gap: 16px;
 }
 @media (max-width: 1100px) { .settings-grid { grid-template-columns: 1fr; } }
+
+/* 设置页布局：顶部水平 TOC + 下方分组网格 */
+.settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-toc {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 0;
+  /* sticky 已上提到 .settings-header，这里不再单独 sticky */
+  background: transparent;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.settings-toc::-webkit-scrollbar { height: 4px; }
+.settings-toc::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.15); border-radius: 2px; }
+
+.toc-title {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  color: white;
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(249, 115, 22, 0.3);
+}
+.toc-title svg { width: 16px; height: 16px; }
+.toc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.7);
+  text-decoration: none;
+  transition: all 0.18s;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.toc-link:hover {
+  background: rgba(255, 255, 255, 0.85);
+  color: #0F172A;
+  border-color: rgba(255, 255, 255, 0.85);
+}
+.toc-link.active {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.95) 0%, rgba(255, 237, 213, 0.9) 100%);
+  color: #C2410C;
+  font-weight: 600;
+  border-color: rgba(249, 115, 22, 0.35);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.85),
+    0 4px 12px rgba(249, 115, 22, 0.18);
+}
+.toc-link.active .toc-icon {
+  color: #F97316;
+  background: rgba(255, 255, 255, 0.85);
+}
+.toc-icon {
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.7);
+}
+.toc-icon svg { width: 13px; height: 13px; }
+
+@media (max-width: 640px) {
+  .settings-toc { top: 80px; padding: 8px 10px; }
+  .toc-title { display: none; }
+  .toc-link { padding: 6px 10px; font-size: 12px; }
+}
+
+/* 滚动锚点偏移（fixed topbar 98 + sticky header ~56 + 余量） */
+.settings-group { scroll-margin-top: 170px; }
 
 .settings-group {
   background: rgba(255, 255, 255, 0.55);
@@ -1395,6 +1518,17 @@ html, body {
   gap: 14px;
 }
 
+/* 两列网格表单（field-full 跨两列） */
+.settings-form.form-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+@media (max-width: 640px) {
+  .settings-form.form-2col { grid-template-columns: 1fr; }
+}
+.settings-form.form-2col .field-full { grid-column: 1 / -1; }
+
 .settings-form label {
   display: flex;
   flex-direction: column;
@@ -1425,18 +1559,93 @@ html, body {
   backdrop-filter: blur(8px);
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   font-size: 13px;
   color: #0F172A;
   font-family: 'JetBrains Mono', Consolas, monospace;
-  transition: all 0.15s;
+  transition: all 0.18s;
   outline: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 .settings-form input:focus,
 .settings-form select:focus {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92);
   border-color: #F97316;
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  box-shadow:
+    0 0 0 3px rgba(249, 115, 22, 0.18),
+    inset 1px 1px 1px rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+/* range slider 玻璃样式 */
+.settings-form input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.1);
+  outline: none;
+  box-shadow: inset 1px 1px 2px rgba(15, 23, 42, 0.12);
+}
+.settings-form input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  cursor: pointer;
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.4),
+    0 2px 6px rgba(249, 115, 22, 0.5);
+  border: 2px solid white;
+}
+.settings-form input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.5);
+}
+
+/* 背景预设按钮组 */
+.bg-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  border: 1px dashed rgba(15, 23, 42, 0.12);
+}
+.bg-presets .field-label { margin-right: 4px; }
+.bg-preset {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 9999px;
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.75);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+  backdrop-filter: blur(8px);
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.7);
+}
+.bg-preset:hover {
+  background: rgba(255, 247, 237, 0.9);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #C2410C;
+  transform: translateY(-1px);
+}
+.bg-preset.active {
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
 }
 
 /* Toggle 开关 */

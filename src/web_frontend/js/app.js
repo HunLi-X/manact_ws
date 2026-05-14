@@ -42,6 +42,7 @@ const ICONS = {
   'users':        '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   'camera':       '<svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
   'sliders':      '<svg viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>',
+  'image':        '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
 };
 
 function renderIcons(root = document) {
@@ -737,5 +738,217 @@ const _origReloadSettings = reloadSettings;
 reloadSettings = async function() {
   await _origReloadSettings();
   await reloadCameraParams();
+  loadBgFormFromPrefs();
 };
+
+
+// ======================================================================
+// 动态背景管理
+// ======================================================================
+const BG_PRESETS = {
+  default: { type: 'default', mask: 0,  blur: 0 },
+  bing:    { type: 'bing',    mask: 25, blur: 0 },
+  'unsplash-nature': { type: 'url', url: 'https://picsum.photos/seed/nature1/1920/1080', mask: 30, blur: 0 },
+  'unsplash-tech':   { type: 'url', url: 'https://picsum.photos/seed/tech1/1920/1080',   mask: 35, blur: 0 },
+  picsum:  { type: 'url', url: 'https://picsum.photos/1920/1080?random=' + Math.floor(Math.random() * 1000), mask: 30, blur: 0 },
+};
+
+const BG_DEFAULTS = { type: 'default', url: '', mask: 0, blur: 0 };
+
+function getBgPref() {
+  return {
+    type: getLocalPref('bg_type', BG_DEFAULTS.type),
+    url:  getLocalPref('bg_url',  BG_DEFAULTS.url),
+    mask: getLocalPref('bg_mask', BG_DEFAULTS.mask),
+    blur: getLocalPref('bg_blur', BG_DEFAULTS.blur),
+  };
+}
+
+function setBgPref(pref) {
+  setLocalPref('bg_type', pref.type);
+  setLocalPref('bg_url',  pref.url || '');
+  setLocalPref('bg_mask', pref.mask);
+  setLocalPref('bg_blur', pref.blur);
+}
+
+// 解析背景类型 → 实际 URL
+function resolveBgUrl(type, customUrl) {
+  switch (type) {
+    case 'url':      return customUrl || '';
+    case 'bing':     return 'https://bing.biturl.top/?resolution=1920&format=image&index=0&mkt=zh-CN';
+    case 'unsplash': return 'https://picsum.photos/1920/1080?random=' + Date.now();
+    case 'picsum':   return 'https://picsum.photos/1920/1080?random=' + Date.now();
+    default:         return '';
+  }
+}
+
+// 应用到 DOM
+function applyBackground(pref) {
+  const canvas = document.getElementById('bg-canvas');
+  const img = document.getElementById('bg-image');
+  const mask = document.getElementById('bg-mask');
+  if (!canvas || !img || !mask) return;
+
+  const url = resolveBgUrl(pref.type, pref.url);
+
+  if (url) {
+    // 预加载图片，加载成功才切换
+    const probe = new Image();
+    probe.onload = () => {
+      img.style.backgroundImage = `url("${url}")`;
+      img.style.filter = pref.blur > 0 ? `blur(${pref.blur}px)` : '';
+      canvas.classList.add('has-image');
+      // 蒙版：0 = 透明显示原图，100 = 全白
+      const alpha = Math.max(0, Math.min(100, pref.mask)) / 100;
+      mask.style.background = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+    };
+    probe.onerror = () => {
+      appendLog('[背景] 图片加载失败，回退到默认: ' + url, 'warn');
+      img.style.backgroundImage = '';
+      canvas.classList.remove('has-image');
+      mask.style.background = 'rgba(255, 255, 255, 0)';
+    };
+    probe.src = url;
+  } else {
+    // 无图片时：清空图片层 + 透明蒙版 + 移除 has-image，让默认渐变 + 光斑显示
+    img.style.backgroundImage = '';
+    img.style.filter = '';
+    canvas.classList.remove('has-image');
+    mask.style.background = 'rgba(255, 255, 255, 0)';
+  }
+}
+
+// 启动时立即应用
+applyBackground(getBgPref());
+
+// 同步表单 ← 偏好
+function loadBgFormFromPrefs() {
+  const pref = getBgPref();
+  const sel = document.getElementById('bg-type-select');
+  const urlEl = document.getElementById('bg-url-input');
+  const maskEl = document.getElementById('bg-mask-input');
+  const blurEl = document.getElementById('bg-blur-input');
+  if (sel) sel.value = pref.type;
+  if (urlEl) urlEl.value = pref.url || '';
+  if (maskEl) {
+    maskEl.value = pref.mask;
+    setTxt('bg-mask-value', pref.mask + '%');
+  }
+  if (blurEl) {
+    blurEl.value = pref.blur;
+    setTxt('bg-blur-value', pref.blur + ' px');
+  }
+}
+
+// 读取表单 → 偏好对象
+function readBgFromForm() {
+  return {
+    type: document.getElementById('bg-type-select')?.value || 'default',
+    url:  document.getElementById('bg-url-input')?.value || '',
+    mask: parseInt(document.getElementById('bg-mask-input')?.value || '55', 10),
+    blur: parseInt(document.getElementById('bg-blur-input')?.value || '0', 10),
+  };
+}
+
+function applyBgFromForm() {
+  const pref = readBgFromForm();
+  applyBackground(pref);
+  setBgPref(pref);
+  showToast('背景已应用并保存', 'info');
+}
+
+function previewBgFromForm() {
+  const pref = readBgFromForm();
+  applyBackground(pref);
+  showToast('已预览（未保存）', 'info');
+}
+
+function resetBg() {
+  setBgPref({ ...BG_DEFAULTS });
+  applyBackground({ ...BG_DEFAULTS });
+  loadBgFormFromPrefs();
+  document.querySelectorAll('.bg-preset').forEach(b => b.classList.remove('active'));
+  showToast('已恢复默认背景', 'info');
+}
+
+// 预设按钮 + 滑块实时更新
+document.addEventListener('DOMContentLoaded', () => bindBgControls());
+bindBgControls(); // 兜底（脚本可能在 DOMContentLoaded 之后才解析）
+
+function bindBgControls() {
+  // 滑块标签实时更新
+  const maskEl = document.getElementById('bg-mask-input');
+  if (maskEl && !maskEl._bound) {
+    maskEl._bound = true;
+    maskEl.addEventListener('input', () => setTxt('bg-mask-value', maskEl.value + '%'));
+  }
+  const blurEl = document.getElementById('bg-blur-input');
+  if (blurEl && !blurEl._bound) {
+    blurEl._bound = true;
+    blurEl.addEventListener('input', () => setTxt('bg-blur-value', blurEl.value + ' px'));
+  }
+  // 预设按钮
+  document.querySelectorAll('.bg-preset').forEach(btn => {
+    if (btn._bound) return;
+    btn._bound = true;
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.preset;
+      const preset = BG_PRESETS[name];
+      if (!preset) return;
+      const pref = { ...BG_DEFAULTS, ...preset };
+      // 写表单
+      const sel = document.getElementById('bg-type-select');
+      const urlEl = document.getElementById('bg-url-input');
+      if (sel)   sel.value = pref.type;
+      if (urlEl) urlEl.value = pref.url || '';
+      if (maskEl) { maskEl.value = pref.mask; setTxt('bg-mask-value', pref.mask + '%'); }
+      if (blurEl) { blurEl.value = pref.blur; setTxt('bg-blur-value', pref.blur + ' px'); }
+      // 应用 + 保存
+      applyBackground(pref);
+      setBgPref(pref);
+      // 高亮当前预设
+      document.querySelectorAll('.bg-preset').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      showToast(`已应用预设: ${btn.textContent.trim()}`, 'info');
+    });
+  });
+}
+
+
+// ======================================================================
+// 设置页 TOC scrollspy（点击锚点 + 滚动高亮）
+// ======================================================================
+document.querySelectorAll('.toc-link').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = a.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (target) {
+      // 用 scrollIntoView 平滑滚动
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // 立即高亮
+      document.querySelectorAll('.toc-link').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+    }
+  });
+});
+
+// 滚动监听（高亮当前可见分组）
+function updateTocActive() {
+  const groups = document.querySelectorAll('.settings-group[id]');
+  if (!groups.length) return;
+  const offset = 180;  // fixed topbar 98 + sticky header ~56 + 余量
+  let active = null;
+  for (const g of groups) {
+    const rect = g.getBoundingClientRect();
+    if (rect.top - offset <= 0) active = g.id;
+  }
+  if (!active) active = groups[0].id;
+  document.querySelectorAll('.toc-link').forEach(a => {
+    a.classList.toggle('active', a.dataset.toc === active);
+  });
+}
+window.addEventListener('scroll', () => {
+  if (location.hash === '#settings') updateTocActive();
+}, { passive: true });
 
