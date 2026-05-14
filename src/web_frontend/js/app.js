@@ -4,13 +4,68 @@
 // ======================================================================
 
 // ======================================================================
+// SVG 图标常量（Lucide 风格，无外部依赖）
+// 所有 path 来自 lucide-icons (MIT License)
+// ======================================================================
+const ICONS = {
+  // 导航
+  'target':       '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  'search':       '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  'gamepad':      '<svg viewBox="0 0 24 24"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg>',
+  'activity':     '<svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+  'settings':     '<svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+  'sparkles':     '<svg viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>',
+  // 工作流步骤
+  'crosshair':    '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>',
+  'footprints':   '<svg viewBox="0 0 24 24"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>',
+  'bot':          '<svg viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
+  'check':        '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>',
+  // 任务按钮
+  'package':      '<svg viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+  'rotate-cw':    '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+  'arrow-left':   '<svg viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
+  'square':       '<svg viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>',
+  'trash-2':      '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>',
+  // 方向 / Chevron
+  'chevron-up':    '<svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>',
+  'chevron-down':  '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>',
+  'chevron-left':  '<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>',
+  'chevron-right': '<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>',
+  // 设置 + 其他
+  'lightbulb':    '<svg viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>',
+  'refresh-cw':   '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>',
+  'palette':      '<svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>',
+  // 敬请期待
+  'mic':          '<svg viewBox="0 0 24 24"><rect width="6" height="12" x="9" y="2" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>',
+  'map':          '<svg viewBox="0 0 24 24"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>',
+  'cloud':        '<svg viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>',
+  'users':        '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  'camera':       '<svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
+  'sliders':      '<svg viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>',
+};
+
+function renderIcons(root = document) {
+  root.querySelectorAll('[data-icon]').forEach(el => {
+    const name = el.dataset.icon;
+    const svg = ICONS[name];
+    if (!svg) return;
+    // 避免重复注入（如已经有 svg 子元素则跳过）
+    if (el.querySelector('svg')) return;
+    el.innerHTML = svg;
+  });
+}
+
+renderIcons();
+
+
+// ======================================================================
 // 状态映射
 // ======================================================================
 const STATE_COLORS = {
-  IDLE:     { dot: 'bg-slate-400',   text: '空闲' },
-  WORKING:  { dot: 'bg-cyan-500',    text: '执行中' },
-  GRABBING: { dot: 'bg-red-500',     text: '抓取中' },
-  MENU:     { dot: 'bg-emerald-500', text: '可放下' },
+  IDLE:     { dot: '#94A3B8', text: '空闲' },
+  WORKING:  { dot: '#F97316', text: '执行中' },
+  GRABBING: { dot: '#EF4444', text: '抓取中' },
+  MENU:     { dot: '#10B981', text: '可放下' },
 };
 
 const VIEW_META = {
@@ -261,9 +316,9 @@ async function pollState() {
     updateConnIndicator(true, s.mock === true);
 
     // ----- 顶部全局状态 -----
-    const st = STATE_COLORS[s.state] || { dot: 'bg-slate-400', text: s.state };
+    const st = STATE_COLORS[s.state] || { dot: '#94A3B8', text: s.state };
     const stateDot = document.getElementById('state-dot');
-    if (stateDot) stateDot.className = 'state-dot ' + st.dot;
+    if (stateDot) stateDot.style.background = st.dot;
     setTxt('state-label', st.text);
     setTxt('fps-label', 'FPS ' + (s.fps || 0).toFixed(0));
     setTxt('det-label', '检测 ' + (s.det_count || 0));
@@ -317,6 +372,9 @@ async function pollState() {
 
     // 健康度环
     updateHealthRing(computeHealth(s));
+
+    // ----- 相机驱动状态（轻量字段，不带日志）-----
+    if (s.camera) applyCameraStatus(s.camera);
 
     // ----- 日志追加 -----
     if (s.logs && s.logs.length > 0) {
@@ -513,4 +571,171 @@ if (!location.hash) {
   const defaultView = getLocalPref('default_view', 'grasp');
   if (defaultView && defaultView !== 'grasp') switchView(defaultView);
 }
+
+
+// ======================================================================
+// 相机驱动启动器
+// ======================================================================
+async function cameraStart() {
+  const btn = document.getElementById('cam-start-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/camera/start', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) {
+      appendLog('[相机] 启动失败: ' + (data.error || 'unknown'), 'error');
+    } else {
+      appendLog('[相机] ' + (data.msg || '已启动'), 'info');
+    }
+  } catch (e) {
+    appendLog('[相机] 网络错误: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    refreshCameraStatus();
+  }
+}
+
+async function cameraStop() {
+  const btn = document.getElementById('cam-stop-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/camera/stop', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) {
+      appendLog('[相机] 停止失败: ' + (data.error || 'unknown'), 'error');
+    } else {
+      appendLog('[相机] ' + (data.msg || '已停止'), 'info');
+    }
+  } catch (e) {
+    appendLog('[相机] 网络错误: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    refreshCameraStatus();
+  }
+}
+
+function fmtUptime(sec) {
+  if (sec == null || sec <= 0) return '—';
+  const s = Math.floor(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (h > 0) return `${h}h ${m}m ${ss}s`;
+  if (m > 0) return `${m}m ${ss}s`;
+  return `${ss}s`;
+}
+
+// 由轮询数据驱动相机卡片状态（轻量字段，不带日志）
+function applyCameraStatus(cam) {
+  if (!cam) return;
+  const pill = document.getElementById('cam-state-pill');
+  const label = document.getElementById('cam-state-label');
+  const startBtn = document.getElementById('cam-start-btn');
+  const stopBtn = document.getElementById('cam-stop-btn');
+
+  if (pill && label) {
+    if (cam.running) {
+      pill.classList.remove('cam-pill-off');
+      pill.classList.add('cam-pill-on');
+      label.textContent = '运行中';
+    } else {
+      pill.classList.remove('cam-pill-on');
+      pill.classList.add('cam-pill-off');
+      label.textContent = '未启动';
+    }
+  }
+  if (startBtn) startBtn.disabled = !!cam.running;
+  if (stopBtn) stopBtn.disabled = !cam.running;
+
+  setTxt('cam-pid', cam.pid != null ? String(cam.pid) : '—');
+  setTxt('cam-uptime', fmtUptime(cam.uptime));
+  if (cam.params) {
+    setTxt('cam-ns', cam.params['camera_namespace'] || '—');
+    setTxt('cam-name', cam.params['camera_name'] || '—');
+    setTxt('cam-align', cam.params['align_depth.enable'] || '—');
+    // 重新拼命令行预览
+    const parts = ['ros2 launch', cam.launch_pkg || 'realsense2_camera', cam.launch_file || 'rs_launch.py'];
+    Object.entries(cam.params).forEach(([k, v]) => parts.push(`${k}:=${v}`));
+    setTxt('cam-cmd', parts.join(' '));
+  }
+}
+
+// 主动拉取一次完整状态（含日志）— 切换到 status 视图或操作后调用
+async function refreshCameraStatus() {
+  try {
+    const r = await fetch('/api/camera/status');
+    if (!r.ok) return;
+    const data = await r.json();
+    applyCameraStatus(data);
+    const box = document.getElementById('cam-log-box');
+    if (box && Array.isArray(data.logs)) {
+      box.innerHTML = '';
+      for (const line of data.logs) {
+        const el = document.createElement('div');
+        el.className = 'log-line log-info';
+        el.textContent = line;
+        box.appendChild(el);
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// 切换到 status 视图时主动刷新一次完整状态
+const _origSwitchViewForCam = switchView;
+switchView = function(name) {
+  _origSwitchViewForCam(name);
+  if (name === 'status') refreshCameraStatus();
+};
+
+
+// ======================================================================
+// 设置面板：相机参数子表单（独立于 /api/config）
+// ======================================================================
+async function reloadCameraParams() {
+  try {
+    const r = await fetch('/api/camera/status');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const params = data.params || {};
+    document.querySelectorAll('[data-camera-key]').forEach(el => {
+      const key = el.dataset.cameraKey;
+      if (!(key in params)) return;
+      const v = params[key];
+      if (el.type === 'checkbox') el.checked = String(v).toLowerCase() === 'true';
+      else el.value = v;
+    });
+    showToast('相机参数已加载', 'info');
+  } catch (e) {
+    showToast('读取相机参数失败: ' + e.message, 'error');
+  }
+}
+
+async function saveCameraParams() {
+  const updates = {};
+  document.querySelectorAll('[data-camera-key]').forEach(el => {
+    const key = el.dataset.cameraKey;
+    if (el.type === 'checkbox') updates[key] = el.checked ? 'true' : 'false';
+    else if (el.value !== '') updates[key] = el.value;
+  });
+  try {
+    const r = await fetch('/api/camera/params', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    const data = await r.json();
+    if (!r.ok || data.ok === false) throw new Error(data.error || 'save failed');
+    showToast('相机参数已保存（下次启动生效）', 'info');
+  } catch (e) {
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+// 初次进入 settings 视图时也加载相机参数
+const _origReloadSettings = reloadSettings;
+reloadSettings = async function() {
+  await _origReloadSettings();
+  await reloadCameraParams();
+};
 

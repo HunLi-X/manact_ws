@@ -102,6 +102,17 @@ class MockState:
         self._manual_vx = 0.0
         self._manual_vyaw = 0.0
 
+        # 相机驱动 mock 状态
+        self._camera_running = False
+        self._camera_pid = None
+        self._camera_start_time = 0.0
+        self._camera_params = {
+            "camera_namespace": "robot1",
+            "camera_name": "D455_1",
+            "align_depth.enable": "true",
+        }
+        self._camera_logs = deque(maxlen=200)
+
         self.append_log("[Mock] 本地预览服务器启动", "info")
         self.append_log(f"[Mock] 目标类别: {self.target_class}", "info")
 
@@ -122,10 +133,59 @@ class MockState:
             "distance": self.distance,
             "det_count": self.det_count,
             "fps": self.fps,
+            "camera": self.camera_status(),
             "logs": new_logs,
             "log_idx": cur_idx,
             "mock": True,
         }
+
+    # ---- 相机驱动 mock ----
+    def camera_status(self) -> dict:
+        uptime = (time.time() - self._camera_start_time) if self._camera_running else 0.0
+        return {
+            "running": self._camera_running,
+            "pid": self._camera_pid,
+            "uptime": round(uptime, 1),
+            "launch_pkg": "realsense2_camera",
+            "launch_file": "rs_launch.py",
+            "params": dict(self._camera_params),
+        }
+
+    def camera_recent_logs(self, n: int = 50) -> list:
+        return list(self._camera_logs)[-n:]
+
+    def camera_start(self) -> dict:
+        if self._camera_running:
+            return {"ok": True, "msg": f"已在运行 (pid={self._camera_pid})", "running": True}
+        self._camera_running = True
+        self._camera_pid = 99999
+        self._camera_start_time = time.time()
+        self._camera_logs.clear()
+        cmd = "ros2 launch realsense2_camera rs_launch.py " + " ".join(
+            f"{k}:={v}" for k, v in self._camera_params.items()
+        )
+        self._camera_logs.append(f"[launch] {cmd}")
+        self._camera_logs.append("[INFO] [realsense2_camera_node]: RealSense ROS v4.55.1")
+        self._camera_logs.append("[INFO] [realsense2_camera_node]: Device with serial number 123456789 was found.")
+        self.append_log(f"[Mock][相机] 启动: {cmd}", "info")
+        return {"ok": True, "msg": f"已启动 (pid={self._camera_pid})", "running": True}
+
+    def camera_stop(self) -> dict:
+        if not self._camera_running:
+            return {"ok": True, "msg": "未在运行", "running": False}
+        self._camera_running = False
+        self._camera_pid = None
+        self._camera_start_time = 0.0
+        self.append_log("[Mock][相机] 已停止", "info")
+        return {"ok": True, "msg": "已停止", "running": False}
+
+    def camera_set_params(self, params: dict) -> dict:
+        if not isinstance(params, dict):
+            return {"ok": False, "error": "params must be dict"}
+        for k, v in params.items():
+            self._camera_params[k] = str(v)
+        self.append_log(f"[Mock][相机] 参数已更新: {params}", "info")
+        return {"ok": True, "params": dict(self._camera_params)}
 
     # ---- 配置 ----
     def get_config(self) -> dict:
@@ -430,6 +490,26 @@ def create_app() -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_wrap(mock.cmd_left_put_down)
+
+    # ---- 相机驱动 mock 路由 ----
+    @app.route("/api/camera/start", methods=["POST"])
+    def api_camera_start():
+        res = mock.camera_start()
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/camera/stop", methods=["POST"])
+    def api_camera_stop():
+        res = mock.camera_stop()
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/camera/status", methods=["GET"])
+    def api_camera_status():
+        return jsonify({**mock.camera_status(), "logs": mock.camera_recent_logs(80)})
+
+    @app.route("/api/camera/params", methods=["POST"])
+    def api_camera_params():
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(mock.camera_set_params(data))
 
     return app
 

@@ -33,10 +33,13 @@ G1 NavGrasp Web 控制面板 (Flask + MJPEG)
 import os
 import sys
 import time
+import signal
+import shutil
 import threading
+import subprocess
 from pathlib import Path
 from collections import deque
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import cv2
@@ -111,6 +114,177 @@ def _resolve_frontend_dir() -> Path:
 
 
 # ======================================================================
+# 相机驱动启动器
+# ======================================================================
+class CameraLauncher:
+    """通过 subprocess 管理 RealSense ROS2 驱动进程。
+
+    默认命令：
+        ros2 launch realsense2_camera rs_launch.py \
+            camera_namespace:=robot1 camera_name:=D455_1 align_depth.enable:=true
+
+    特性：
+        - 子进程在独立 process group（preexec_fn=os.setsid），便于完整 kill
+        - 输出实时收集到环形缓冲（最近 200 行），供 /api/state 暴露
+        - 重复 start 是幂等的（已运行则直接返回）
+        - stop 先 SIGINT，超时后 SIGKILL
+    """
+
+    DEFAULT_PARAMS = {
+        "camera_namespace": "robot1",
+        "camera_name": "D455_1",
+        "align_depth.enable": "true",
+    }
+
+    def __init__(self, log_callback=None):
+        self._proc: Optional[subprocess.Popen] = None
+        self._start_time: float = 0.0
+        self._lock = threading.Lock()
+        self._log_lines = deque(maxlen=200)
+        self._log_thread: Optional[threading.Thread] = None
+        self._launch_pkg = "realsense2_camera"
+        self._launch_file = "rs_launch.py"
+        self._params = dict(self.DEFAULT_PARAMS)
+        # 外部日志回调（注入到主面板日志流）
+        self._on_log = log_callback or (lambda msg, level="info": None)
+
+    # ---- 配置参数访问 ----
+    def get_params(self) -> dict:
+        return dict(self._params)
+
+    def set_param(self, key: str, value) -> None:
+        if not key:
+            return
+        self._params[key] = str(value)
+
+    def set_launch(self, pkg: str, launch_file: str) -> None:
+        if pkg:
+            self._launch_pkg = pkg
+        if launch_file:
+            self._launch_file = launch_file
+
+    # ---- 状态 ----
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._proc is not None and self._proc.poll() is None
+
+    def status(self) -> dict:
+        with self._lock:
+            running = self._proc is not None and self._proc.poll() is None
+            pid = self._proc.pid if (self._proc and running) else None
+            uptime = (time.time() - self._start_time) if running else 0.0
+            return {
+                "running": running,
+                "pid": pid,
+                "uptime": round(uptime, 1),
+                "launch_pkg": self._launch_pkg,
+                "launch_file": self._launch_file,
+                "params": dict(self._params),
+            }
+
+    def recent_logs(self, n: int = 50) -> List[str]:
+        with self._lock:
+            return list(self._log_lines)[-n:]
+
+    # ---- 启动 / 停止 ----
+    def build_command(self) -> List[str]:
+        cmd = ["ros2", "launch", self._launch_pkg, self._launch_file]
+        for k, v in self._params.items():
+            cmd.append(f"{k}:={v}")
+        return cmd
+
+    def start(self) -> dict:
+        with self._lock:
+            if self._proc is not None and self._proc.poll() is None:
+                return {"ok": True, "msg": f"已在运行 (pid={self._proc.pid})", "running": True}
+
+            if shutil.which("ros2") is None:
+                msg = "找不到 ros2 命令，请确认已 source ROS2 setup.bash"
+                self._on_log(f"[相机] {msg}", "error")
+                return {"ok": False, "error": msg}
+
+            cmd = self.build_command()
+            self._on_log(f"[相机] 启动: {' '.join(cmd)}", "info")
+            try:
+                # preexec_fn=os.setsid 让子进程在独立 process group，便于完整 kill 整个 launch 树
+                preexec = os.setsid if hasattr(os, "setsid") else None
+                self._proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                    universal_newlines=True,
+                    preexec_fn=preexec,
+                )
+                self._start_time = time.time()
+                self._log_lines.clear()
+            except Exception as e:
+                self._proc = None
+                self._on_log(f"[相机] 启动失败: {e}", "error")
+                return {"ok": False, "error": str(e)}
+
+            # 启动后台日志收集线程
+            self._log_thread = threading.Thread(
+                target=self._read_output, args=(self._proc,), daemon=True,
+            )
+            self._log_thread.start()
+            return {"ok": True, "msg": f"已启动 (pid={self._proc.pid})", "running": True}
+
+    def stop(self, timeout: float = 5.0) -> dict:
+        with self._lock:
+            if self._proc is None or self._proc.poll() is not None:
+                self._proc = None
+                return {"ok": True, "msg": "未在运行", "running": False}
+            proc = self._proc
+
+        self._on_log(f"[相机] 正在停止 (pid={proc.pid}) ...", "info")
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            else:
+                proc.terminate()
+        except (ProcessLookupError, OSError) as e:
+            self._on_log(f"[相机] 终止信号失败: {e}", "warn")
+
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self._on_log("[相机] SIGINT 超时，发送 SIGKILL", "warn")
+            try:
+                if hasattr(os, "killpg"):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                else:
+                    proc.kill()
+                proc.wait(timeout=2.0)
+            except Exception as e:
+                self._on_log(f"[相机] 强制终止失败: {e}", "error")
+
+        with self._lock:
+            self._proc = None
+        self._on_log("[相机] 已停止", "info")
+        return {"ok": True, "msg": "已停止", "running": False}
+
+    def _read_output(self, proc: subprocess.Popen) -> None:
+        """后台线程：读取子进程输出到环形缓冲。"""
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                line = line.rstrip()
+                with self._lock:
+                    self._log_lines.append(line)
+        except Exception:
+            pass
+        finally:
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
+
+
+
+
+# ======================================================================
 # ROS2 节点 + Flask 后端
 # ======================================================================
 class WebPanelNode(Node, GraspStateMachineMixin):
@@ -174,6 +348,24 @@ class WebPanelNode(Node, GraspStateMachineMixin):
 
         # 状态机 tick 定时器（10Hz）
         self._tick_timer = self.create_timer(0.1, self._tick)
+
+        # 相机驱动启动器（subprocess 管理 ros2 launch realsense2_camera）
+        self.declare_parameter("camera_launch_pkg", "realsense2_camera")
+        self.declare_parameter("camera_launch_file", "rs_launch.py")
+        self.declare_parameter("camera_namespace", "robot1")
+        self.declare_parameter("camera_name", "D455_1")
+        self.declare_parameter("camera_align_depth", True)
+        self._camera = CameraLauncher(log_callback=self._append_log)
+        self._camera.set_launch(
+            self.get_parameter("camera_launch_pkg").value,
+            self.get_parameter("camera_launch_file").value,
+        )
+        self._camera.set_param("camera_namespace", self.get_parameter("camera_namespace").value)
+        self._camera.set_param("camera_name", self.get_parameter("camera_name").value)
+        self._camera.set_param(
+            "align_depth.enable",
+            "true" if bool(self.get_parameter("camera_align_depth").value) else "false",
+        )
 
         self._log_info(f"Web 面板启动: http://{self._http_host}:{self._http_port}")
         self._log_info(f"目标类别: {self._gs_target_class}")
@@ -368,6 +560,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             "distance": float(self._gs_target_distance) if self._gs_target_distance is not None else None,
             "det_count": self._det_count,
             "fps": float(self._fps),
+            "camera": self._camera.status(),
             "logs": new_logs,
             "log_idx": cur_idx,
         }
@@ -423,6 +616,22 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             raise RuntimeError("请先停止当前任务")
         threading.Thread(target=self._gs_do_left_put_down, daemon=True).start()
 
+    # ---- 相机驱动控制 ----
+    def cmd_camera_start(self) -> dict:
+        return self._camera.start()
+
+    def cmd_camera_stop(self) -> dict:
+        return self._camera.stop()
+
+    def cmd_camera_set(self, params: dict) -> dict:
+        """更新相机参数（仅在下次启动生效）。"""
+        if not isinstance(params, dict):
+            return {"ok": False, "error": "params must be dict"}
+        for k, v in params.items():
+            self._camera.set_param(k, v)
+        self._log_info(f"[相机] 参数已更新: {params}")
+        return {"ok": True, "params": self._camera.get_params()}
+
     # --- 生成 MJPEG 流（用于 Flask Response）---
     def mjpeg_generator(self, mode: str):
         """mode: 'raw' | 'annotated'"""
@@ -440,6 +649,11 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             time.sleep(self._stream_interval)
 
     def destroy_node(self) -> None:
+        try:
+            if self._camera.is_running():
+                self._camera.stop(timeout=3.0)
+        except Exception:
+            pass
         self._gs_destroy()
         super().destroy_node()
 
@@ -534,6 +748,37 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_route(node.cmd_left_put_down)
+
+    # ---- 相机驱动 ----
+    @app.route("/api/camera/start", methods=["POST"])
+    def api_camera_start():
+        try:
+            res = node.cmd_camera_start()
+            code = 200 if res.get("ok") else 400
+            return jsonify(res), code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    @app.route("/api/camera/stop", methods=["POST"])
+    def api_camera_stop():
+        try:
+            res = node.cmd_camera_stop()
+            code = 200 if res.get("ok") else 400
+            return jsonify(res), code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    @app.route("/api/camera/status", methods=["GET"])
+    def api_camera_status():
+        return jsonify({
+            **node._camera.status(),
+            "logs": node._camera.recent_logs(80),
+        })
+
+    @app.route("/api/camera/params", methods=["POST"])
+    def api_camera_params():
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(node.cmd_camera_set(data))
 
     return app
 
