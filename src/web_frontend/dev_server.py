@@ -102,7 +102,7 @@ class MockState:
         self._manual_vx = 0.0
         self._manual_vyaw = 0.0
 
-        # 相机驱动 mock 状态
+        # 相机驱动 mock 状态（保留兼容旧路由）
         self._camera_running = False
         self._camera_pid = None
         self._camera_start_time = 0.0
@@ -112,6 +112,39 @@ class MockState:
             "align_depth.enable": "true",
         }
         self._camera_logs = deque(maxlen=200)
+
+        # 通用进程注册表（camera / yolo / rgbd）
+        self._processes = {
+            "camera": {
+                "name": "相机", "mode": "launch",
+                "pkg": "realsense2_camera", "target": "rs_launch.py",
+                "running": False, "pid": None, "start_time": 0.0,
+                "params": dict(self._camera_params),
+                "logs": deque(maxlen=200),
+            },
+            "yolo": {
+                "name": "YOLO", "mode": "run",
+                "pkg": "g1_yolo_nav_py", "target": "yolo_detector",
+                "running": False, "pid": None, "start_time": 0.0,
+                "params": {
+                    "image_topic": "/D455_1/color/image_raw",
+                    "conf_threshold": "0.5",
+                },
+                "logs": deque(maxlen=200),
+            },
+            "rgbd": {
+                "name": "RGBD", "mode": "run",
+                "pkg": "g1_yolo_nav_py", "target": "rgbd_capture",
+                "running": False, "pid": None, "start_time": 0.0,
+                "params": {
+                    "color_topic": "/D455_1/color/image_raw",
+                    "depth_topic": "/D455_1/depth/image_rect_raw",
+                    "interval_sec": "5.0",
+                    "duration_sec": "60.0",
+                },
+                "logs": deque(maxlen=200),
+            },
+        }
 
         self.append_log("[Mock] 本地预览服务器启动", "info")
         self.append_log(f"[Mock] 目标类别: {self.target_class}", "info")
@@ -133,59 +166,99 @@ class MockState:
             "distance": self.distance,
             "det_count": self.det_count,
             "fps": self.fps,
-            "camera": self.camera_status(),
+            "camera": self.process_status("camera"),
+            "yolo":   self.process_status("yolo"),
+            "rgbd":   self.process_status("rgbd"),
             "logs": new_logs,
             "log_idx": cur_idx,
             "mock": True,
         }
 
-    # ---- 相机驱动 mock ----
-    def camera_status(self) -> dict:
-        uptime = (time.time() - self._camera_start_time) if self._camera_running else 0.0
+    # ---- 通用进程 mock ----
+    def process_status(self, name: str) -> dict:
+        p = self._processes.get(name)
+        if p is None:
+            return {"running": False, "pid": None, "uptime": 0.0, "params": {}}
+        uptime = (time.time() - p["start_time"]) if p["running"] else 0.0
         return {
-            "running": self._camera_running,
-            "pid": self._camera_pid,
+            "name": p["name"],
+            "mode": p["mode"],
+            "pkg": p["pkg"],
+            "target": p["target"],
+            "running": p["running"],
+            "pid": p["pid"],
             "uptime": round(uptime, 1),
-            "launch_pkg": "realsense2_camera",
-            "launch_file": "rs_launch.py",
-            "params": dict(self._camera_params),
+            "params": dict(p["params"]),
         }
 
-    def camera_recent_logs(self, n: int = 50) -> list:
-        return list(self._camera_logs)[-n:]
+    def process_recent_logs(self, name: str, n: int = 50) -> list:
+        p = self._processes.get(name)
+        if p is None:
+            return []
+        return list(p["logs"])[-n:]
 
-    def camera_start(self) -> dict:
-        if self._camera_running:
-            return {"ok": True, "msg": f"已在运行 (pid={self._camera_pid})", "running": True}
-        self._camera_running = True
-        self._camera_pid = 99999
-        self._camera_start_time = time.time()
-        self._camera_logs.clear()
-        cmd = "ros2 launch realsense2_camera rs_launch.py " + " ".join(
-            f"{k}:={v}" for k, v in self._camera_params.items()
-        )
-        self._camera_logs.append(f"[launch] {cmd}")
-        self._camera_logs.append("[INFO] [realsense2_camera_node]: RealSense ROS v4.55.1")
-        self._camera_logs.append("[INFO] [realsense2_camera_node]: Device with serial number 123456789 was found.")
-        self.append_log(f"[Mock][相机] 启动: {cmd}", "info")
-        return {"ok": True, "msg": f"已启动 (pid={self._camera_pid})", "running": True}
+    def process_start(self, name: str) -> dict:
+        p = self._processes.get(name)
+        if p is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
+        if p["running"]:
+            return {"ok": True, "msg": f"已在运行 (pid={p['pid']})", "running": True}
+        p["running"] = True
+        p["pid"] = 90000 + hash(name) % 9000
+        p["start_time"] = time.time()
+        p["logs"].clear()
+        if p["mode"] == "launch":
+            cmd = f"ros2 launch {p['pkg']} {p['target']} " + " ".join(f"{k}:={v}" for k, v in p["params"].items())
+        else:
+            cmd = f"ros2 run {p['pkg']} {p['target']}"
+            if p["params"]:
+                cmd += " --ros-args " + " ".join(f"-p {k}:={v}" for k, v in p["params"].items())
+        p["logs"].append(f"[launch] {cmd}")
+        p["logs"].append(f"[INFO] [{p['target']}]: 节点已启动 (mock)")
+        self.append_log(f"[Mock][{p['name']}] 启动: {cmd}", "info")
+        return {"ok": True, "msg": f"已启动 (pid={p['pid']})", "running": True}
 
-    def camera_stop(self) -> dict:
-        if not self._camera_running:
+    def process_stop(self, name: str) -> dict:
+        p = self._processes.get(name)
+        if p is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
+        if not p["running"]:
             return {"ok": True, "msg": "未在运行", "running": False}
-        self._camera_running = False
-        self._camera_pid = None
-        self._camera_start_time = 0.0
-        self.append_log("[Mock][相机] 已停止", "info")
+        p["running"] = False
+        p["pid"] = None
+        p["start_time"] = 0.0
+        self.append_log(f"[Mock][{p['name']}] 已停止", "info")
         return {"ok": True, "msg": "已停止", "running": False}
 
-    def camera_set_params(self, params: dict) -> dict:
+    def process_set_params(self, name: str, params: dict) -> dict:
+        p = self._processes.get(name)
+        if p is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
         if not isinstance(params, dict):
             return {"ok": False, "error": "params must be dict"}
         for k, v in params.items():
-            self._camera_params[k] = str(v)
-        self.append_log(f"[Mock][相机] 参数已更新: {params}", "info")
-        return {"ok": True, "params": dict(self._camera_params)}
+            p["params"][k] = str(v)
+        # 同步相机参数到旧字段（向后兼容）
+        if name == "camera":
+            self._camera_params = dict(p["params"])
+        self.append_log(f"[Mock][{p['name']}] 参数已更新: {params}", "info")
+        return {"ok": True, "params": dict(p["params"])}
+
+    # ---- 相机驱动 mock（兼容旧路由）----
+    def camera_status(self) -> dict:
+        return self.process_status("camera")
+
+    def camera_recent_logs(self, n: int = 50) -> list:
+        return self.process_recent_logs("camera", n)
+
+    def camera_start(self) -> dict:
+        return self.process_start("camera")
+
+    def camera_stop(self) -> dict:
+        return self.process_stop("camera")
+
+    def camera_set_params(self, params: dict) -> dict:
+        return self.process_set_params("camera", params)
 
     # ---- 配置 ----
     def get_config(self) -> dict:
@@ -510,6 +583,28 @@ def create_app() -> Flask:
     def api_camera_params():
         data = request.get_json(force=True, silent=True) or {}
         return jsonify(mock.camera_set_params(data))
+
+    # ---- 通用进程路由（camera / yolo / rgbd）----
+    @app.route("/api/process/<name>/start", methods=["POST"])
+    def api_proc_start(name):
+        res = mock.process_start(name)
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/process/<name>/stop", methods=["POST"])
+    def api_proc_stop(name):
+        res = mock.process_stop(name)
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/process/<name>/status", methods=["GET"])
+    def api_proc_status(name):
+        if name not in mock._processes:
+            return jsonify({"ok": False, "error": f"unknown process: {name}"}), 404
+        return jsonify({**mock.process_status(name), "logs": mock.process_recent_logs(name, 80)})
+
+    @app.route("/api/process/<name>/params", methods=["POST"])
+    def api_proc_params(name):
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(mock.process_set_params(name, data))
 
     return app
 

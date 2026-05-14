@@ -376,8 +376,10 @@ async function pollState() {
     // 健康度环
     updateHealthRing(computeHealth(s));
 
-    // ----- 相机驱动状态（轻量字段，不带日志）-----
-    if (s.camera) applyCameraStatus(s.camera);
+    // ----- 相机/YOLO/RGBD 进程状态（轻量字段，不带日志）-----
+    if (s.camera) applyProcStatus('camera', s.camera);
+    if (s.yolo)   applyProcStatus('yolo', s.yolo);
+    if (s.rgbd)   applyProcStatus('rgbd', s.rgbd);
 
     // ----- 日志追加 -----
     if (s.logs && s.logs.length > 0) {
@@ -577,67 +579,63 @@ if (!location.hash) {
 
 
 // ======================================================================
-// 相机驱动启动器
+// 通用进程启动器（相机 / YOLO / RGBD）
 // ======================================================================
-async function cameraStart() {
-  const btn = document.getElementById('cam-start-btn');
-  if (btn) btn.disabled = true;
+const PROC_NAMES = ['camera', 'yolo', 'rgbd'];
+const PROC_LABELS = { camera: '相机', yolo: 'YOLO', rgbd: 'RGBD' };
+
+function _procEl(procName, bindKey) {
+  return document.querySelector(`.process-card[data-proc="${procName}"] [data-bind="${bindKey}"]`);
+}
+
+async function procStart(name) {
+  const startBtn = _procEl(name, 'start-btn');
+  if (startBtn) startBtn.disabled = true;
   try {
-    const r = await fetch('/api/camera/start', { method: 'POST' });
+    const r = await fetch(`/api/process/${name}/start`, { method: 'POST' });
     const data = await r.json();
     if (!r.ok || data.ok === false) {
-      appendLog('[相机] 启动失败: ' + (data.error || 'unknown'), 'error');
+      appendLog(`[${PROC_LABELS[name] || name}] 启动失败: ` + (data.error || 'unknown'), 'error');
     } else {
-      appendLog('[相机] ' + (data.msg || '已启动'), 'info');
+      appendLog(`[${PROC_LABELS[name] || name}] ` + (data.msg || '已启动'), 'info');
     }
   } catch (e) {
-    appendLog('[相机] 网络错误: ' + e.message, 'error');
+    appendLog(`[${PROC_LABELS[name] || name}] 网络错误: ` + e.message, 'error');
   } finally {
-    if (btn) btn.disabled = false;
-    refreshCameraStatus();
+    if (startBtn) startBtn.disabled = false;
+    refreshProcStatus(name);
   }
 }
 
-async function cameraStop() {
-  const btn = document.getElementById('cam-stop-btn');
-  if (btn) btn.disabled = true;
+async function procStop(name) {
+  const stopBtn = _procEl(name, 'stop-btn');
+  if (stopBtn) stopBtn.disabled = true;
   try {
-    const r = await fetch('/api/camera/stop', { method: 'POST' });
+    const r = await fetch(`/api/process/${name}/stop`, { method: 'POST' });
     const data = await r.json();
     if (!r.ok || data.ok === false) {
-      appendLog('[相机] 停止失败: ' + (data.error || 'unknown'), 'error');
+      appendLog(`[${PROC_LABELS[name] || name}] 停止失败: ` + (data.error || 'unknown'), 'error');
     } else {
-      appendLog('[相机] ' + (data.msg || '已停止'), 'info');
+      appendLog(`[${PROC_LABELS[name] || name}] ` + (data.msg || '已停止'), 'info');
     }
   } catch (e) {
-    appendLog('[相机] 网络错误: ' + e.message, 'error');
+    appendLog(`[${PROC_LABELS[name] || name}] 网络错误: ` + e.message, 'error');
   } finally {
-    if (btn) btn.disabled = false;
-    refreshCameraStatus();
+    if (stopBtn) stopBtn.disabled = false;
+    refreshProcStatus(name);
   }
 }
 
-function fmtUptime(sec) {
-  if (sec == null || sec <= 0) return '—';
-  const s = Math.floor(sec);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = s % 60;
-  if (h > 0) return `${h}h ${m}m ${ss}s`;
-  if (m > 0) return `${m}m ${ss}s`;
-  return `${ss}s`;
-}
+// 由轮询数据驱动单个进程卡片状态
+function applyProcStatus(name, data) {
+  if (!data) return;
+  const card = document.querySelector(`.process-card[data-proc="${name}"]`);
+  if (!card) return;
 
-// 由轮询数据驱动相机卡片状态（轻量字段，不带日志）
-function applyCameraStatus(cam) {
-  if (!cam) return;
-  const pill = document.getElementById('cam-state-pill');
-  const label = document.getElementById('cam-state-label');
-  const startBtn = document.getElementById('cam-start-btn');
-  const stopBtn = document.getElementById('cam-stop-btn');
-
+  const pill = card.querySelector('[data-bind="state-pill"]');
+  const label = card.querySelector('[data-bind="state-label"]');
   if (pill && label) {
-    if (cam.running) {
+    if (data.running) {
       pill.classList.remove('cam-pill-off');
       pill.classList.add('cam-pill-on');
       label.textContent = '运行中';
@@ -647,30 +645,53 @@ function applyCameraStatus(cam) {
       label.textContent = '未启动';
     }
   }
-  if (startBtn) startBtn.disabled = !!cam.running;
-  if (stopBtn) stopBtn.disabled = !cam.running;
 
-  setTxt('cam-pid', cam.pid != null ? String(cam.pid) : '—');
-  setTxt('cam-uptime', fmtUptime(cam.uptime));
-  if (cam.params) {
-    setTxt('cam-ns', cam.params['camera_namespace'] || '—');
-    setTxt('cam-name', cam.params['camera_name'] || '—');
-    setTxt('cam-align', cam.params['align_depth.enable'] || '—');
-    // 重新拼命令行预览
-    const parts = ['ros2 launch', cam.launch_pkg || 'realsense2_camera', cam.launch_file || 'rs_launch.py'];
-    Object.entries(cam.params).forEach(([k, v]) => parts.push(`${k}:=${v}`));
-    setTxt('cam-cmd', parts.join(' '));
+  const startBtn = card.querySelector('[data-bind="start-btn"]');
+  const stopBtn = card.querySelector('[data-bind="stop-btn"]');
+  if (startBtn) startBtn.disabled = !!data.running;
+  if (stopBtn)  stopBtn.disabled  = !data.running;
+
+  const pidEl = card.querySelector('[data-bind="pid"]');
+  if (pidEl) pidEl.textContent = data.pid != null ? String(data.pid) : '—';
+  const upEl = card.querySelector('[data-bind="uptime"]');
+  if (upEl) upEl.textContent = fmtUptime(data.uptime);
+
+  // 命令行预览
+  const cmdEl = card.querySelector('[data-bind="cmd"]');
+  if (cmdEl && data.params) {
+    const parts = data.mode === 'launch'
+      ? ['ros2 launch', data.pkg || '?', data.target || '?']
+      : ['ros2 run',    data.pkg || '?', data.target || '?'];
+    if (data.mode === 'launch') {
+      Object.entries(data.params).forEach(([k, v]) => parts.push(`${k}:=${v}`));
+    } else {
+      const entries = Object.entries(data.params);
+      if (entries.length > 0) {
+        parts.push('--ros-args');
+        entries.forEach(([k, v]) => parts.push(`-p ${k}:=${v}`));
+      }
+    }
+    cmdEl.textContent = parts.join(' ');
+  }
+
+  // 参数动态绑定（data-bind="param.xxx"）
+  if (data.params) {
+    card.querySelectorAll('[data-bind^="param."]').forEach(el => {
+      const key = el.dataset.bind.slice(6);  // 去掉 "param." 前缀
+      if (key in data.params) el.textContent = data.params[key];
+    });
   }
 }
 
-// 主动拉取一次完整状态（含日志）— 切换到 status 视图或操作后调用
-async function refreshCameraStatus() {
+// 拉取单个进程完整状态（含日志）
+async function refreshProcStatus(name) {
   try {
-    const r = await fetch('/api/camera/status');
+    const r = await fetch(`/api/process/${name}/status`);
     if (!r.ok) return;
     const data = await r.json();
-    applyCameraStatus(data);
-    const box = document.getElementById('cam-log-box');
+    applyProcStatus(name, data);
+    const card = document.querySelector(`.process-card[data-proc="${name}"]`);
+    const box = card && card.querySelector('[data-bind="log-box"]');
     if (box && Array.isArray(data.logs)) {
       box.innerHTML = '';
       for (const line of data.logs) {
@@ -684,12 +705,35 @@ async function refreshCameraStatus() {
   } catch (e) { /* ignore */ }
 }
 
-// 切换到 status 视图时主动刷新一次完整状态
+// 切到 status 视图时刷新所有进程
 const _origSwitchViewForCam = switchView;
 switchView = function(name) {
   _origSwitchViewForCam(name);
-  if (name === 'status') refreshCameraStatus();
+  if (name === 'status') {
+    PROC_NAMES.forEach(refreshProcStatus);
+  }
 };
+
+
+// ======================================================================
+// 兼容旧 cameraStart/cameraStop（如果模板还在用）
+// ======================================================================
+async function cameraStart() { return procStart('camera'); }
+async function cameraStop()  { return procStop('camera'); }
+async function refreshCameraStatus() { return refreshProcStatus('camera'); }
+function applyCameraStatus(cam) { applyProcStatus('camera', cam); }
+
+
+function fmtUptime(sec) {
+  if (sec == null || sec <= 0) return '—';
+  const s = Math.floor(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (h > 0) return `${h}h ${m}m ${ss}s`;
+  if (m > 0) return `${m}m ${ss}s`;
+  return `${ss}s`;
+}
 
 
 // ======================================================================

@@ -114,41 +114,46 @@ def _resolve_frontend_dir() -> Path:
 
 
 # ======================================================================
-# 相机驱动启动器
+# 通用进程启动器（相机 / YOLO / RGBD 复用同一套逻辑）
 # ======================================================================
-class CameraLauncher:
-    """通过 subprocess 管理 RealSense ROS2 驱动进程。
+class ProcessLauncher:
+    """通过 subprocess 管理 ROS2 节点 / launch 进程。
 
-    默认命令：
-        ros2 launch realsense2_camera rs_launch.py \
-            camera_namespace:=robot1 camera_name:=D455_1 align_depth.enable:=true
+    支持两种命令模式：
+        - mode='launch': ros2 launch <pkg> <launch_file> k1:=v1 k2:=v2 ...
+        - mode='run':    ros2 run    <pkg> <executable> --ros-args -p k1:=v1 -p k2:=v2 ...
 
     特性：
         - 子进程在独立 process group（preexec_fn=os.setsid），便于完整 kill
-        - 输出实时收集到环形缓冲（最近 200 行），供 /api/state 暴露
+        - 输出实时收集到环形缓冲（最近 200 行），供 status API 暴露
         - 重复 start 是幂等的（已运行则直接返回）
         - stop 先 SIGINT，超时后 SIGKILL
     """
 
-    DEFAULT_PARAMS = {
-        "camera_namespace": "robot1",
-        "camera_name": "D455_1",
-        "align_depth.enable": "true",
-    }
+    def __init__(
+        self,
+        name: str,                       # 显示名称，例如 "相机" / "YOLO" / "RGBD"
+        mode: str = "launch",            # 'launch' or 'run'
+        pkg: str = "",
+        target: str = "",                # launch 文件名 或 可执行节点名
+        params: Optional[dict] = None,
+        log_callback=None,
+    ):
+        assert mode in ("launch", "run"), "mode must be 'launch' or 'run'"
+        self._name = name
+        self._mode = mode
+        self._pkg = pkg
+        self._target = target
+        self._params: dict = dict(params or {})
 
-    def __init__(self, log_callback=None):
         self._proc: Optional[subprocess.Popen] = None
         self._start_time: float = 0.0
         self._lock = threading.Lock()
         self._log_lines = deque(maxlen=200)
         self._log_thread: Optional[threading.Thread] = None
-        self._launch_pkg = "realsense2_camera"
-        self._launch_file = "rs_launch.py"
-        self._params = dict(self.DEFAULT_PARAMS)
-        # 外部日志回调（注入到主面板日志流）
         self._on_log = log_callback or (lambda msg, level="info": None)
 
-    # ---- 配置参数访问 ----
+    # ---- 配置 ----
     def get_params(self) -> dict:
         return dict(self._params)
 
@@ -157,11 +162,15 @@ class CameraLauncher:
             return
         self._params[key] = str(value)
 
-    def set_launch(self, pkg: str, launch_file: str) -> None:
+    def set_params(self, params: dict) -> None:
+        for k, v in (params or {}).items():
+            self.set_param(k, v)
+
+    def set_target(self, pkg: str = "", target: str = "") -> None:
         if pkg:
-            self._launch_pkg = pkg
-        if launch_file:
-            self._launch_file = launch_file
+            self._pkg = pkg
+        if target:
+            self._target = target
 
     # ---- 状态 ----
     def is_running(self) -> bool:
@@ -174,11 +183,13 @@ class CameraLauncher:
             pid = self._proc.pid if (self._proc and running) else None
             uptime = (time.time() - self._start_time) if running else 0.0
             return {
+                "name": self._name,
+                "mode": self._mode,
+                "pkg": self._pkg,
+                "target": self._target,
                 "running": running,
                 "pid": pid,
                 "uptime": round(uptime, 1),
-                "launch_pkg": self._launch_pkg,
-                "launch_file": self._launch_file,
                 "params": dict(self._params),
             }
 
@@ -186,13 +197,21 @@ class CameraLauncher:
         with self._lock:
             return list(self._log_lines)[-n:]
 
-    # ---- 启动 / 停止 ----
+    # ---- 命令构建 ----
     def build_command(self) -> List[str]:
-        cmd = ["ros2", "launch", self._launch_pkg, self._launch_file]
-        for k, v in self._params.items():
-            cmd.append(f"{k}:={v}")
+        if self._mode == "launch":
+            cmd = ["ros2", "launch", self._pkg, self._target]
+            for k, v in self._params.items():
+                cmd.append(f"{k}:={v}")
+        else:  # run
+            cmd = ["ros2", "run", self._pkg, self._target]
+            if self._params:
+                cmd.append("--ros-args")
+                for k, v in self._params.items():
+                    cmd.extend(["-p", f"{k}:={v}"])
         return cmd
 
+    # ---- 启动 / 停止 ----
     def start(self) -> dict:
         with self._lock:
             if self._proc is not None and self._proc.poll() is None:
@@ -200,13 +219,12 @@ class CameraLauncher:
 
             if shutil.which("ros2") is None:
                 msg = "找不到 ros2 命令，请确认已 source ROS2 setup.bash"
-                self._on_log(f"[相机] {msg}", "error")
+                self._on_log(f"[{self._name}] {msg}", "error")
                 return {"ok": False, "error": msg}
 
             cmd = self.build_command()
-            self._on_log(f"[相机] 启动: {' '.join(cmd)}", "info")
+            self._on_log(f"[{self._name}] 启动: {' '.join(cmd)}", "info")
             try:
-                # preexec_fn=os.setsid 让子进程在独立 process group，便于完整 kill 整个 launch 树
                 preexec = os.setsid if hasattr(os, "setsid") else None
                 self._proc = subprocess.Popen(
                     cmd,
@@ -220,10 +238,9 @@ class CameraLauncher:
                 self._log_lines.clear()
             except Exception as e:
                 self._proc = None
-                self._on_log(f"[相机] 启动失败: {e}", "error")
+                self._on_log(f"[{self._name}] 启动失败: {e}", "error")
                 return {"ok": False, "error": str(e)}
 
-            # 启动后台日志收集线程
             self._log_thread = threading.Thread(
                 target=self._read_output, args=(self._proc,), daemon=True,
             )
@@ -237,19 +254,19 @@ class CameraLauncher:
                 return {"ok": True, "msg": "未在运行", "running": False}
             proc = self._proc
 
-        self._on_log(f"[相机] 正在停止 (pid={proc.pid}) ...", "info")
+        self._on_log(f"[{self._name}] 正在停止 (pid={proc.pid}) ...", "info")
         try:
             if hasattr(os, "killpg"):
                 os.killpg(os.getpgid(proc.pid), signal.SIGINT)
             else:
                 proc.terminate()
         except (ProcessLookupError, OSError) as e:
-            self._on_log(f"[相机] 终止信号失败: {e}", "warn")
+            self._on_log(f"[{self._name}] 终止信号失败: {e}", "warn")
 
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            self._on_log("[相机] SIGINT 超时，发送 SIGKILL", "warn")
+            self._on_log(f"[{self._name}] SIGINT 超时，发送 SIGKILL", "warn")
             try:
                 if hasattr(os, "killpg"):
                     os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
@@ -257,15 +274,14 @@ class CameraLauncher:
                     proc.kill()
                 proc.wait(timeout=2.0)
             except Exception as e:
-                self._on_log(f"[相机] 强制终止失败: {e}", "error")
+                self._on_log(f"[{self._name}] 强制终止失败: {e}", "error")
 
         with self._lock:
             self._proc = None
-        self._on_log("[相机] 已停止", "info")
+        self._on_log(f"[{self._name}] 已停止", "info")
         return {"ok": True, "msg": "已停止", "running": False}
 
     def _read_output(self, proc: subprocess.Popen) -> None:
-        """后台线程：读取子进程输出到环形缓冲。"""
         try:
             for line in iter(proc.stdout.readline, ""):
                 if not line:
@@ -280,6 +296,10 @@ class CameraLauncher:
                 proc.stdout.close()
             except Exception:
                 pass
+
+
+# 兼容性别名（旧代码引用 CameraLauncher 仍可用）
+CameraLauncher = ProcessLauncher
 
 
 
@@ -349,23 +369,75 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         # 状态机 tick 定时器（10Hz）
         self._tick_timer = self.create_timer(0.1, self._tick)
 
-        # 相机驱动启动器（subprocess 管理 ros2 launch realsense2_camera）
+        # ----- 子进程启动器（相机 / YOLO / RGBD 共用 ProcessLauncher）-----
+        # 相机驱动（ros2 launch realsense2_camera rs_launch.py）
         self.declare_parameter("camera_launch_pkg", "realsense2_camera")
         self.declare_parameter("camera_launch_file", "rs_launch.py")
         self.declare_parameter("camera_namespace", "robot1")
         self.declare_parameter("camera_name", "D455_1")
         self.declare_parameter("camera_align_depth", True)
-        self._camera = CameraLauncher(log_callback=self._append_log)
-        self._camera.set_launch(
-            self.get_parameter("camera_launch_pkg").value,
-            self.get_parameter("camera_launch_file").value,
+        self._camera = ProcessLauncher(
+            name="相机",
+            mode="launch",
+            pkg=self.get_parameter("camera_launch_pkg").value,
+            target=self.get_parameter("camera_launch_file").value,
+            params={
+                "camera_namespace": self.get_parameter("camera_namespace").value,
+                "camera_name": self.get_parameter("camera_name").value,
+                "align_depth.enable": "true" if bool(self.get_parameter("camera_align_depth").value) else "false",
+            },
+            log_callback=self._append_log,
         )
-        self._camera.set_param("camera_namespace", self.get_parameter("camera_namespace").value)
-        self._camera.set_param("camera_name", self.get_parameter("camera_name").value)
-        self._camera.set_param(
-            "align_depth.enable",
-            "true" if bool(self.get_parameter("camera_align_depth").value) else "false",
+
+        # YOLO 检测器（ros2 run g1_yolo_nav_py yolo_detector）
+        self.declare_parameter("yolo_pkg", "g1_yolo_nav_py")
+        self.declare_parameter("yolo_executable", "yolo_detector")
+        self.declare_parameter("yolo_image_topic", "/D455_1/color/image_raw")
+        self.declare_parameter("yolo_conf_threshold", 0.5)
+        self._yolo = ProcessLauncher(
+            name="YOLO",
+            mode="run",
+            pkg=self.get_parameter("yolo_pkg").value,
+            target=self.get_parameter("yolo_executable").value,
+            params={
+                "image_topic": self.get_parameter("yolo_image_topic").value,
+                "conf_threshold": str(float(self.get_parameter("yolo_conf_threshold").value)),
+            },
+            log_callback=self._append_log,
         )
+
+        # RGBD 数据采集（ros2 run g1_yolo_nav_py rgbd_capture）
+        self.declare_parameter("rgbd_pkg", "g1_yolo_nav_py")
+        self.declare_parameter("rgbd_executable", "rgbd_capture")
+        self.declare_parameter("rgbd_color_topic", "/D455_1/color/image_raw")
+        self.declare_parameter("rgbd_depth_topic", "/D455_1/depth/image_rect_raw")
+        self.declare_parameter("rgbd_interval_sec", 5.0)
+        self.declare_parameter("rgbd_duration_sec", 60.0)
+        self.declare_parameter("rgbd_output_dir", "")
+        self._rgbd = ProcessLauncher(
+            name="RGBD",
+            mode="run",
+            pkg=self.get_parameter("rgbd_pkg").value,
+            target=self.get_parameter("rgbd_executable").value,
+            params={
+                "color_topic": self.get_parameter("rgbd_color_topic").value,
+                "depth_topic": self.get_parameter("rgbd_depth_topic").value,
+                "interval_sec": str(float(self.get_parameter("rgbd_interval_sec").value)),
+                "duration_sec": str(float(self.get_parameter("rgbd_duration_sec").value)),
+            },
+            log_callback=self._append_log,
+        )
+        # 可选 output_dir：仅在用户显式配置时传递
+        out_dir = self.get_parameter("rgbd_output_dir").value
+        if out_dir:
+            self._rgbd.set_param("output_dir", out_dir)
+
+        # 进程注册表（按 name 路由）
+        self._processes = {
+            "camera": self._camera,
+            "yolo":   self._yolo,
+            "rgbd":   self._rgbd,
+        }
 
         self._log_info(f"Web 面板启动: http://{self._http_host}:{self._http_port}")
         self._log_info(f"目标类别: {self._gs_target_class}")
@@ -561,6 +633,8 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             "det_count": self._det_count,
             "fps": float(self._fps),
             "camera": self._camera.status(),
+            "yolo":   self._yolo.status(),
+            "rgbd":   self._rgbd.status(),
             "logs": new_logs,
             "log_idx": cur_idx,
         }
@@ -632,6 +706,32 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._log_info(f"[相机] 参数已更新: {params}")
         return {"ok": True, "params": self._camera.get_params()}
 
+    # ---- 通用进程控制（按 name 路由：camera / yolo / rgbd）----
+    def get_process(self, name: str) -> Optional[ProcessLauncher]:
+        return self._processes.get(name)
+
+    def cmd_process_start(self, name: str) -> dict:
+        proc = self.get_process(name)
+        if proc is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
+        return proc.start()
+
+    def cmd_process_stop(self, name: str) -> dict:
+        proc = self.get_process(name)
+        if proc is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
+        return proc.stop()
+
+    def cmd_process_set(self, name: str, params: dict) -> dict:
+        proc = self.get_process(name)
+        if proc is None:
+            return {"ok": False, "error": f"unknown process: {name}"}
+        if not isinstance(params, dict):
+            return {"ok": False, "error": "params must be dict"}
+        proc.set_params(params)
+        self._log_info(f"[{proc._name}] 参数已更新: {params}")
+        return {"ok": True, "params": proc.get_params()}
+
     # --- 生成 MJPEG 流（用于 Flask Response）---
     def mjpeg_generator(self, mode: str):
         """mode: 'raw' | 'annotated'"""
@@ -649,11 +749,13 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             time.sleep(self._stream_interval)
 
     def destroy_node(self) -> None:
-        try:
-            if self._camera.is_running():
-                self._camera.stop(timeout=3.0)
-        except Exception:
-            pass
+        # 退出时清理所有子进程（相机 / YOLO / RGBD 等）
+        for name, proc in self._processes.items():
+            try:
+                if proc.is_running():
+                    proc.stop(timeout=3.0)
+            except Exception:
+                pass
         self._gs_destroy()
         super().destroy_node()
 
@@ -779,6 +881,35 @@ def create_app(node: WebPanelNode) -> Flask:
     def api_camera_params():
         data = request.get_json(force=True, silent=True) or {}
         return jsonify(node.cmd_camera_set(data))
+
+    # ---- 通用进程控制（camera / yolo / rgbd）----
+    @app.route("/api/process/<name>/start", methods=["POST"])
+    def api_proc_start(name):
+        try:
+            res = node.cmd_process_start(name)
+            return jsonify(res), 200 if res.get("ok") else 400
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    @app.route("/api/process/<name>/stop", methods=["POST"])
+    def api_proc_stop(name):
+        try:
+            res = node.cmd_process_stop(name)
+            return jsonify(res), 200 if res.get("ok") else 400
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    @app.route("/api/process/<name>/status", methods=["GET"])
+    def api_proc_status(name):
+        proc = node.get_process(name)
+        if proc is None:
+            return jsonify({"ok": False, "error": f"unknown process: {name}"}), 404
+        return jsonify({**proc.status(), "logs": proc.recent_logs(80)})
+
+    @app.route("/api/process/<name>/params", methods=["POST"])
+    def api_proc_params(name):
+        data = request.get_json(force=True, silent=True) or {}
+        return jsonify(node.cmd_process_set(name, data))
 
     return app
 

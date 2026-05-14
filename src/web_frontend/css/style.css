@@ -1125,7 +1125,31 @@ body.settings-active .topbar-toc { display: flex; }
 /* 视图 4：系统状态 — 仪表盘网格                                            */
 /* ====================================================================== */
 
-/* 相机启动器横条 */
+/* 进程启动器卡片网格（相机 / YOLO / RGBD） */
+.process-launchers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+@media (max-width: 1280px) { .process-launchers { grid-template-columns: 1fr; } }
+
+.process-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.8),
+    0 8px 24px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 旧 .camera-launcher 保留兼容（如果还有引用） */
 .camera-launcher {
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(20px) saturate(180%);
@@ -1145,21 +1169,34 @@ body.settings-active .topbar-toc { display: flex; }
 .launcher-head {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .launcher-icon {
-  width: 48px; height: 48px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(219, 234, 254, 0.9) 0%, rgba(191, 219, 254, 0.85) 100%);
-  color: #1D4ED8;
+  width: 44px; height: 44px;
+  border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.9) 0%, rgba(191, 219, 254, 0.85) 100%);
+  color: #1D4ED8;
   box-shadow:
     inset 1px 1px 1px rgba(255, 255, 255, 0.7),
-    0 4px 12px rgba(29, 78, 216, 0.15);
+    0 4px 10px rgba(29, 78, 216, 0.15);
 }
-.launcher-icon svg { width: 24px; height: 24px; }
+.launcher-icon-blue {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.9) 0%, rgba(191, 219, 254, 0.85) 100%);
+  color: #1D4ED8;
+}
+.launcher-icon-red {
+  background: linear-gradient(135deg, rgba(254, 226, 226, 0.9) 0%, rgba(254, 202, 202, 0.85) 100%);
+  color: #B91C1C;
+}
+.launcher-icon-emerald {
+  background: linear-gradient(135deg, rgba(209, 250, 229, 0.9) 0%, rgba(167, 243, 208, 0.85) 100%);
+  color: #047857;
+}
+.launcher-icon svg { width: 22px; height: 22px; }
 
 .launcher-info { flex: 1; min-width: 0; }
 .launcher-title { font-size: 15px; font-weight: 700; color: #0F172A; }
@@ -1217,10 +1254,10 @@ body.settings-active .topbar-toc { display: flex; }
 
 .launcher-meta {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 10px;
   margin: 0;
-  padding: 12px 0 0;
+  padding: 10px 0 0;
   border-top: 1px dashed rgba(15, 23, 42, 0.1);
 }
 @media (max-width: 900px) { .launcher-meta { grid-template-columns: repeat(2, 1fr); } }

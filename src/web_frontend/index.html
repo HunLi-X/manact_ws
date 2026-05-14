@@ -471,44 +471,6 @@
     <!-- ======================================================= -->
     <section class="view hidden" data-view="status">
 
-      <!-- 相机驱动启动器（全宽横条） -->
-      <div class="camera-launcher">
-        <div class="launcher-head">
-          <div class="launcher-icon" data-icon="camera"></div>
-          <div class="launcher-info">
-            <div class="launcher-title">RealSense 相机驱动</div>
-            <div class="launcher-sub" id="cam-cmd">ros2 launch realsense2_camera rs_launch.py</div>
-          </div>
-          <div class="launcher-state">
-            <span class="cam-pill cam-pill-off" id="cam-state-pill">
-              <span class="cam-dot"></span>
-              <span id="cam-state-label">未启动</span>
-            </span>
-          </div>
-          <div class="launcher-actions">
-            <button class="btn btn-primary" id="cam-start-btn" onclick="cameraStart()">
-              <span data-icon="chevron-right" class="btn-icon"></span>
-              <span>启动</span>
-            </button>
-            <button class="btn btn-outline-danger" id="cam-stop-btn" onclick="cameraStop()" disabled>
-              <span data-icon="square" class="btn-icon"></span>
-              <span>停止</span>
-            </button>
-          </div>
-        </div>
-        <dl class="launcher-meta">
-          <div><dt>PID</dt><dd id="cam-pid">—</dd></div>
-          <div><dt>运行时长</dt><dd id="cam-uptime">—</dd></div>
-          <div><dt>命名空间</dt><dd id="cam-ns">robot1</dd></div>
-          <div><dt>相机名</dt><dd id="cam-name">D455_1</dd></div>
-          <div><dt>对齐深度</dt><dd id="cam-align">true</dd></div>
-        </dl>
-        <details class="launcher-logs-wrap">
-          <summary>启动日志（最近 80 行）</summary>
-          <div id="cam-log-box" class="log-box log-box-compact"></div>
-        </details>
-      </div>
-
       <div class="status-grid">
 
         <div class="status-tile status-tile-primary">
