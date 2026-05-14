@@ -9,7 +9,9 @@ def _collect_web_frontend():
     """收集 src/web_frontend/ 下所有文件，保留目录结构打包到 share/。
 
     源目录约定在 ../web_frontend 相对于本 setup.py。
-    输出格式：[(share_subdir, [file_paths]), ...]
+    返回的源路径必须是相对于 setup.py 所在目录的相对路径
+    （colcon 要求 data_files 源不能是绝对路径）。
+    输出格式：[(share_subdir, [relative_file_paths]), ...]
     """
     # setup.py 位于 src/g1_yolo_nav_py/，前端在 src/web_frontend/
     here = os.path.dirname(os.path.abspath(__file__))
@@ -22,11 +24,24 @@ def _collect_web_frontend():
     for root, _dirs, files in os.walk(frontend_src):
         if not files:
             continue
-        # 相对路径作为 share 子目录后缀
+        # 跳过 __pycache__ 等无用目录
+        skip = any(seg.startswith(("__pycache__", ".")) for seg in os.path.relpath(root, frontend_src).split(os.sep))
+        if skip:
+            continue
+        # share 子目录（保留层级）
         rel = os.path.relpath(root, frontend_src)
         sub = share_base if rel == "." else share_base + "/" + rel.replace(os.sep, "/")
-        paths = [os.path.join(root, f).replace(os.sep, "/") for f in files]
-        result.append((sub, paths))
+        # 源路径：相对于 setup.py 所在目录（here），形如 "../web_frontend/index.html"
+        paths = []
+        for f in files:
+            # 跳过 .pyc / dev_server 临时产物
+            if f.endswith((".pyc",)) or f == "__pycache__":
+                continue
+            abs_path = os.path.join(root, f)
+            rel_path = os.path.relpath(abs_path, here).replace(os.sep, "/")
+            paths.append(rel_path)
+        if paths:
+            result.append((sub, paths))
     return result
 
 
