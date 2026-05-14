@@ -19,7 +19,8 @@ G1 NavGrasp Web 控制面板 (Flask + MJPEG)
         ├── POST /api/cmd/search         → 搜索目标
         ├── POST /api/cmd/grab           → 抓取
         ├── POST /api/cmd/putdown        → 放下
-        └── POST /api/cmd/turn_putdown   → 右转放下
+        ├── POST /api/cmd/turn_putdown   → 右转放下
+        └── POST /api/cmd/left_putdown   → 左移放下
 
 运行：
     ros2 run g1_yolo_nav_py web_panel
@@ -238,6 +239,8 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         "search_yaw_speed": ("_gs_search_speed", float, "搜索旋转速度 (rad/s)"),
         "turn_yaw_speed": ("_gs_turn_speed", float, "转身速度 (rad/s)"),
         "turn_duration": ("_gs_turn_duration", float, "转身时长 (s)"),
+        "side_step_speed": ("_gs_side_step_speed", float, "左移放下速度 (m/s)"),
+        "side_step_duration": ("_gs_side_step_duration", float, "左移放下时长 (s)"),
         # StepAligner 属性
         "step_yaw_speed":       ("aligner.step_yaw_speed",      float, "每步旋转速度 (rad/s)"),
         "step_duration":        ("aligner.step_duration",       float, "每步持续时间 (s)"),
@@ -415,6 +418,11 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             raise RuntimeError("请先停止当前任务")
         threading.Thread(target=self._gs_do_turn_and_put_down, daemon=True).start()
 
+    def cmd_left_put_down(self) -> None:
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
+            raise RuntimeError("请先停止当前任务")
+        threading.Thread(target=self._gs_do_left_put_down, daemon=True).start()
+
     # --- 生成 MJPEG 流（用于 Flask Response）---
     def mjpeg_generator(self, mode: str):
         """mode: 'raw' | 'annotated'"""
@@ -522,6 +530,10 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/cmd/turn_putdown", methods=["POST"])
     def cmd_turn_putdown():
         return _cmd_route(node.cmd_turn_put_down)
+
+    @app.route("/api/cmd/left_putdown", methods=["POST"])
+    def cmd_left_putdown():
+        return _cmd_route(node.cmd_left_put_down)
 
     return app
 

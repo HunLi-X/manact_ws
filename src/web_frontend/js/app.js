@@ -101,6 +101,7 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
       case 'grab':         postCmd('/api/cmd/grab'); break;
       case 'putdown':      postCmd('/api/cmd/putdown'); break;
       case 'turn_putdown': postCmd('/api/cmd/turn_putdown'); break;
+      case 'left_putdown': postCmd('/api/cmd/left_putdown'); break;
       case 'stop':         postCmd('/api/cmd/stop'); break;
     }
   });

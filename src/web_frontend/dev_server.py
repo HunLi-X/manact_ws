@@ -62,6 +62,8 @@ class MockState:
         "search_yaw_speed": 0.3,
         "turn_yaw_speed": 0.6,
         "turn_duration": 2.6,
+        "side_step_speed": 0.2,
+        "side_step_duration": 2.0,
         "step_yaw_speed": 0.3,
         "step_duration": 0.3,
         "camera_settle_time": 2.0,
@@ -182,6 +184,12 @@ class MockState:
     def cmd_turn_put_down(self):
         self.append_log("[Mock] 右转 90° + 放下 (模拟)", "info")
         threading.Timer(3.0, self._finish_putdown).start()
+
+    def cmd_left_put_down(self):
+        v = self.config.get("side_step_speed", 0.2)
+        t = self.config.get("side_step_duration", 2.0)
+        self.append_log(f"[Mock] 向左侧移 {t:.1f}s @ {v:.2f}m/s + 放下 (模拟)", "info")
+        threading.Timer(t + 1.5, self._finish_putdown).start()
 
 
 # ======================================================================
@@ -418,6 +426,10 @@ def create_app() -> Flask:
     @app.route("/api/cmd/turn_putdown", methods=["POST"])
     def cmd_turn_putdown():
         return _cmd_wrap(mock.cmd_turn_put_down)
+
+    @app.route("/api/cmd/left_putdown", methods=["POST"])
+    def cmd_left_putdown():
+        return _cmd_wrap(mock.cmd_left_put_down)
 
     return app
 

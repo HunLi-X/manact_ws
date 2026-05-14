@@ -100,6 +100,8 @@ class GraspStateMachineMixin:
         node.declare_parameter("search_yaw_speed", 0.3)
         node.declare_parameter("turn_yaw_speed", 0.6)
         node.declare_parameter("turn_duration", 2.6)
+        node.declare_parameter("side_step_speed", 0.2)         # 左移放下：侧移速度 (m/s)
+        node.declare_parameter("side_step_duration", 2.0)      # 左移放下：侧移持续时间 (s)
         node.declare_parameter("arm_script_dir", arm_script_dir or _DEFAULT_ARM_DIR)
 
         p = lambda n: node.get_parameter(n).value
@@ -114,6 +116,8 @@ class GraspStateMachineMixin:
         self._gs_search_speed = float(p("search_yaw_speed"))
         self._gs_turn_speed = float(p("turn_yaw_speed"))
         self._gs_turn_duration = float(p("turn_duration"))
+        self._gs_side_step_speed = float(p("side_step_speed"))
+        self._gs_side_step_duration = float(p("side_step_duration"))
 
         # network_interface: 优先使用函数参数，否则从 ROS 参数读取
         self._gs_net_iface = network_interface or p("network_interface")
@@ -387,28 +391,31 @@ class GraspStateMachineMixin:
                 print("=" * 40)
                 print("  1. 放下目标物")
                 print("  2. 右转放下目标物")
-                print("  3. 自定义控制（输入 xyz）")
-                print("  4. 退出")
+                print("  3. 左移放下目标物")
+                print("  4. 自定义控制（输入 xyz）")
+                print("  5. 退出")
                 print("=" * 40)
 
                 try:
-                    choice = input("请选择 [1-4]: ").strip()
+                    choice = input("请选择 [1-5]: ").strip()
                 except EOFError:
-                    choice = "4"
+                    choice = "5"
 
                 if choice == "1":
                     self._gs_do_put_down()
                 elif choice == "2":
                     self._gs_do_turn_and_put_down()
                 elif choice == "3":
-                    self._gs_do_custom_control()
+                    self._gs_do_left_put_down()
                 elif choice == "4":
+                    self._gs_do_custom_control()
+                elif choice == "5":
                     self._log_info("[退出] 任务结束")
                     self.gs_state = GraspState.DONE
                     rclpy.shutdown()
                     return
                 else:
-                    print("无效选择，请输入 1-4")
+                    print("无效选择，请输入 1-5")
 
         t = threading.Thread(target=_menu_loop, daemon=True)
         t.start()
@@ -424,6 +431,20 @@ class GraspStateMachineMixin:
         time.sleep(self._gs_turn_duration)
         self._sport.stop()
         self._log_info("[右转] 右转完成")
+        self._gs_do_put_down()
+
+    def _gs_do_left_put_down(self) -> None:
+        """向左侧移指定时间后放下目标物（vy>0=左）。"""
+        v = abs(self._gs_side_step_speed)
+        t = max(0.0, self._gs_side_step_duration)
+        self._log_info(f"[左移] 开始向左侧移 {t:.1f}s @ {v:.2f}m/s ...")
+        # 分多次发布以保证侧移期间持续收到速度指令（Loco API 默认 duration=0.1s）
+        end_time = time.time() + t
+        while time.time() < end_time:
+            self._sport.move(vy=v)
+            time.sleep(0.1)
+        self._sport.stop()
+        self._log_info("[左移] 侧移完成")
         self._gs_do_put_down()
 
     def _gs_do_custom_control(self) -> None:
