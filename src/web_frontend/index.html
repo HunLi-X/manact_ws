@@ -605,6 +605,16 @@
                 <input type="number" step="0.1" min="0.5" max="10" data-key="turn_duration" />
                 <span class="field-help">右转 90° 所需时间</span>
               </label>
+              <label>
+                <span class="field-label">左移放下速度 side_step_speed (m/s)</span>
+                <input type="number" step="0.05" min="0.05" max="0.5" data-key="side_step_speed" />
+                <span class="field-help">vy>0 表示向左侧移</span>
+              </label>
+              <label>
+                <span class="field-label">左移放下时长 side_step_duration (s)</span>
+                <input type="number" step="0.1" min="0.1" max="10" data-key="side_step_duration" />
+                <span class="field-help">侧移持续时间，决定平移距离</span>
+              </label>
               <div class="form-actions">
                 <button type="button" class="btn btn-primary" data-save="motion">保存</button>
               </div>

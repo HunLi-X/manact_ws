@@ -401,6 +401,7 @@ html, body {
 .task-grab .task-icon   { background: #FEE2E2; }
 .task-putdown .task-icon{ background: #D1FAE5; }
 .task-turn .task-icon   { background: #DBEAFE; }
+.task-left .task-icon   { background: #EDE9FE; }
 
 .task-body { flex: 1; min-width: 0; }
 .task-name { font-size: 13px; font-weight: 600; color: #134E4A; }
