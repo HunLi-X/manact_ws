@@ -380,13 +380,23 @@ class GraspStateMachineMixin:
     def _gs_arm_env(self) -> dict:
         """构建 arm 子进程的环境变量（继承当前环境 + 注入 DDS/SDK 路径）。
 
+        关键：移除父进程的 CYCLONEDDS_URI 和 ROS_DOMAIN_ID，
+        让 arm 脚本的 ChannelFactoryInitialize 自己创建独立的 DDS domain，
+        避免与 web_panel 的 ROS2 CycloneDDS 实例冲突导致 segfault。
+
         自动检测逻辑：
         1. CYCLONEDDS_HOME：优先用户设置 → 自动探测常见位置
         2. PYTHONPATH：优先用户设置 → 自动探测 unitree_sdk2_python 位置
         """
         env = os.environ.copy()
 
-        # --- CycloneDDS ---
+        # ★ 关键：隔离 DDS domain — 移除父进程的 ROS2 DDS 配置
+        # 让 arm 脚本的 ChannelFactoryInitialize 自己决定 domain
+        env.pop("CYCLONEDDS_URI", None)
+        env.pop("ROS_DOMAIN_ID", None)
+        env.pop("RMW_IMPLEMENTATION", None)
+
+        # --- CycloneDDS C 库路径 ---
         dds_home = self._gs_cyclonedds_home or self._auto_detect_cyclonedds()
         if dds_home:
             env["CYCLONEDDS_HOME"] = dds_home
