@@ -1970,6 +1970,21 @@ body.settings-active .topbar-toc { display: flex; }
 }
 .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 
+/* 系统环境检测提示条 */
+.env-detect-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(254, 243, 199, 0.6);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 10px;
+  font-size: 12px;
+  color: #92400E;
+  font-weight: 500;
+}
+.env-detect-hint [data-icon] { color: #F59E0B; flex-shrink: 0; }
+
 .form-actions {
   display: flex;
   gap: 8px;

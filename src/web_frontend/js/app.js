@@ -775,6 +775,40 @@ async function refreshCameraStatus() { return refreshProcStatus('camera'); }
 function applyCameraStatus(cam) { applyProcStatus('camera', cam); }
 
 
+// ======================================================================
+// 系统环境自动检测
+// ======================================================================
+async function detectEnv() {
+  try {
+    const r = await fetch('/api/env/detect');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    // 把检测结果填入表单（仅填空字段，不覆盖用户已填的值）
+    const envFields = ['network_interface', 'cyclonedds_home', 'sdk_python_path', 'arm_script_dir'];
+    envFields.forEach(key => {
+      const el = document.querySelector(`[data-settings-group="env"] [data-key="${key}"]`);
+      if (!el) return;
+      // 更新 placeholder 为检测值
+      if (data[key]) {
+        el.placeholder = '检测到: ' + data[key];
+      }
+      // 如果用户没填，把检测值填入
+      if (!el.value && data[key]) {
+        el.value = data[key];
+      }
+    });
+    // 显示额外信息
+    const info = [];
+    if (data.python_executable) info.push('Python: ' + data.python_executable);
+    if (data.virtual_env) info.push('VENV: ' + data.virtual_env);
+    if (info.length) appendLog('[环境检测] ' + info.join(' | '), 'info');
+    showToast('环境检测完成', 'info');
+  } catch (e) {
+    showToast('环境检测失败: ' + e.message, 'error');
+  }
+}
+
+
 function fmtUptime(sec) {
   if (sec == null || sec <= 0) return '—';
   const s = Math.floor(sec);
@@ -836,6 +870,7 @@ reloadSettings = async function() {
   await _origReloadSettings();
   await reloadCameraParams();
   loadBgFormFromPrefs();
+  detectEnv();  // 自动检测系统环境并填入表单
 };
 
 

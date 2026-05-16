@@ -606,6 +606,18 @@ def create_app() -> Flask:
         data = request.get_json(force=True, silent=True) or {}
         return jsonify(mock.process_set_params(name, data))
 
+    # ---- 系统环境自动检测 mock ----
+    @app.route("/api/env/detect", methods=["GET"])
+    def api_env_detect():
+        return jsonify({
+            "network_interface": "eth0",
+            "cyclonedds_home": "/home/zut_robot/unitree_ros2/cyclonedds_ws/install/cyclonedds",
+            "sdk_python_path": "/home/zut_robot/unitree_sdk2_python",
+            "arm_script_dir": "/home/zut_robot/manact_ws/src/g1_yolo_nav_py/arm",
+            "python_executable": "/home/zut_robot/g1act_venv/bin/python",
+            "virtual_env": "/home/zut_robot/g1act_venv",
+        })
+
     return app
 
 

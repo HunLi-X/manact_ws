@@ -121,6 +121,10 @@
           <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
           <span class="toc-label">偏好</span>
         </a>
+        <a href="#sg-env" class="toc-link" data-toc="sg-env">
+          <span class="toc-icon group-icon-amber" data-icon="server"></span>
+          <span class="toc-label">环境</span>
+        </a>
         <a href="#sg-bg" class="toc-link" data-toc="sg-bg">
           <span class="toc-icon group-icon-blue" data-icon="image"></span>
           <span class="toc-label">背景</span>
@@ -898,28 +902,52 @@
                 <input type="number" step="0.1" min="0.1" max="10" data-key="side_step_duration" />
                 <span class="field-help">侧移持续时间，决定平移距离</span>
               </label>
+              <div class="form-actions field-full">
+                <button type="button" class="btn btn-primary" data-save="motion">保存</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 系统环境 -->
+          <div class="settings-group" id="sg-env">
+            <div class="settings-group-head">
+              <div class="group-icon group-icon-amber" data-icon="server"></div>
+              <div>
+                <div class="group-title">系统环境</div>
+                <div class="group-sub">网络接口 / DDS / SDK 路径（自动检测 + 可手动覆盖）</div>
+              </div>
+            </div>
+            <form class="settings-form form-2col" data-settings-group="env">
+              <div class="env-detect-hint field-full">
+                <span data-icon="lightbulb" class="btn-icon"></span>
+                <span>以下字段默认使用自动检测值。留空 = 使用自动检测，填写 = 手动覆盖。</span>
+              </div>
               <label class="field-full">
                 <span class="field-label">网络接口 network_interface</span>
-                <input type="text" data-key="network_interface" placeholder="eth0 / wlan0 / enp3s0" />
-                <span class="field-help">全局网络接口，DDS / unitree_sdk2py / arm 子进程共用。修改后下一次启动相关组件生效。</span>
+                <input type="text" data-key="network_interface" placeholder="自动（如 eth0 / wlan0 / enp3s0）" />
+                <span class="field-help">全局网络接口，DDS / unitree_sdk2py / arm 子进程共用。</span>
               </label>
               <label class="field-full">
-                <span class="field-label">CycloneDDS 目录 cyclonedds_home</span>
-                <input type="text" data-key="cyclonedds_home" placeholder="/home/zut_robot/unitree_ros2/cyclonedds_ws/build/cyclonedds" />
-                <span class="field-help">设置 CYCLONEDDS_HOME 环境变量 + LD_LIBRARY_PATH。arm 子进程启动时注入。</span>
+                <span class="field-label">CycloneDDS 安装目录 cyclonedds_home</span>
+                <input type="text" data-key="cyclonedds_home" placeholder="自动检测（如 ~/unitree_ros2/cyclonedds_ws/install/cyclonedds）" />
+                <span class="field-help">设置子进程 CYCLONEDDS_HOME + LD_LIBRARY_PATH。留空则自动探测。</span>
               </label>
               <label class="field-full">
                 <span class="field-label">SDK Python 路径 sdk_python_path</span>
-                <input type="text" data-key="sdk_python_path" placeholder="/home/zut_robot/unitree_sdk2_python" />
-                <span class="field-help">unitree_sdk2_python 源码目录，加入子进程 PYTHONPATH。</span>
+                <input type="text" data-key="sdk_python_path" placeholder="自动检测（如 ~/unitree_sdk2_python）" />
+                <span class="field-help">unitree_sdk2_python 源码目录，加入子进程 PYTHONPATH。留空则自动探测。</span>
               </label>
               <label class="field-full">
                 <span class="field-label">arm 脚本目录 arm_script_dir</span>
                 <input type="text" data-key="arm_script_dir" placeholder="自动检测" />
-                <span class="field-help">armup.py / armdown.py 所在目录绝对路径。留空使用自动检测的默认值。</span>
+                <span class="field-help">armup.py / armdown.py 所在目录。留空则自动探测。</span>
               </label>
               <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" data-save="motion">保存</button>
+                <button type="button" class="btn btn-primary" data-save="env">保存</button>
+                <button type="button" class="btn btn-outline-brand" id="env-detect-btn" onclick="detectEnv()">
+                  <span data-icon="search" class="btn-icon"></span>
+                  <span>重新检测</span>
+                </button>
               </div>
             </form>
           </div>
