@@ -426,19 +426,27 @@ class GraspStateMachineMixin:
             args = [sys.executable, script]
             if self._gs_net_iface:
                 args.append(self._gs_net_iface)
+            self._log_info(f"[放下] 命令: {' '.join(args)}")
             proc = subprocess.run(
-                args, check=True, input=b"\n",
+                args, input=b"\n",
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=120,
             )
+            # 不论成功失败都打印输出
             if proc.stdout:
+                level = "error" if proc.returncode != 0 else "info"
                 for line in proc.stdout.decode(errors="replace").splitlines():
-                    self._log_info(f"[armdown] {line}")
-            self._log_info("[放下] armdown.py 执行完成")
+                    if line.strip():
+                        if level == "error":
+                            self._log_error(f"[armdown] {line}")
+                        else:
+                            self._log_info(f"[armdown] {line}")
+            if proc.returncode != 0:
+                self._log_error(f"[放下] armdown.py 失败: 返回码={proc.returncode}")
+            else:
+                self._log_info("[放下] armdown.py 执行完成")
         except subprocess.TimeoutExpired:
             self._log_error("[放下] armdown.py 超时（120秒）")
-        except subprocess.CalledProcessError as e:
-            self._log_error(f"[放下] armdown.py 失败: 返回码={e.returncode}")
         except Exception as e:
             self._log_error(f"[放下] armdown.py 异常: {e}")
 
