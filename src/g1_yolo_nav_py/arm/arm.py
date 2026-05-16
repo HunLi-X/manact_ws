@@ -14,6 +14,7 @@ import math
 import time
 import sys
 import threading
+from typing import List
 
 import numpy as np
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelFactoryInitialize
@@ -61,7 +62,7 @@ class ArmDemoController:
         lo, hi = JOINT_LIMITS.get(joint, (-math.pi, math.pi))
         return float(np.clip(value, lo, hi))
 
-    def _apply_joint_pd(self, targets: list[float], ratio: float) -> None:
+    def _apply_joint_pd(self, targets: List[float], ratio: float) -> None:
         """对所有受控关节应用 PD 位置控制（插值到目标）。"""
         for i, joint in enumerate(ARM_JOINTS):
             with self._state_lock:
