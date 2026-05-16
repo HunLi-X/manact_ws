@@ -39,6 +39,7 @@ from g1_yolo_nav_py.sport_client import SportClient
 from g1_yolo_nav_py._detection_utils import find_best_detection, sample_depth_at_pixel, depth_to_meters
 from g1_yolo_nav_py._step_aligner import StepAligner, AlignAction
 from g1_yolo_nav_py._forward_approach import ForwardApproach, ApproachAction
+from g1_yolo_nav_py._dds_compat import build_isolated_env, get_venv_python, auto_detect_cyclonedds, auto_detect_sdk_path
 
 class GraspState(Enum):
     """抓取任务状态枚举。"""
@@ -364,85 +365,16 @@ class GraspStateMachineMixin:
         # APPROACHING / WAIT → 继续等下一 tick
 
     def _gs_arm_python(self) -> str:
-        """获取 arm 子进程应使用的 Python 解释器路径。
-
-        优先使用 venv 的 python（能访问 venv site-packages），
-        而不是 sys.executable（可能解析为 /usr/bin/python3 看不到 venv 包）。
-        """
-        # 如果在 venv 中，VIRTUAL_ENV 环境变量指向 venv 根目录
-        venv = os.environ.get("VIRTUAL_ENV")
-        if venv:
-            venv_python = os.path.join(venv, "bin", "python")
-            if os.path.isfile(venv_python):
-                return venv_python
-        return sys.executable
+        """获取 arm 子进程应使用的 Python 解释器路径。"""
+        return get_venv_python()
 
     def _gs_arm_env(self) -> dict:
-        """构建 arm 子进程的环境变量（继承当前环境 + 注入 DDS/SDK 路径）。
-
-        关键：移除父进程的 CYCLONEDDS_URI 和 ROS_DOMAIN_ID，
-        让 arm 脚本的 ChannelFactoryInitialize 自己创建独立的 DDS domain，
-        避免与 web_panel 的 ROS2 CycloneDDS 实例冲突导致 segfault。
-
-        自动检测逻辑：
-        1. CYCLONEDDS_HOME：优先用户设置 → 自动探测常见位置
-        2. PYTHONPATH：优先用户设置 → 自动探测 unitree_sdk2_python 位置
-        """
-        env = os.environ.copy()
-
-        # ★ 关键：隔离 DDS domain — 移除父进程的 ROS2 DDS 配置
-        # 让 arm 脚本的 ChannelFactoryInitialize 自己决定 domain
-        env.pop("CYCLONEDDS_URI", None)
-        env.pop("ROS_DOMAIN_ID", None)
-        env.pop("RMW_IMPLEMENTATION", None)
-
-        # --- CycloneDDS C 库路径 ---
-        dds_home = self._gs_cyclonedds_home or self._auto_detect_cyclonedds()
-        if dds_home:
-            env["CYCLONEDDS_HOME"] = dds_home
-            lib_dir = os.path.join(dds_home, "lib")
-            if os.path.isdir(lib_dir):
-                env["LD_LIBRARY_PATH"] = lib_dir + ":" + env.get("LD_LIBRARY_PATH", "")
-            env["CMAKE_PREFIX_PATH"] = dds_home + ":" + env.get("CMAKE_PREFIX_PATH", "")
-
-        # --- SDK PYTHONPATH ---
-        sdk_path = self._gs_sdk_python_path or self._auto_detect_sdk_path()
-        if sdk_path:
-            env["PYTHONPATH"] = sdk_path + ":" + env.get("PYTHONPATH", "")
-
-        return env
-
-    def _auto_detect_cyclonedds(self) -> str:
-        """自动探测 CycloneDDS 安装目录。"""
-        home = os.path.expanduser("~")
-        candidates = [
-            os.path.join(home, "unitree_ros2/cyclonedds_ws/install/cyclonedds"),
-            os.path.join(home, "cyclonedds_ws/install/cyclonedds"),
-            "/opt/cyclonedds",
-            "/usr/local",
-        ]
-        for c in candidates:
-            # 检查是否有 lib/libddsc.so 或 lib64/libddsc.so
-            if os.path.isfile(os.path.join(c, "lib", "libddsc.so")):
-                return c
-            if os.path.isfile(os.path.join(c, "lib64", "libddsc.so")):
-                return c
-            # 有些安装只有 cmake 文件
-            if os.path.isfile(os.path.join(c, "lib", "cmake", "CycloneDDS", "CycloneDDSConfig.cmake")):
-                return c
-        return ""
-
-    def _auto_detect_sdk_path(self) -> str:
-        """自动探测 unitree_sdk2_python 目录（加入 PYTHONPATH）。"""
-        home = os.path.expanduser("~")
-        candidates = [
-            os.path.join(home, "unitree_sdk2_python"),
-            os.path.join(home, "G1DWAQ_Lab/unitree_sdk2_python"),
-        ]
-        for c in candidates:
-            if os.path.isfile(os.path.join(c, "unitree_sdk2py", "__init__.py")):
-                return c
-        return ""
+        """构建 arm 子进程的隔离环境变量（委托给 _dds_compat）。"""
+        return build_isolated_env(
+            network_interface=self._gs_net_iface,
+            cyclonedds_home=self._gs_cyclonedds_home,
+            sdk_python_path=self._gs_sdk_python_path,
+        )
 
     def _gs_run_grab(self) -> None:
         """执行 armup.py 抓取目标物。"""

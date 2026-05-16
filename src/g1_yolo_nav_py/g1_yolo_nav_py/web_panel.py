@@ -920,14 +920,13 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/env/detect", methods=["GET"])
     def api_env_detect():
         """返回自动检测到的环境路径（供前端显示 placeholder / 填入表单）。"""
-        from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin
-        mixin = node  # node 继承了 GraspStateMachineMixin
+        from g1_yolo_nav_py._dds_compat import auto_detect_cyclonedds, auto_detect_sdk_path, get_venv_python
         return jsonify({
-            "network_interface": mixin._gs_net_iface or "",
-            "cyclonedds_home":   mixin._auto_detect_cyclonedds(),
-            "sdk_python_path":   mixin._auto_detect_sdk_path(),
-            "arm_script_dir":    mixin._gs_arm_dir or "",
-            "python_executable": mixin._gs_arm_python(),
+            "network_interface": node._gs_net_iface or "",
+            "cyclonedds_home":   node._gs_cyclonedds_home or auto_detect_cyclonedds(),
+            "sdk_python_path":   node._gs_sdk_python_path or auto_detect_sdk_path(),
+            "arm_script_dir":    node._gs_arm_dir or "",
+            "python_executable": get_venv_python(),
             "virtual_env":       os.environ.get("VIRTUAL_ENV", ""),
         })
 
