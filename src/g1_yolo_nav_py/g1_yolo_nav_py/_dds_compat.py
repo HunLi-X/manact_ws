@@ -64,15 +64,24 @@ def build_isolated_env(
     env.pop("ROS_DOMAIN_ID", None)
     env.pop("RMW_IMPLEMENTATION", None)
 
-    # ★ 注入独立的 CycloneDDS 配置：禁用 shared memory
+    # ★ 注入独立的 CycloneDDS 配置：
+    # - 禁用 shared memory（避免跟父进程冲突）
+    # - 禁用多播发现（避免父进程收到不兼容的 type 信息导致 segfault）
+    # - 使用单播直连机器人 192.168.123.1（宇树 G1 默认 IP）
+    # - 使用 DomainId 42（与 ROS2 默认 domain 0 隔离）
     net_iface = network_interface or "lo"
     cyclonedds_xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<CycloneDDS>'
-        '<Domain>'
+        '<Domain id="42">'
         '<General>'
-        f'<Interfaces><NetworkInterface name="{net_iface}" priority="default" multicast="true"/></Interfaces>'
+        f'<Interfaces><NetworkInterface name="{net_iface}" priority="default" multicast="false"/></Interfaces>'
+        '<AllowMulticast>false</AllowMulticast>'
         '</General>'
+        '<Discovery>'
+        '<Peers><Peer address="192.168.123.1"/></Peers>'
+        '<ParticipantIndex>auto</ParticipantIndex>'
+        '</Discovery>'
         '<SharedMemory><Enable>false</Enable></SharedMemory>'
         '<Tracing><Verbosity>warning</Verbosity></Tracing>'
         '</Domain>'
