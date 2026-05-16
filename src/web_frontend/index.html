@@ -904,6 +904,16 @@
                 <span class="field-help">全局网络接口，DDS / unitree_sdk2py / arm 子进程共用。修改后下一次启动相关组件生效。</span>
               </label>
               <label class="field-full">
+                <span class="field-label">CycloneDDS 目录 cyclonedds_home</span>
+                <input type="text" data-key="cyclonedds_home" placeholder="/home/zut_robot/unitree_ros2/cyclonedds_ws/build/cyclonedds" />
+                <span class="field-help">设置 CYCLONEDDS_HOME 环境变量 + LD_LIBRARY_PATH。arm 子进程启动时注入。</span>
+              </label>
+              <label class="field-full">
+                <span class="field-label">SDK Python 路径 sdk_python_path</span>
+                <input type="text" data-key="sdk_python_path" placeholder="/home/zut_robot/unitree_sdk2_python" />
+                <span class="field-help">unitree_sdk2_python 源码目录，加入子进程 PYTHONPATH。</span>
+              </label>
+              <label class="field-full">
                 <span class="field-label">arm 脚本目录 arm_script_dir</span>
                 <input type="text" data-key="arm_script_dir" placeholder="自动检测" />
                 <span class="field-help">armup.py / armdown.py 所在目录绝对路径。留空使用自动检测的默认值。</span>

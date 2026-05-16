@@ -129,6 +129,8 @@ class GraspStateMachineMixin:
         self._gs_include_idle = include_idle
 
         node.declare_parameter("network_interface", "")
+        node.declare_parameter("cyclonedds_home", "")
+        node.declare_parameter("sdk_python_path", "")
         node.declare_parameter("detection_topic", "/g1/vision/detections")
         node.declare_parameter("depth_topic", "/D455_1/depth/image_rect_raw")
         node.declare_parameter("target_class_id", "chair")
@@ -168,6 +170,10 @@ class GraspStateMachineMixin:
 
         # network_interface: 优先使用函数参数，否则从 ROS 参数读取
         self._gs_net_iface = network_interface or p("network_interface")
+        # CycloneDDS 安装目录（传给子进程 CYCLONEDDS_HOME 环境变量）
+        self._gs_cyclonedds_home = p("cyclonedds_home")
+        # unitree_sdk2_python 目录（传给子进程 PYTHONPATH）
+        self._gs_sdk_python_path = p("sdk_python_path")
 
         # arm 脚本目录（用 property 管理，便于运行时动态切换）
         self._gs_arm_dir = p("arm_script_dir")
@@ -357,6 +363,21 @@ class GraspStateMachineMixin:
 
         # APPROACHING / WAIT → 继续等下一 tick
 
+    def _gs_arm_env(self) -> dict:
+        """构建 arm 子进程的环境变量（继承当前环境 + 注入 DDS/SDK 路径）。"""
+        env = os.environ.copy()
+        if self._gs_cyclonedds_home:
+            env["CYCLONEDDS_HOME"] = self._gs_cyclonedds_home
+            # 同时把 lib 加到 LD_LIBRARY_PATH（cyclonedds python 绑定需要）
+            lib_dir = os.path.join(self._gs_cyclonedds_home, "lib")
+            if os.path.isdir(lib_dir):
+                env["LD_LIBRARY_PATH"] = lib_dir + ":" + env.get("LD_LIBRARY_PATH", "")
+            # CMAKE_PREFIX_PATH 也设上（cyclonedds pip 编译时需要）
+            env["CMAKE_PREFIX_PATH"] = self._gs_cyclonedds_home + ":" + env.get("CMAKE_PREFIX_PATH", "")
+        if self._gs_sdk_python_path:
+            env["PYTHONPATH"] = self._gs_sdk_python_path + ":" + env.get("PYTHONPATH", "")
+        return env
+
     def _gs_run_grab(self) -> None:
         """执行 armup.py 抓取目标物。"""
         script = str(Path(self._gs_arm_dir) / "armup.py")
@@ -388,11 +409,16 @@ class GraspStateMachineMixin:
                 args = [sys.executable, script]
                 if self._gs_net_iface:
                     args.append(self._gs_net_iface)
+                env = self._gs_arm_env()
                 self._log_info(f"[抓取] 命令: {' '.join(args)}")
+                if self._gs_cyclonedds_home:
+                    self._log_info(f"[抓取] CYCLONEDDS_HOME={self._gs_cyclonedds_home}")
+                if self._gs_sdk_python_path:
+                    self._log_info(f"[抓取] PYTHONPATH+={self._gs_sdk_python_path}")
                 proc = subprocess.run(
                     args, input=b"\n",
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    timeout=120,
+                    timeout=120, env=env,
                 )
                 # 不论成功失败都打印输出
                 _dump_output(proc.stdout, "error" if proc.returncode != 0 else "info")
@@ -425,11 +451,12 @@ class GraspStateMachineMixin:
             args = [sys.executable, script]
             if self._gs_net_iface:
                 args.append(self._gs_net_iface)
+            env = self._gs_arm_env()
             self._log_info(f"[放下] 命令: {' '.join(args)}")
             proc = subprocess.run(
                 args, input=b"\n",
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                timeout=120,
+                timeout=120, env=env,
             )
             # 不论成功失败都打印输出
             if proc.stdout:

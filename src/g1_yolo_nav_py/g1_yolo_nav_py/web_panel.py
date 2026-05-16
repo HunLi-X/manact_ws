@@ -517,8 +517,10 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         "align_stable_time":  ("approach.align_stable_time",   float, "居中稳定时长 (s)"),
         # 流编码参数
         "stream_quality": ("_sq", int, "JPEG 质量 (1-100)"),
-        # 全局参数：网络接口（DDS / unitree_sdk2py / arm 子进程共用）+ 脚本目录
-        "network_interface": ("_gs_net_iface", str, "全局网络接口（DDS / SDK / arm 子进程共用，如 eth0/wlan0）"),
+        # 全局参数：网络接口 + DDS 路径 + 脚本目录
+        "network_interface": ("_gs_net_iface", str, "全局网络接口（DDS / SDK / arm 子进程共用，如 eth0）"),
+        "cyclonedds_home":   ("_gs_cyclonedds_home", str, "CycloneDDS 安装目录（CYCLONEDDS_HOME 环境变量）"),
+        "sdk_python_path":   ("_gs_sdk_python_path", str, "unitree_sdk2_python 目录（加入子进程 PYTHONPATH）"),
         "arm_script_dir":    ("_gs_arm_dir",   str, "arm 脚本目录（armup.py / armdown.py 所在目录）"),
     }
 
