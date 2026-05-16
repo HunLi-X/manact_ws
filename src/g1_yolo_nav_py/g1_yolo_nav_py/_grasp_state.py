@@ -369,24 +369,41 @@ class GraspStateMachineMixin:
 
         self._log_info("[抓取] 执行 armup.py ...")
 
+        def _dump_output(stdout_bytes, level="info"):
+            """把 subprocess 输出按行打到日志（保证错误可见）。"""
+            if not stdout_bytes:
+                return
+            try:
+                text = stdout_bytes.decode(errors="replace")
+            except Exception:
+                return
+            for line in text.splitlines():
+                if line.strip():
+                    if level == "error":
+                        self._log_error(f"[armup] {line}")
+                    else:
+                        self._log_info(f"[armup] {line}")
+
         def _worker():
             try:
                 args = [sys.executable, script]
                 if self._gs_net_iface:
                     args.append(self._gs_net_iface)
+                self._log_info(f"[抓取] 命令: {' '.join(args)}")
                 proc = subprocess.run(
-                    args, check=True, input=b"\n",
+                    args, input=b"\n",
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     timeout=120,
                 )
-                if proc.stdout:
-                    for line in proc.stdout.decode(errors="replace").splitlines():
-                        self._log_info(f"[armup] {line}")
-                self._log_info("[抓取] armup.py 执行完成")
-            except subprocess.TimeoutExpired:
+                # 不论成功失败都打印输出
+                _dump_output(proc.stdout, "error" if proc.returncode != 0 else "info")
+                if proc.returncode != 0:
+                    self._log_error(f"[抓取] armup.py 执行失败: 返回码={proc.returncode}")
+                else:
+                    self._log_info("[抓取] armup.py 执行完成")
+            except subprocess.TimeoutExpired as e:
+                _dump_output(getattr(e, "stdout", None), "error")
                 self._log_error("[抓取] armup.py 超时（120秒）")
-            except subprocess.CalledProcessError as e:
-                self._log_error(f"[抓取] armup.py 执行失败: 返回码={e.returncode}")
             except Exception as e:
                 self._log_error(f"[抓取] armup.py 异常: {e}")
             finally:
