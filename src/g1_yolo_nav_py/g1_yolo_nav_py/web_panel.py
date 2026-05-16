@@ -517,6 +517,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         "align_stable_time":  ("approach.align_stable_time",   float, "居中稳定时长 (s)"),
         # 流编码参数
         "stream_quality": ("_sq", int, "JPEG 质量 (1-100)"),
+        # 全局参数：网络接口（DDS / unitree_sdk2py / arm 子进程共用）+ 脚本目录
+        "network_interface": ("_gs_net_iface", str, "全局网络接口（DDS / SDK / arm 子进程共用，如 eth0/wlan0）"),
+        "arm_script_dir":    ("_gs_arm_dir",   str, "arm 脚本目录（armup.py / armdown.py 所在目录）"),
     }
 
     def get_config(self) -> dict:

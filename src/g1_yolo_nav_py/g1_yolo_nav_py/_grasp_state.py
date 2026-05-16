@@ -169,9 +169,8 @@ class GraspStateMachineMixin:
         # network_interface: 优先使用函数参数，否则从 ROS 参数读取
         self._gs_net_iface = network_interface or p("network_interface")
 
-        arm_dir = p("arm_script_dir")
-        self._gs_armup_script = Path(arm_dir) / "armup.py"
-        self._gs_armdown_script = Path(arm_dir) / "armdown.py"
+        # arm 脚本目录（用 property 管理，便于运行时动态切换）
+        self._gs_arm_dir = p("arm_script_dir")
 
         self._sport = SportClient(node)
 
@@ -360,7 +359,7 @@ class GraspStateMachineMixin:
 
     def _gs_run_grab(self) -> None:
         """执行 armup.py 抓取目标物。"""
-        script = str(self._gs_armup_script)
+        script = str(Path(self._gs_arm_dir) / "armup.py")
         if not Path(script).exists():
             self._log_error(f"[抓取] armup.py 不存在: {script}")
             self.gs_state = GraspState.MENU
@@ -415,7 +414,7 @@ class GraspStateMachineMixin:
 
     def _gs_run_armdown(self) -> None:
         """执行 armdown.py 放下目标物。"""
-        script = str(self._gs_armdown_script)
+        script = str(Path(self._gs_arm_dir) / "armdown.py")
         if not Path(script).exists():
             self._log_error(f"[放下] armdown.py 不存在: {script}")
             return

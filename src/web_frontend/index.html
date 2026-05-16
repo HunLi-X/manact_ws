@@ -898,6 +898,16 @@
                 <input type="number" step="0.1" min="0.1" max="10" data-key="side_step_duration" />
                 <span class="field-help">侧移持续时间，决定平移距离</span>
               </label>
+              <label class="field-full">
+                <span class="field-label">网络接口 network_interface</span>
+                <input type="text" data-key="network_interface" placeholder="eth0 / wlan0 / enp3s0" />
+                <span class="field-help">全局网络接口，DDS / unitree_sdk2py / arm 子进程共用。修改后下一次启动相关组件生效。</span>
+              </label>
+              <label class="field-full">
+                <span class="field-label">arm 脚本目录 arm_script_dir</span>
+                <input type="text" data-key="arm_script_dir" placeholder="自动检测" />
+                <span class="field-help">armup.py / armdown.py 所在目录绝对路径。留空使用自动检测的默认值。</span>
+              </label>
               <div class="form-actions field-full">
                 <button type="button" class="btn btn-primary" data-save="motion">保存</button>
               </div>
