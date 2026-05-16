@@ -46,6 +46,25 @@ def _collect_web_frontend():
     return result
 
 
+def _collect_arm_scripts():
+    """收集 arm/ 下所有脚本，打包到 share/g1_yolo_nav_py/arm/。
+
+    arm/ 目录与 setup.py 同级（src/g1_yolo_nav_py/arm/）。
+    返回相对路径（colcon 要求）。
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    arm_dir = os.path.join(here, "arm")
+    if not os.path.isdir(arm_dir):
+        return []
+    paths = []
+    for f in os.listdir(arm_dir):
+        if f.endswith(".py"):
+            paths.append("arm/" + f)
+    if not paths:
+        return []
+    return [("share/" + package_name + "/arm", paths)]
+
+
 setup(
     name=package_name,
     version="0.1.0",
@@ -56,7 +75,7 @@ setup(
         ("share/" + package_name + "/launch", glob.glob("launch/*.launch.py")),
         ("share/" + package_name + "/config", glob.glob("config/*.yaml")),
         ("share/" + package_name + "/models", glob.glob("*.pt")),
-    ] + _collect_web_frontend(),
+    ] + _collect_arm_scripts() + _collect_web_frontend(),
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="developer",

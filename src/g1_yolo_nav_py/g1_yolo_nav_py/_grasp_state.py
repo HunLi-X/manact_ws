@@ -48,7 +48,54 @@ class GraspState(Enum):
     MENU = auto()        # 交互菜单
     DONE = auto()        # 任务完成（grasp_task 专用）
 
-_DEFAULT_ARM_DIR = os.path.expanduser("~/g1act_ws/manact_ws/src/g1_yolo_nav_py/arm")
+def _resolve_arm_dir():
+    """按优先级查找 arm 脚本目录（无硬编码绝对路径，便于迁移）：
+
+    1. 环境变量 G1_ARM_DIR（手动覆盖，绝对路径或相对路径均可）
+    2. 安装目录：ament_index 的 share/g1_yolo_nav_py/arm/（colcon build 后）
+    3. 开发源码树：从当前 .py 文件向上找 src/g1_yolo_nav_py/arm/
+       （兼容任意工作空间名称，例如 manact_ws / g1act_ws / 任意自定义名）
+
+    返回：绝对路径（os.path.abspath），无脚本时返回 ""。
+    """
+    candidates = []
+
+    env = os.environ.get("G1_ARM_DIR")
+    if env:
+        candidates.append(os.path.abspath(os.path.expanduser(env)))
+
+    # ament_index：colcon install 后由 setup.py 打包进来
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share = get_package_share_directory("g1_yolo_nav_py")
+        candidates.append(os.path.join(share, "arm"))
+    except Exception:
+        pass
+
+    # 开发源码树：从当前文件位置向上找 src/g1_yolo_nav_py/arm
+    # 当前文件位置：<ws>/src/g1_yolo_nav_py/g1_yolo_nav_py/_grasp_state.py
+    # 目标位置：    <ws>/src/g1_yolo_nav_py/arm/
+    here = os.path.dirname(os.path.abspath(__file__))
+    p = here
+    for _ in range(8):
+        cand = os.path.join(p, "arm")
+        if os.path.isfile(os.path.join(cand, "armup.py")):
+            candidates.append(cand)
+            break
+        parent = os.path.dirname(p)
+        if parent == p:
+            break
+        p = parent
+
+    for c in candidates:
+        if c and os.path.isfile(os.path.join(c, "armup.py")):
+            return c
+
+    # 全部找不到时返回第一个候选（或 share 占位），让调用方看到清晰报错
+    return candidates[0] if candidates else ""
+
+
+_DEFAULT_ARM_DIR = _resolve_arm_dir()
 
 class GraspStateMachineMixin:
     """抓取任务状态机混入类 — 提供共享的状态机逻辑。
