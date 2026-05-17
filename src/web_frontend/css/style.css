@@ -150,21 +150,48 @@ html, body {
 /*                         全局布局                                         */
 /* ====================================================================== */
 .app-layout {
+  --sidebar-w: 240px;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100vh;
   position: relative;
   z-index: 1;
+  transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 手动折叠：侧边栏收缩到 64px（通过 CSS 变量驱动，sidebar/topbar 同步过渡） */
+.app-layout.sidebar-collapsed { --sidebar-w: 64px; }
+.app-layout.sidebar-collapsed .sidebar .nav-label,
+.app-layout.sidebar-collapsed .sidebar .brand-text,
+.app-layout.sidebar-collapsed .sidebar .nav-badge,
+.app-layout.sidebar-collapsed .footer-pulse,
+.app-layout.sidebar-collapsed .footer-version,
+.app-layout.sidebar-collapsed .sidebar-toggle-label { display: none; }
+.app-layout.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 16px 0; }
+.app-layout.sidebar-collapsed .nav-item { justify-content: center; padding: 12px 0; }
+.app-layout.sidebar-collapsed .sidebar-toggle {
+  width: 40px;
+  margin: 6px auto 4px;
+  justify-content: center;
+  padding: 10px 0;
 }
 
 @media (max-width: 900px) {
-  .app-layout { grid-template-columns: 64px 1fr; }
+  .app-layout { --sidebar-w: 64px; }
   .sidebar .nav-label,
   .sidebar .brand-text,
   .sidebar .nav-badge,
-  .sidebar-footer { display: none; }
+  .footer-pulse,
+  .footer-version,
+  .sidebar-toggle-label { display: none; }
   .sidebar-brand { justify-content: center; padding: 16px 0; }
   .nav-item { justify-content: center; padding: 12px 0; }
+  .sidebar-toggle {
+    width: 40px;
+    margin: 6px auto 4px;
+    justify-content: center;
+    padding: 10px 0;
+  }
 }
 
 .main-wrap {
@@ -294,8 +321,8 @@ html, body {
   /* fixed 真正固定在视口顶端，不受父容器 transform 影响 */
   position: fixed;
   top: 14px;
-  /* 配合 sidebar 240px + main-wrap padding-x 24px：left=264, right=24 */
-  left: calc(240px + 24px);
+  /* 配合 sidebar 宽度 + main-wrap padding-x 24px：sidebar + 24 */
+  left: calc(var(--sidebar-w, 240px) + 24px);
   right: 24px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.55);
@@ -306,12 +333,50 @@ html, body {
     inset 1px 1px 1px rgba(255, 255, 255, 0.7),
     0 8px 24px rgba(15, 23, 42, 0.06);
   z-index: 20;
-}
-@media (max-width: 900px) {
-  .topbar { left: calc(64px + 24px); }
+  transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.topbar-left { flex-shrink: 0; }
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.topbar-title-block { min-width: 0; }
+
+/* 侧边栏底部折叠按钮（仿 nav-item 风格） */
+.sidebar-toggle {
+  width: calc(100% - 16px);
+  margin: 6px 8px 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.6);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: #C2410C;
+}
+.sidebar-toggle:hover .sidebar-toggle-icon { color: #F97316; }
+.sidebar-toggle:active { transform: scale(0.98); }
+.sidebar-toggle svg { width: 18px; height: 18px; stroke-width: 2; }
+.sidebar-toggle-icon {
+  display: inline-flex;
+  width: 22px;
+  flex-shrink: 0;
+  color: rgba(15, 23, 42, 0.55);
+  transition: color 0.18s;
+}
+.sidebar-toggle-label { flex: 1; text-align: left; }
 
 /* 顶栏中段嵌入式 TOC（默认隐藏，body.settings-active 时显示） */
 .topbar-toc {
@@ -1121,6 +1186,50 @@ body.settings-active .topbar-toc { display: flex; }
     0 10px 26px rgba(239, 68, 68, 0.55) !important;
 }
 
+/* 旋转按钮行（左转 / 右转）— 与 D-Pad 风格协调 */
+.rotate-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 264px;
+}
+.rotate-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 48px;
+  border: none;
+  cursor: pointer;
+  border-radius: 14px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(79, 70, 229, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.15),
+    inset -1px -2px 2px rgba(0, 0, 0, 0.18),
+    0 6px 14px rgba(79, 70, 229, 0.35);
+  transition: transform 0.12s, box-shadow 0.18s, background 0.18s;
+}
+.rotate-btn svg {
+  width: 20px; height: 20px; stroke-width: 2.5;
+}
+.rotate-btn:hover {
+  background: linear-gradient(135deg, #818CF8 0%, #6366F1 100%);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.2),
+    inset -1px -2px 2px rgba(0, 0, 0, 0.2),
+    0 10px 22px rgba(99, 102, 241, 0.5);
+  transform: translateY(-2px);
+}
+.rotate-btn:active {
+  transform: scale(0.96);
+  box-shadow:
+    inset 1px 2px 4px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(15, 23, 42, 0.2);
+}
+
 /* ====================================================================== */
 /* 视图：节点管理 — 垂直卡片堆叠                                             */
 /* ====================================================================== */
@@ -1799,6 +1908,34 @@ body.settings-active .topbar-toc { display: flex; }
 
 .group-title { font-size: 15px; font-weight: 700; color: #0F172A; line-height: 1.2; }
 .group-sub { font-size: 11px; color: rgba(15, 23, 42, 0.45); margin-top: 3px; }
+
+/* 子分组（合并卡片内的二级标题 + 分隔线） */
+.subgroup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.78);
+}
+.subgroup-title svg { width: 16px; height: 16px; stroke-width: 2.2; opacity: 0.65; }
+.subgroup-title [data-icon] { display: inline-flex; }
+.subgroup-title .subgroup-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(15, 23, 42, 0.42);
+  margin-left: 4px;
+}
+.subgroup-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    rgba(15, 23, 42, 0) 0%,
+    rgba(15, 23, 42, 0.08) 25%,
+    rgba(15, 23, 42, 0.08) 75%,
+    rgba(15, 23, 42, 0) 100%);
+  margin: 6px 0;
+}
 
 .settings-form {
   display: flex;

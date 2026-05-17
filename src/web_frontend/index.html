@@ -81,6 +81,10 @@
     </nav>
 
     <div class="sidebar-footer">
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" title="收起侧边栏" aria-label="切换侧边栏">
+        <span class="sidebar-toggle-icon" data-icon="panel-left-close"></span>
+        <span class="sidebar-toggle-label">收起</span>
+      </button>
       <div class="footer-pulse">
         <span class="pulse-dot"></span>
         <span id="conn-label">已连接</span>
@@ -101,33 +105,21 @@
       <!-- 设置页 TOC（嵌入 topbar 中段，仅 settings 视图显示） -->
       <nav class="topbar-toc" id="topbar-toc">
         <div class="toc-title" data-icon="lightbulb" title="目录"></div>
-        <a href="#sg-detect" class="toc-link" data-toc="sg-detect">
-          <span class="toc-icon group-icon-red" data-icon="search"></span>
-          <span class="toc-label">检测</span>
+        <a href="#sg-detect-align" class="toc-link" data-toc="sg-detect-align">
+          <span class="toc-icon group-icon-red" data-icon="crosshair"></span>
+          <span class="toc-label">检测与对齐</span>
         </a>
-        <a href="#sg-align" class="toc-link" data-toc="sg-align">
-          <span class="toc-icon group-icon-amber" data-icon="crosshair"></span>
-          <span class="toc-label">对齐</span>
-        </a>
-        <a href="#sg-motion" class="toc-link" data-toc="sg-motion">
+        <a href="#sg-motion-camera" class="toc-link" data-toc="sg-motion-camera">
           <span class="toc-icon group-icon-blue" data-icon="gamepad"></span>
-          <span class="toc-label">运动</span>
-        </a>
-        <a href="#sg-camera" class="toc-link" data-toc="sg-camera">
-          <span class="toc-icon group-icon-blue" data-icon="camera"></span>
-          <span class="toc-label">相机</span>
-        </a>
-        <a href="#sg-ui" class="toc-link" data-toc="sg-ui">
-          <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
-          <span class="toc-label">偏好</span>
+          <span class="toc-label">运动与相机</span>
         </a>
         <a href="#sg-env" class="toc-link" data-toc="sg-env">
           <span class="toc-icon group-icon-amber" data-icon="server"></span>
-          <span class="toc-label">环境</span>
+          <span class="toc-label">系统环境</span>
         </a>
-        <a href="#sg-bg" class="toc-link" data-toc="sg-bg">
-          <span class="toc-icon group-icon-blue" data-icon="image"></span>
-          <span class="toc-label">背景</span>
+        <a href="#sg-ui-bg" class="toc-link" data-toc="sg-ui-bg">
+          <span class="toc-icon group-icon-emerald" data-icon="palette"></span>
+          <span class="toc-label">偏好与背景</span>
         </a>
       </nav>
 
@@ -433,13 +425,13 @@
                 <span data-icon="chevron-up"></span>
               </button>
               <div></div>
-              <button class="dpad-btn dpad-left" data-dcmd="left" aria-label="左转">
+              <button class="dpad-btn dpad-left" data-dcmd="left" aria-label="左移">
                 <span data-icon="chevron-left"></span>
               </button>
               <button class="dpad-btn dpad-stop" data-dcmd="stop" aria-label="停止">
                 <span data-icon="square"></span>
               </button>
-              <button class="dpad-btn dpad-right" data-dcmd="right" aria-label="右转">
+              <button class="dpad-btn dpad-right" data-dcmd="right" aria-label="右移">
                 <span data-icon="chevron-right"></span>
               </button>
               <div></div>
@@ -447,6 +439,17 @@
                 <span data-icon="chevron-down"></span>
               </button>
               <div></div>
+            </div>
+
+            <div class="rotate-row">
+              <button class="rotate-btn" data-dcmd="turn_left" aria-label="左转">
+                <span data-icon="rotate-ccw"></span>
+                <span class="rotate-label">左转</span>
+              </button>
+              <button class="rotate-btn" data-dcmd="turn_right" aria-label="右转">
+                <span data-icon="rotate-cw"></span>
+                <span class="rotate-label">右转</span>
+              </button>
             </div>
           </div>
         </div>
@@ -464,7 +467,8 @@
           <div class="pad-panel">
             <div class="pad-panel-title">提示</div>
             <ul class="pad-tips-list">
-              <li>▲▼ 前后，◄► 左右转</li>
+              <li>▲▼ 前后，◄► 左右平移</li>
+              <li>↺↻ 原地左转 / 右转</li>
               <li>■ 停止所有运动</li>
               <li>vyaw = 2 × 线速度</li>
             </ul>
@@ -777,14 +781,20 @@
 
           <div class="settings-grid">
 
-          <!-- 检测识别 -->
-          <div class="settings-group" id="sg-detect">
+          <!-- 1. 检测与对齐 -->
+          <div class="settings-group" id="sg-detect-align">
             <div class="settings-group-head">
-              <div class="group-icon group-icon-red" data-icon="search"></div>
+              <div class="group-icon group-icon-red" data-icon="crosshair"></div>
               <div>
-                <div class="group-title">检测识别</div>
-                <div class="group-sub">目标类别、深度距离判断</div>
+                <div class="group-title">检测与对齐</div>
+                <div class="group-sub">目标识别 + 步进式偏航对齐</div>
               </div>
+            </div>
+
+            <div class="subgroup-title" data-icon="search">
+              <span data-icon="search"></span>
+              <span>检测识别</span>
+              <span class="subgroup-sub">目标类别、深度距离判断</span>
             </div>
             <form class="settings-form form-2col" data-settings-group="detect">
               <label class="field-full">
@@ -813,19 +823,16 @@
                 <input type="number" step="0.5" min="0.5" max="30" data-key="lost_timeout" />
               </label>
               <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" data-save="detect">保存</button>
+                <button type="button" class="btn btn-primary" data-save="detect">保存检测</button>
               </div>
             </form>
-          </div>
 
-          <!-- 对齐控制 -->
-          <div class="settings-group" id="sg-align">
-            <div class="settings-group-head">
-              <div class="group-icon group-icon-amber" data-icon="crosshair"></div>
-              <div>
-                <div class="group-title">对齐控制</div>
-                <div class="group-sub">步进式偏航对齐参数</div>
-              </div>
+            <div class="subgroup-divider"></div>
+
+            <div class="subgroup-title">
+              <span data-icon="crosshair"></span>
+              <span>对齐控制</span>
+              <span class="subgroup-sub">步进式偏航对齐参数</span>
             </div>
             <form class="settings-form form-2col" data-settings-group="align">
               <label>
@@ -851,19 +858,25 @@
                 <span class="field-help">归一化，越小越严格</span>
               </label>
               <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" data-save="align">保存</button>
+                <button type="button" class="btn btn-primary" data-save="align">保存对齐</button>
               </div>
             </form>
           </div>
 
-          <!-- 运动控制 -->
-          <div class="settings-group" id="sg-motion">
+          <!-- 2. 运动与相机 -->
+          <div class="settings-group" id="sg-motion-camera">
             <div class="settings-group-head">
               <div class="group-icon group-icon-blue" data-icon="gamepad"></div>
               <div>
-                <div class="group-title">运动控制</div>
-                <div class="group-sub">前进、搜索、转身、左移</div>
+                <div class="group-title">运动与相机</div>
+                <div class="group-sub">前进 / 转身 / 侧移 + 相机驱动参数</div>
               </div>
+            </div>
+
+            <div class="subgroup-title">
+              <span data-icon="gamepad"></span>
+              <span>运动控制</span>
+              <span class="subgroup-sub">前进、搜索、转身、左移</span>
             </div>
             <form class="settings-form form-2col" data-settings-group="motion">
               <label>
@@ -903,12 +916,47 @@
                 <span class="field-help">侧移持续时间，决定平移距离</span>
               </label>
               <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" data-save="motion">保存</button>
+                <button type="button" class="btn btn-primary" data-save="motion">保存运动</button>
+              </div>
+            </form>
+
+            <div class="subgroup-divider"></div>
+
+            <div class="subgroup-title">
+              <span data-icon="camera"></span>
+              <span>相机驱动</span>
+              <span class="subgroup-sub">RealSense ros2 launch 参数</span>
+            </div>
+            <form class="settings-form form-2col" data-settings-group="camera">
+              <label>
+                <span class="field-label">camera_namespace</span>
+                <input type="text" data-camera-key="camera_namespace" />
+                <span class="field-help">话题前缀，如 robot1</span>
+              </label>
+              <label>
+                <span class="field-label">camera_name</span>
+                <input type="text" data-camera-key="camera_name" />
+                <span class="field-help">设备名称，如 D455_1</span>
+              </label>
+              <label class="field-inline field-full">
+                <span class="field-label">align_depth.enable</span>
+                <label class="toggle">
+                  <input type="checkbox" data-camera-key="align_depth.enable" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </label>
+              <div class="field-help field-full">提示：参数仅在「下次启动」时生效。修改后需先停止再启动。</div>
+              <div class="form-actions field-full">
+                <button type="button" class="btn btn-primary" onclick="saveCameraParams()">保存相机参数</button>
+                <button type="button" class="btn btn-outline-brand" onclick="reloadCameraParams()">
+                  <span data-icon="refresh-cw" class="btn-icon"></span>
+                  <span>读取当前</span>
+                </button>
               </div>
             </form>
           </div>
 
-          <!-- 系统环境 -->
+          <!-- 3. 系统环境 -->
           <div class="settings-group" id="sg-env">
             <div class="settings-group-head">
               <div class="group-icon group-icon-amber" data-icon="server"></div>
@@ -952,52 +1000,20 @@
             </form>
           </div>
 
-          <!-- 相机驱动参数 -->
-          <div class="settings-group" id="sg-camera">
-            <div class="settings-group-head">
-              <div class="group-icon group-icon-blue" data-icon="camera"></div>
-              <div>
-                <div class="group-title">相机驱动</div>
-                <div class="group-sub">RealSense ros2 launch 参数</div>
-              </div>
-            </div>
-            <form class="settings-form form-2col" data-settings-group="camera">
-              <label>
-                <span class="field-label">camera_namespace</span>
-                <input type="text" data-camera-key="camera_namespace" />
-                <span class="field-help">话题前缀，如 robot1</span>
-              </label>
-              <label>
-                <span class="field-label">camera_name</span>
-                <input type="text" data-camera-key="camera_name" />
-                <span class="field-help">设备名称，如 D455_1</span>
-              </label>
-              <label class="field-inline field-full">
-                <span class="field-label">align_depth.enable</span>
-                <label class="toggle">
-                  <input type="checkbox" data-camera-key="align_depth.enable" />
-                  <span class="toggle-slider"></span>
-                </label>
-              </label>
-              <div class="field-help field-full">提示：参数仅在「下次启动」时生效。修改后需先停止再启动。</div>
-              <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" onclick="saveCameraParams()">保存参数</button>
-                <button type="button" class="btn btn-outline-brand" onclick="reloadCameraParams()">
-                  <span data-icon="refresh-cw" class="btn-icon"></span>
-                  <span>读取当前</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <!-- 界面偏好 -->
-          <div class="settings-group" id="sg-ui">
+          <!-- 4. 偏好与背景 -->
+          <div class="settings-group" id="sg-ui-bg">
             <div class="settings-group-head">
               <div class="group-icon group-icon-emerald" data-icon="palette"></div>
               <div>
-                <div class="group-title">界面偏好</div>
-                <div class="group-sub">视频流 + UI 外观（本地保存）</div>
+                <div class="group-title">偏好与背景</div>
+                <div class="group-sub">界面外观 + 动态壁纸（本地保存）</div>
               </div>
+            </div>
+
+            <div class="subgroup-title">
+              <span data-icon="palette"></span>
+              <span>界面偏好</span>
+              <span class="subgroup-sub">视频流 + UI 外观（本地保存）</span>
             </div>
             <form class="settings-form form-2col" data-settings-group="ui">
               <label>
@@ -1028,20 +1044,17 @@
                 <span class="field-help">保存在浏览器本地，刷新生效</span>
               </label>
               <div class="form-actions field-full">
-                <button type="button" class="btn btn-primary" data-save="ui">保存</button>
+                <button type="button" class="btn btn-primary" data-save="ui">保存偏好</button>
                 <button type="button" class="btn btn-outline-danger" onclick="resetLocalPrefs()">重置本地</button>
               </div>
             </form>
-          </div>
 
-          <!-- 动态背景 -->
-          <div class="settings-group" id="sg-bg">
-            <div class="settings-group-head">
-              <div class="group-icon group-icon-blue" data-icon="image"></div>
-              <div>
-                <div class="group-title">动态背景</div>
-                <div class="group-sub">自定义壁纸 / 在线壁纸源（本地保存）</div>
-              </div>
+            <div class="subgroup-divider"></div>
+
+            <div class="subgroup-title">
+              <span data-icon="image"></span>
+              <span>动态背景</span>
+              <span class="subgroup-sub">自定义壁纸 / 在线壁纸源（本地保存）</span>
             </div>
             <form class="settings-form form-2col" data-settings-group="bg">
               <label class="field-full">

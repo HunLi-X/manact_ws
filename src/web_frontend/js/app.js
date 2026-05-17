@@ -23,6 +23,9 @@ const ICONS = {
   // 任务按钮
   'package':      '<svg viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
   'rotate-cw':    '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+  'rotate-ccw':   '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+  'panel-left-close':  '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>',
+  'panel-left-open':   '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>',
   'arrow-left':   '<svg viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>',
   'square':       '<svg viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>',
   'trash-2':      '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>',
@@ -58,6 +61,42 @@ function renderIcons(root = document) {
 }
 
 renderIcons();
+
+
+// ======================================================================
+// 侧边栏折叠 / 展开（持久化到 localStorage）
+// ======================================================================
+const SIDEBAR_KEY = 'g1.sidebar.collapsed';
+function applySidebarState(collapsed) {
+  const layout = document.querySelector('.app-layout');
+  if (!layout) return;
+  layout.classList.toggle('sidebar-collapsed', !!collapsed);
+  // 切换按钮图标 + 标题
+  const btn = document.getElementById('sidebar-toggle');
+  if (btn) {
+    const iconEl = btn.querySelector('.sidebar-toggle-icon');
+    if (iconEl) {
+      iconEl.dataset.icon = collapsed ? 'panel-left-open' : 'panel-left-close';
+      iconEl.innerHTML = ICONS[iconEl.dataset.icon] || '';
+    }
+    btn.title = collapsed ? '展开侧边栏' : '收起侧边栏';
+    btn.setAttribute('aria-label', btn.title);
+  }
+}
+(function initSidebarToggle() {
+  // 启动时读取本地状态
+  const saved = localStorage.getItem(SIDEBAR_KEY) === '1';
+  applySidebarState(saved);
+
+  const btn = document.getElementById('sidebar-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const layout = document.querySelector('.app-layout');
+    const next = !layout.classList.contains('sidebar-collapsed');
+    applySidebarState(next);
+    try { localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0'); } catch (_) {}
+  });
+})();
 
 
 // ======================================================================
@@ -168,6 +207,9 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
 });
 
 // 方向盘按钮（data-dcmd）— 运动控制模块
+//   forward/backward → vx (前后)
+//   left/right       → vy (左/右平移，vy>0=左)
+//   turn_left/turn_right → vyaw (原地左转/右转，vyaw>0=左转)
 document.querySelectorAll('[data-dcmd]').forEach(btn => {
   btn.addEventListener('click', () => {
     const cmd = btn.dataset.dcmd;
@@ -175,11 +217,13 @@ document.querySelectorAll('[data-dcmd]').forEach(btn => {
     const vyaw = v * 2.0;
     let vx = 0, vy = 0, vyawOut = 0;
     switch (cmd) {
-      case 'forward':  vx =  v; break;
-      case 'backward': vx = -v; break;
-      case 'left':     vyawOut =  vyaw; break;
-      case 'right':    vyawOut = -vyaw; break;
-      case 'stop':     postCmd('/api/cmd/stop'); return;
+      case 'forward':    vx =  v; break;
+      case 'backward':   vx = -v; break;
+      case 'left':       vy =  v; break;
+      case 'right':      vy = -v; break;
+      case 'turn_left':  vyawOut =  vyaw; break;
+      case 'turn_right': vyawOut = -vyaw; break;
+      case 'stop':       postCmd('/api/cmd/stop'); return;
     }
     postCmd('/api/cmd/manual', { vx, vy, vyaw: vyawOut });
     // 立即更新速度映射显示（乐观更新）
