@@ -151,15 +151,12 @@ html, body {
 /* ====================================================================== */
 .app-layout {
   --sidebar-w: 240px;
-  display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
-  min-height: 100vh;
   position: relative;
+  min-height: 100vh;
   z-index: 1;
-  transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 手动折叠：侧边栏收缩到 64px（通过 CSS 变量驱动，sidebar/topbar 同步过渡） */
+/* 手动折叠：侧边栏收缩到 64px（通过 CSS 变量驱动，sidebar/topbar/main 同步过渡） */
 .app-layout.sidebar-collapsed { --sidebar-w: 64px; }
 .app-layout.sidebar-collapsed .sidebar .nav-label,
 .app-layout.sidebar-collapsed .sidebar .brand-text,
@@ -197,7 +194,9 @@ html, body {
 .main-wrap {
   /* 顶部留出 fixed topbar 的空间：14 (顶) + ~76 (高) + 22 (间距) ≈ 112px */
   padding: 112px 24px 24px;
+  margin-left: var(--sidebar-w, 240px);
   overflow-x: hidden;
+  transition: margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ====================================================================== */
@@ -210,10 +209,15 @@ html, body {
   border-right: 1px solid rgba(255, 255, 255, 0.5);
   display: flex;
   flex-direction: column;
-  position: sticky;
+  position: fixed;
   top: 0;
-  height: 100vh;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w, 240px);
+  z-index: 15;
   box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.4);
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .sidebar-brand {
@@ -240,7 +244,9 @@ html, body {
 .brand-text .brand-title { font-weight: 700; color: #0F172A; font-size: 15px; line-height: 1.2; }
 .brand-text .brand-sub { font-size: 11px; color: rgba(15, 23, 42, 0.55); margin-top: 2px; }
 
-.sidebar-nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 3px; }
+.sidebar-nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overflow-x: hidden; }
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.12); border-radius: 2px; }
 
 .nav-item {
   display: flex; align-items: center; gap: 12px;
