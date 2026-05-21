@@ -660,6 +660,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         prev = self._gs_state
         self.gs_state = GraspState.IDLE
         self._sport.stop()
+        self._gs_reset_detection()
         self._gs_aligner.reset()
         self._gs_approach.reset()
         self._log_info(f"[停止] {prev.name} → IDLE")
@@ -668,6 +669,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             raise RuntimeError("请先停止当前任务")
         self.gs_state = GraspState.WORKING
+        self._gs_reset_detection()
         self._gs_aligned = False
         self._gs_aligner.reset()
         self._gs_approach.reset()
