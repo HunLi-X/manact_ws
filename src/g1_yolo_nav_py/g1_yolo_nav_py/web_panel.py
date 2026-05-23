@@ -669,6 +669,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             raise RuntimeError("请先停止当前任务")
         self.gs_state = GraspState.WORKING
         self._gs_aligned = False
+        self._gs_search_started = True
         self._gs_aligner.reset()
         self._gs_approach.reset()
         self._log_info(f"[搜索] 开始搜索 '{self._gs_target_class}'")

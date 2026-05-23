@@ -213,6 +213,7 @@ class GraspStateMachineMixin:
         self._gs_last_detect_time: float = 0.0
         self._gs_state: GraspState = start_state
         self._gs_aligned: bool = False        # 目标已居中（用于对齐完成日志）
+        self._gs_search_started: bool = False  # 搜索刚启动，首次 tick 需先停止对齐
 
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -321,8 +322,17 @@ class GraspStateMachineMixin:
             self._gs_aligned = False
             self._gs_aligner.reset()
             self._gs_approach.reset()
-            self._sport.move(vyaw=self._gs_search_speed)
+            if self._gs_search_started:
+                self._gs_search_started = False
+                self._sport.stop()
+                self._log_info("[工作] 已对齐，开始旋转搜索")
+            else:
+                self._sport.move(vyaw=self._gs_search_speed)
             return
+
+        if self._gs_search_started:
+            self._gs_search_started = False
+            self._log_info("[工作] 搜索启动，开始对齐目标")
 
         action, extra = self._gs_aligner.tick(self._gs_target_u)
 
