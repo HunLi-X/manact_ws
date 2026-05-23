@@ -535,8 +535,11 @@ class GraspStateMachineMixin:
     def _gs_do_turn_and_put_down(self) -> None:
         """右转 90° 后放下目标物。"""
         self._log_info("[右转] 开始右转 90° ...")
-        self._sport.move(vyaw=-self._gs_turn_speed)
-        time.sleep(self._gs_turn_duration)
+        # 分多次发布以保证旋转期间持续收到速度指令（Loco API 默认 duration=1.0s）
+        end_time = time.time() + self._gs_turn_duration
+        while time.time() < end_time:
+            self._sport.move(vyaw=-self._gs_turn_speed)
+            time.sleep(0.1)
         self._sport.stop()
         self._log_info("[右转] 右转完成")
         self._gs_do_put_down()

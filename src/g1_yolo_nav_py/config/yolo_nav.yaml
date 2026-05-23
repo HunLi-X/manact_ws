@@ -5,13 +5,14 @@
 # ---- YOLO 检测节点参数 ----
 g1_yolo_detector_node:
   ros__parameters:
-    model_path: "yolo_v11x_best.pt"           # YOLO 模型文件路径
+    model_path: "yolo_v11s_best.pt"           # YOLO 模型文件路径（s=快速，x=高精度）
     confidence_threshold: 0.25                # 检测置信度阈值
     nms_threshold: 0.45                       # NMS IoU 阈值
     input_image_topic: "/D455_1/color/image_raw"  # D455 彩色图像话题
     output_detection_topic: "/g1/vision/detections"  # 检测结果话题
     target_classes: ["chair"]                   # 目标类别名称（也支持数字 ID）
     max_image_size: 640                       # 推理图像尺寸
+    skip_frames: 3                            # 跳帧：每 N 帧推理一次（1=不跳，3=每3帧推理1次）
 
 # ---- 空间投影节点参数 ----
 g1_spatial_target_node:

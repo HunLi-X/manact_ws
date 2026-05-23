@@ -46,6 +46,7 @@ class YoloDetectorNode(Node):
         self.declare_parameter("max_image_size", 640)
         self.declare_parameter("use_tta", False)  # 测试时增强（TTA），提高精度但降低帧率
         self.declare_parameter("clahe_enabled", True)  # CLAHE 对比度增强
+        self.declare_parameter("skip_frames", 1)  # 跳帧：每 N 帧推理一次（1=不跳，2=每2帧推理1次）
         self.declare_parameter("voting_window", 3)  # 多帧投票窗口大小（1 表示关闭）
 
         model_path = self.get_parameter("model_path").value
@@ -58,7 +59,10 @@ class YoloDetectorNode(Node):
         self._max_size = int(self.get_parameter("max_image_size").value)
         self._use_tta = bool(self.get_parameter("use_tta").value)
         self._clahe_enabled = bool(self.get_parameter("clahe_enabled").value)
+        self._skip_frames = max(1, int(self.get_parameter("skip_frames").value))
         self._voting_window = int(self.get_parameter("voting_window").value)
+        self._frame_counter = 0  # 跳帧计数器
+        self._last_det_array = None  # 缓存上一次检测结果（跳帧复用）
 
         self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
@@ -67,7 +71,7 @@ class YoloDetectorNode(Node):
         self.get_logger().info(
             f"模型路径: {model_path}, 置信度阈值: {self._conf_thresh}, "
             f"imgsz: {self._max_size}, TTA: {self._use_tta}, "
-            f"CLAHE: {self._clahe_enabled}, 投票窗口: {self._voting_window}"
+            f"CLAHE: {self._clahe_enabled}, 跳帧: {self._skip_frames}, 投票窗口: {self._voting_window}"
         )
 
         if YOLO is None:
@@ -121,6 +125,15 @@ class YoloDetectorNode(Node):
 
     def _image_callback(self, msg: Image) -> None:
         """图像回调：执行推理并发布检测结果。"""
+        self._frame_counter += 1
+
+        # 跳帧：不是每帧都推理，复用上一次结果
+        if self._frame_counter % self._skip_frames != 0:
+            if self._last_det_array is not None:
+                self._last_det_array.header = msg.header
+                self._pub.publish(self._last_det_array)
+            return
+
         try:
             cv_image = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
@@ -185,6 +198,7 @@ class YoloDetectorNode(Node):
             )
 
         self._pub.publish(det_array)
+        self._last_det_array = det_array  # 缓存供跳帧复用
 
     def _vote_detections(self) -> list:
         """多帧投票：IoU 匹配 + 出现次数计数，过滤单帧闪烁误检。"""

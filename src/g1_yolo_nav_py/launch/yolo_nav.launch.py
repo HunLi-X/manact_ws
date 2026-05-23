@@ -40,7 +40,7 @@ def generate_launch_description() -> LaunchDescription:
 
     model_path_arg = DeclareLaunchArgument(
         name="model_path",
-        default_value="yolo_v11x_best.pt",
+        default_value="yolo_v11s_best.pt",
         description="YOLO 模型文件名（相对于 share/models/ 目录，或绝对路径）",
     )
 
