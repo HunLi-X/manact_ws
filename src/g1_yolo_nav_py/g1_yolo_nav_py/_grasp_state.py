@@ -593,6 +593,15 @@ class GraspStateMachineMixin:
             self._log_info(f"[自定义] cmd: vx={vx}, vy={vy}, vyaw={vyaw}")
             self._sport.move(vx=vx, vy=vy, vyaw=vyaw)
 
+    def _gs_reset_detection(self) -> None:
+        """清除所有检测状态，强制从搜索阶段重新开始。"""
+        self._gs_target_u = None
+        self._gs_target_v = None
+        self._gs_target_distance = None
+        self._gs_bbox_size_x = 0.0
+        self._gs_bbox_size_y = 0.0
+        self._gs_last_detect_time = 0.0
+
     def _gs_destroy(self) -> None:
         """停止运动并清理。"""
         self._sport.stop()

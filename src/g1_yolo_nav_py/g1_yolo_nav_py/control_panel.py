@@ -488,6 +488,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
         prev = self._gs_state
         self.gs_state = GraspState.IDLE
         self._sport.stop()
+        self._gs_reset_detection()
         self._gs_aligner.reset()
         self._gs_approach.reset()
         self._append_log(f"[状态] {prev.name} → IDLE: 手动停止")
@@ -507,6 +508,7 @@ class ControlPanelNode(Node, GraspStateMachineMixin):
             self._append_log("[提示] 请先停止当前任务")
             return
         self.gs_state = GraspState.WORKING
+        self._gs_reset_detection()
         self._gs_aligned = False
         self._gs_aligner.reset()
         self._gs_approach.reset()
