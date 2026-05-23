@@ -113,6 +113,7 @@ const VIEW_META = {
   grasp:    { title: '目标抓取',   subtitle: '完整抓取任务流程' },
   detect:   { title: '目标识别',   subtitle: '仅显示视觉检测，不触发运动' },
   control:  { title: '运动控制',   subtitle: '手动遥控机器人' },
+  arm_debug:{ title: '上肢调试',   subtitle: '分组滑块 + 预设管理' },
   status:   { title: '系统状态',   subtitle: '话题健康与日志总览' },
   nodes:    { title: '节点管理',   subtitle: 'ROS2 子进程启动 / 停止 / 参数' },
   settings: { title: '系统设置',   subtitle: '运行时参数热更新 + 界面偏好' },
@@ -1127,4 +1128,218 @@ function updateTocActive() {
 window.addEventListener('scroll', () => {
   if (location.hash === '#settings') updateTocActive();
 }, { passive: true });
+
+
+// =====================================================================
+// 上肢调试模块（分组滑块 + 预设 CRUD）
+// =====================================================================
+const ARM_JOINT_NAMES = [
+  // 左臂 5 个
+  'L-ShoulderPitch', 'L-ShoulderRoll', 'L-ShoulderYaw',
+  'L-Elbow', 'L-WristRoll',
+  // 右臂 5 个
+  'R-ShoulderPitch', 'R-ShoulderRoll', 'R-ShoulderYaw',
+  'R-Elbow', 'R-WristRoll',
+  // 腰部 3 个
+  'WaistYaw', 'WaistRoll', 'WaistPitch',
+];
+const ARM_LIMITS = [
+  [-2.5, 2.5], [-1.5, 2.0], [-1.5, 1.5], [-1.5, 2.0], [-1.5, 1.5],
+  [-2.5, 2.5], [-2.0, 1.5], [-1.5, 1.5], [-1.5, 2.0], [-1.5, 1.5],
+  [-1.5, 1.5], [-0.5, 0.5], [-0.5, 0.5],
+];
+const ARM_GROUPS = [
+  { id: 'left',  name: '左臂', icon: 'chevron-left',  start: 0, count: 5 },
+  { id: 'right', name: '右臂', icon: 'chevron-right', start: 5, count: 5 },
+  { id: 'waist', name: '腰部', icon: 'rotate-cw',       start: 10, count: 3 },
+];
+
+let _armDebugRunning = false;
+
+// ---------- 初始化滑块 ----------
+function buildArmSliders() {
+  ARM_GROUPS.forEach(g => {
+    const container = document.getElementById('arm-group-' + g.id);
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = g.start; i < g.start + g.count; i++) {
+      const row = document.createElement('div');
+      row.className = 'arm-slider-row';
+      row.innerHTML = `
+        <span class="arm-slider-label">${ARM_JOINT_NAMES[i]}</span>
+        <input type="range" class="arm-slider-input" data-idx="${i}"
+               min="${ARM_LIMITS[i][0]}" max="${ARM_LIMITS[i][1]}" step="0.01" value="0" />
+        <input type="number" class="arm-slider-val" data-idx="${i}"
+               min="${ARM_LIMITS[i][0]}" max="${ARM_LIMITS[i][1]}" step="0.01" value="0" />
+      `;
+      container.appendChild(row);
+    }
+  });
+  bindArmSliderEvents();
+}
+
+function bindArmSliderEvents() {
+  // range → number
+  document.querySelectorAll('.arm-slider-input').forEach(inp => {
+    if (inp._bound) return;
+    inp._bound = true;
+    inp.addEventListener('input', () => {
+      const idx = parseInt(inp.dataset.idx);
+      const val = parseFloat(inp.value);
+      const num = document.querySelector(`.arm-slider-val[data-idx="${idx}"]`);
+      if (num) num.value = val.toFixed(2);
+      sendArmAngles();
+    });
+  });
+  // number → range
+  document.querySelectorAll('.arm-slider-val').forEach(inp => {
+    if (inp._bound) return;
+    inp._bound = true;
+    inp.addEventListener('change', () => {
+      const idx = parseInt(inp.dataset.idx);
+      let val = parseFloat(inp.value) || 0;
+      const lo = ARM_LIMITS[idx][0], hi = ARM_LIMITS[idx][1];
+      val = Math.max(lo, Math.min(hi, val));
+      inp.value = val.toFixed(2);
+      const rng = document.querySelector(`.arm-slider-input[data-idx="${idx}"]`);
+      if (rng) rng.value = val;
+      sendArmAngles();
+    });
+  });
+}
+
+// ---------- 读取 / 发送角度 ----------
+function readArmAngles() {
+  const angles = [];
+  for (let i = 0; i < ARM_JOINT_NAMES.length; i++) {
+    const el = document.querySelector(`.arm-slider-val[data-idx="${i}"]`);
+    angles.push(parseFloat(el?.value) || 0);
+  }
+  return angles;
+}
+
+function sendArmAngles() {
+  if (!_armDebugRunning) return;
+  const angles = readArmAngles();
+  fetch('/api/arm_debug/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ angles }),
+  }).catch(() => {});
+}
+
+// ---------- 预设 ----------
+function loadArmPresets() {
+  fetch('/api/arm_debug/presets')
+    .then(r => r.json())
+    .then(data => {
+      const sel = document.getElementById('arm-preset-select');
+      if (!sel) return;
+      // 保留第一个 placeholder
+      sel.innerHTML = '<option value="">— 加载预设姿势 —</option>';
+      (data.presets || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(() => {});
+}
+
+function applyArmPreset(key) {
+  fetch('/api/arm_debug/presets')
+    .then(r => r.json())
+    .then(data => {
+      const p = (data.presets || []).find(x => x.key === key);
+      if (!p || !p.angles) return;
+      p.angles.forEach((a, i) => {
+        const rng = document.querySelector(`.arm-slider-input[data-idx="${i}"]`);
+        const num = document.querySelector(`.arm-slider-val[data-idx="${i}"]`);
+        if (rng) rng.value = a;
+        if (num) num.value = parseFloat(a).toFixed(2);
+      });
+      if (_armDebugRunning) sendArmAngles();
+    })
+    .catch(() => {});
+}
+
+// ---------- 开始 / 停止 ----------
+function armDebugStart() {
+  fetch('/api/arm_debug/start', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || '启动失败', 'error'); return; }
+      _armDebugRunning = true;
+      updateArmStatusUI();
+      showToast('上肢调试已启动', 'info');
+      // 发送当前角度
+      sendArmAngles();
+    })
+    .catch(() => showToast('启动失败', 'error'));
+}
+
+function armDebugStop() {
+  fetch('/api/arm_debug/stop', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      _armDebugRunning = false;
+      updateArmStatusUI();
+      showToast('上肢调试已停止', 'info');
+    })
+    .catch(() => {});
+}
+
+function updateArmStatusUI() {
+  const dot  = document.getElementById('arm-status-dot');
+  const txt  = document.getElementById('arm-status-text');
+  const btnS = document.getElementById('arm-start-btn');
+  const btnT = document.getElementById('arm-stop-btn');
+  if (dot) dot.classList.toggle('active', _armDebugRunning);
+  if (txt) txt.textContent = _armDebugRunning ? '调试中' : '未启动';
+  if (btnS) btnS.classList.toggle('hidden', _armDebugRunning);
+  if (btnT) btnT.classList.toggle('hidden', !_armDebugRunning);
+}
+
+// ---------- 轮询状态 ----------
+function pollArmStatus() {
+  fetch('/api/arm_debug/status')
+    .then(r => r.json())
+    .then(data => {
+      const was = _armDebugRunning;
+      _armDebugRunning = !!data.running;
+      if (was && !_armDebugRunning) {
+        // 进程意外退出
+        showToast('调试进程已退出', 'warn');
+      }
+      updateArmStatusUI();
+    })
+    .catch(() => {});
+}
+
+// ---------- 初始化绑定 ----------
+(function initArmDebug() {
+  buildArmSliders();
+  loadArmPresets();
+
+  const btnStart = document.getElementById('arm-start-btn');
+  const btnStop  = document.getElementById('arm-stop-btn');
+  const selPreset = document.getElementById('arm-preset-select');
+  const btnSave  = document.getElementById('arm-preset-save-btn');
+
+  if (btnStart) btnStart.addEventListener('click', armDebugStart);
+  if (btnStop)  btnStop.addEventListener('click',  armDebugStop);
+  if (selPreset) selPreset.addEventListener('change', () => {
+    const key = selPreset.value;
+    if (key) applyArmPreset(key);
+  });
+  if (btnSave) btnSave.addEventListener('click', () => {
+    // 简单 prompt 保存当前角度到后端（后端暂不支持，提示即可）
+    showToast('保存预设功能需后端支持，当前仅支持加载内置预设', 'warn');
+  });
+
+  // 每 3 秒轮询状态
+  setInterval(pollArmStatus, 3000);
+  updateArmStatusUI();
+})();
 

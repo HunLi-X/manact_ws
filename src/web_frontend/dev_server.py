@@ -102,6 +102,9 @@ class MockState:
         self._manual_vx = 0.0
         self._manual_vyaw = 0.0
 
+        # 上肢调试 mock 状态
+        self._arm_debug_running = False
+
         # 相机驱动 mock 状态（保留兼容旧路由）
         self._camera_running = False
         self._camera_pid = None
@@ -563,6 +566,38 @@ def create_app() -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_wrap(mock.cmd_left_put_down)
+
+    # ---- 上肢调试 mock 路由 ----
+    @app.route("/api/arm_debug/start", methods=["POST"])
+    def api_arm_debug_start():
+        mock._arm_debug_running = True
+        return jsonify({"ok": True, "msg": "调试进程已启动 (mock)", "running": True})
+
+    @app.route("/api/arm_debug/stop", methods=["POST"])
+    def api_arm_debug_stop():
+        mock._arm_debug_running = False
+        return jsonify({"ok": True, "msg": "调试进程已停止 (mock)", "running": False})
+
+    @app.route("/api/arm_debug/send", methods=["POST"])
+    def api_arm_debug_send():
+        data = request.get_json(force=True, silent=True) or {}
+        angles = data.get("angles", [])
+        return jsonify({"ok": True, "msg": f"指令已发送 (mock, {len(angles)} angles)"})
+
+    @app.route("/api/arm_debug/status", methods=["GET"])
+    def api_arm_debug_status():
+        return jsonify({"running": mock._arm_debug_running, "pid": 12345 if mock._arm_debug_running else None})
+
+    @app.route("/api/arm_debug/presets", methods=["GET"])
+    def api_arm_debug_presets():
+        presets = [
+            {"key": "reach_forward", "name": "伸手接近", "angles": [-0.8,0.5,-0.4,0.15,-1.8,-0.8,-0.5,0.4,0.15,1.8,0.0,0.0,0.0]},
+            {"key": "arms_up",       "name": "抬起目标", "angles": [-1.0,0.7,0.0,0.6,-0.8,-1.0,-0.7,0.0,0.6,0.8,0.0,0.0,0.0]},
+            {"key": "pray",          "name": "夹紧保持", "angles": [-1.15,0.5,-0.3,0.3,-1.8,-1.15,-0.5,0.3,0.3,1.8,0.0,0.0,0.0]},
+            {"key": "wave",          "name": "伸展下放", "angles": [-1.1,0.55,-0.45,0.2,-1.8,-1.1,-0.55,0.45,0.2,1.8,0.0,0.0,0.0]},
+            {"key": "wave_body",     "name": "自然下垂", "angles": [-0.7,0.7,0.0,0.6,-0.8,-0.7,-0.7,0.0,0.6,0.8,0.0,0.0,0.0]},
+        ]
+        return jsonify({"ok": True, "presets": presets})
 
     # ---- 相机驱动 mock 路由 ----
     @app.route("/api/camera/start", methods=["POST"])

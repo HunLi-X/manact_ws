@@ -2243,3 +2243,185 @@ body.settings-active .topbar-toc { display: flex; }
   color: #C2410C;
   border-color: rgba(254, 215, 170, 0.7);
 }
+
+/* ===================================================================== */
+/*                         上肢调试视图                                        */
+/* ===================================================================== */
+.arm-debug-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 0;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.arm-debug-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.arm-debug-title {
+  flex: 1;
+  min-width: 200px;
+}
+
+.arm-debug-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.arm-select {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+  color: #0F172A;
+  min-width: 180px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+.arm-select:focus {
+  border-color: #F97316;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.arm-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 960px) {
+  .arm-debug-grid { grid-template-columns: 1fr; }
+}
+
+.arm-group-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.7),
+    0 6px 20px rgba(15, 23, 42, 0.06);
+  padding: 18px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arm-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+.arm-group-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: #F97316;
+  background: rgba(254, 243, 199, 0.55);
+}
+.arm-group-icon svg { width: 16px; height: 16px; stroke-width: 2.2; }
+.arm-group-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* 单个关节滑块行 */
+.arm-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arm-slider-label {
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.55);
+  font-weight: 500;
+  width: 32px;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.arm-slider-input {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.1);
+  outline: none;
+  cursor: pointer;
+}
+.arm-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+  transition: transform 0.12s;
+}
+.arm-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.arm-slider-input::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+}
+.arm-slider-val {
+  font-size: 11px;
+  color: #0F172A;
+  font-weight: 600;
+  width: 56px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 状态指示条 */
+.arm-debug-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+  font-weight: 500;
+}
+.arm-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #94A3B8;
+  box-shadow: 0 0 0 0 rgba(148, 163, 184, 0.5);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.arm-status-dot.active {
+  background: #10B981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4);
+}
+.arm-status-dot.error {
+  background: #EF4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
+}
+.arm-status-text { color: rgba(15, 23, 42, 0.7); }

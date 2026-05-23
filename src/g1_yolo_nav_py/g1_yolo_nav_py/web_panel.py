@@ -37,6 +37,7 @@ import signal
 import shutil
 import threading
 import subprocess
+import json
 from pathlib import Path
 from collections import deque
 from typing import Optional, List
@@ -58,6 +59,7 @@ except ImportError:
 
 # 不导入 unitree_sdk2py（避免 DDS 冲突），所有运动通过 SportClient
 from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState
+from g1_yolo_nav_py._dds_compat import get_venv_python, build_isolated_env
 from g1_yolo_nav_py._vis_utils import draw_detections_on_frame
 
 
@@ -360,6 +362,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._manual_vy = 0.0
         self._manual_vyaw = 0.0
         self._manual_active = False
+
+        # 上肢调试进程（按需启动，不占用内存）
+        self._arm_debug_proc: Optional[subprocess.Popen] = None
 
         # 日志环形缓冲（前端轮询拉取）
         self._log_lock = threading.Lock()
@@ -698,6 +703,110 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             raise RuntimeError("请先停止当前任务")
         threading.Thread(target=self._gs_do_left_put_down, daemon=True).start()
 
+    # ---- 上肢调试控制 ----
+    def cmd_arm_debug_start(self) -> dict:
+        """启动 arm_debug.py 子进程（按需启动，不占用内存）。"""
+        if self._arm_debug_proc is not None and self._arm_debug_proc.poll() is None:
+            return {"ok": True, "msg": "调试进程已在运行", "running": True}
+        script = str(Path(self._gs_arm_dir) / "arm_debug.py")
+        if not Path(script).exists():
+            return {"ok": False, "error": f"arm_debug.py 不存在: {script}"}
+        python = get_venv_python()
+        args = [python, script]
+        if self._gs_net_iface:
+            args.append(self._gs_net_iface)
+        env = build_isolated_env(
+            network_interface=self._gs_net_iface or "",
+            cyclonedds_home=self._gs_cyclonedds_home or "",
+            sdk_python_path=self._gs_sdk_python_path or "",
+        )
+        self._log_info(f"[调试] 启动: {' '.join(args)}")
+        try:
+            self._arm_debug_proc = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                universal_newlines=True,
+                env=env,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+            # 读取子进程输出到日志
+            threading.Thread(
+                target=self._read_arm_debug_output,
+                args=(self._arm_debug_proc,),
+                daemon=True,
+            ).start()
+            return {"ok": True, "msg": f"调试进程已启动 (pid={self._arm_debug_proc.pid})", "running": True}
+        except Exception as e:
+            self._log_error(f"[调试] 启动失败: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def cmd_arm_debug_stop(self) -> dict:
+        """停止 arm_debug.py 子进程（平滑归零 + 释放 arm_sdk）。"""
+        if self._arm_debug_proc is None or self._arm_debug_proc.poll() is not None:
+            self._arm_debug_proc = None
+            return {"ok": True, "msg": "调试进程未在运行", "running": False}
+        self._log_info("[调试] 发送停止指令...")
+        try:
+            self._arm_debug_proc.stdin.write(json.dumps({"stop": True}) + "\n")
+            self._arm_debug_proc.stdin.flush()
+        except Exception as e:
+            self._log_error(f"[调试] 发送停止指令失败: {e}")
+        # 等待归零完成（最多 10 秒）
+        try:
+            self._arm_debug_proc.wait(timeout=10.0)
+        except subprocess.TimeoutExpired:
+            self._log_info("[调试] 归零超时，强制终止", "warn")
+            try:
+                if hasattr(os, "killpg"):
+                    os.killpg(os.getpgid(self._arm_debug_proc.pid), signal.SIGKILL)
+                else:
+                    self._arm_debug_proc.kill()
+                self._arm_debug_proc.wait(timeout=2.0)
+            except Exception as e:
+                self._log_error(f"[调试] 强制终止失败: {e}")
+        self._arm_debug_proc = None
+        self._log_info("[调试] 已停止")
+        return {"ok": True, "msg": "调试进程已停止", "running": False}
+
+    def cmd_arm_debug_send(self, angles: list) -> dict:
+        """发送目标角度到 arm_debug.py 子进程。"""
+        if self._arm_debug_proc is None or self._arm_debug_proc.poll() is not None:
+            return {"ok": False, "error": "调试进程未运行，请先启动"}
+        if len(angles) != len(ARM_JOINTS):
+            return {"ok": False, "error": f"角度数量错误: 期望 {len(ARM_JOINTS)}，收到 {len(angles)}"}
+        try:
+            msg = json.dumps({"angles": [float(a) for a in angles]})
+            self._arm_debug_proc.stdin.write(msg + "\n")
+            self._arm_debug_proc.stdin.flush()
+            return {"ok": True, "msg": "指令已发送"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def _read_arm_debug_output(self, proc: subprocess.Popen) -> None:
+        """读取 arm_debug.py 子进程输出到日志。"""
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                line = line.strip()
+                if line:
+                    self._append_log(f"[arm_debug] {line}", "info")
+        except Exception:
+            pass
+
+    def get_arm_debug_status(self) -> dict:
+        """获取 arm_debug 进程状态。"""
+        if self._arm_debug_proc is None:
+            return {"running": False, "pid": None}
+        poll = self._arm_debug_proc.poll()
+        if poll is not None:
+            self._arm_debug_proc = None
+            return {"running": False, "pid": None}
+        return {"running": True, "pid": self._arm_debug_proc.pid}
+
     # ---- 相机驱动控制 ----
     def cmd_camera_start(self) -> dict:
         return self._camera.start()
@@ -859,6 +968,47 @@ def create_app(node: WebPanelNode) -> Flask:
     def cmd_left_putdown():
         return _cmd_route(node.cmd_left_put_down)
 
+    # ---- 上肢调试 ----
+    @app.route("/api/arm_debug/start", methods=["POST"])
+    def api_arm_debug_start():
+        try:
+            return jsonify(node.cmd_arm_debug_start()), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/arm_debug/stop", methods=["POST"])
+    def api_arm_debug_stop():
+        try:
+            return jsonify(node.cmd_arm_debug_stop()), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/arm_debug/send", methods=["POST"])
+    def api_arm_debug_send():
+        data = request.get_json(force=True, silent=True) or {}
+        angles = data.get("angles", [])
+        try:
+            return jsonify(node.cmd_arm_debug_send(angles)), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+
+    @app.route("/api/arm_debug/status", methods=["GET"])
+    def api_arm_debug_status():
+        return jsonify(node.get_arm_debug_status())
+
+    @app.route("/api/arm_debug/presets", methods=["GET"])
+    def api_arm_debug_presets():
+        """返回预设姿势列表（硬编码，不导入 arm_debug 避免加载 unitree_sdk2py）。"""
+        # 与 arm_debug.py PRESETS 保持同步
+        presets = [
+            {"key": "reach_forward", "name": "伸手接近", "angles": [-0.8, 0.5, -0.4, 0.15, -1.8, -0.8, -0.5, 0.4, 0.15, 1.8, 0.0, 0.0, 0.0]},
+            {"key": "arms_up",       "name": "抬起目标", "angles": [-1.0, 0.7, 0.0, 0.6, -0.8, -1.0, -0.7, 0.0, 0.6, 0.8, 0.0, 0.0, 0.0]},
+            {"key": "pray",          "name": "夹紧保持", "angles": [-1.15, 0.5, -0.3, 0.3, -1.8, -1.15, -0.5, 0.3, 0.3, 1.8, 0.0, 0.0, 0.0]},
+            {"key": "wave",          "name": "伸展下放", "angles": [-1.1, 0.55, -0.45, 0.2, -1.8, -1.1, -0.55, 0.45, 0.2, 1.8, 0.0, 0.0, 0.0]},
+            {"key": "wave_body",     "name": "自然下垂", "angles": [-0.7, 0.7, 0.0, 0.6, -0.8, -0.7, -0.7, 0.0, 0.6, 0.8, 0.0, 0.0, 0.0]},
+        ]
+        return jsonify({"ok": True, "presets": presets})
+
     # ---- 相机驱动 ----
     @app.route("/api/camera/start", methods=["POST"])
     def api_camera_start():
@@ -923,7 +1073,7 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/env/detect", methods=["GET"])
     def api_env_detect():
         """返回自动检测到的环境路径（供前端显示 placeholder / 填入表单）。"""
-        from g1_yolo_nav_py._dds_compat import auto_detect_cyclonedds, auto_detect_sdk_path, get_venv_python
+        from g1_yolo_nav_py._dds_compat import auto_detect_cyclonedds, auto_detect_sdk_path
         return jsonify({
             "network_interface": node._gs_net_iface or "",
             "cyclonedds_home":   node._gs_cyclonedds_home or auto_detect_cyclonedds(),

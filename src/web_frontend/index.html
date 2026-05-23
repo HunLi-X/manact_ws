@@ -60,6 +60,11 @@
         <span class="nav-icon" data-icon="gamepad"></span>
         <span class="nav-label">运动控制</span>
       </a>
+      <a href="#arm_debug" class="nav-item" data-view="arm_debug">
+        <span class="nav-icon" data-icon="bot"></span>
+        <span class="nav-label">上肢调试</span>
+        <span class="nav-badge">新</span>
+      </a>
       <a href="#status" class="nav-item" data-view="status">
         <span class="nav-icon" data-icon="activity"></span>
         <span class="nav-label">系统状态</span>
@@ -1105,6 +1110,75 @@
         <div id="settings-toast" class="settings-toast hidden"></div>
 
       </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- 视图 5：上肢调试 — 分组滑块 + 预设 CRUD                      -->
+    <!-- ======================================================= -->
+    <section class="view hidden" data-view="arm_debug">
+      <div class="arm-debug-layout">
+
+        <!-- 顶部栏：开始/停止 + 预设选择 -->
+        <div class="arm-debug-topbar">
+          <div class="arm-debug-title">
+            <h2 class="page-title">上肢调试</h2>
+            <p class="page-subtitle">分组滑块 + 预设管理（按需启动，不占内存）</p>
+          </div>
+          <div class="arm-debug-actions">
+            <select id="arm-preset-select" class="arm-select">
+              <option value="">— 加载预设姿势 —</option>
+            </select>
+            <button type="button" class="btn btn-outline-brand" id="arm-preset-save-btn" title="将当前滑块角度保存为新预设">💾 保存预设</button>
+            <button type="button" class="btn btn-primary" id="arm-start-btn">开始调试</button>
+            <button type="button" class="btn btn-danger hidden" id="arm-stop-btn">停止调试</button>
+          </div>
+        </div>
+
+        <!-- 三组滑块 -->
+        <div class="arm-debug-grid">
+
+          <!-- 左臂 -->
+          <div class="arm-group-card">
+            <div class="arm-group-header">
+              <span class="arm-group-icon" data-icon="chevron-left"></span>
+              <span class="arm-group-name">左臂</span>
+            </div>
+            <div class="arm-slider-list" id="arm-group-left">
+              <!-- JS 动态生成 5 个滑块 -->
+            </div>
+          </div>
+
+          <!-- 右臂 -->
+          <div class="arm-group-card">
+            <div class="arm-group-header">
+              <span class="arm-group-icon" data-icon="chevron-right"></span>
+              <span class="arm-group-name">右臂</span>
+            </div>
+            <div class="arm-slider-list" id="arm-group-right">
+              <!-- JS 动态生成 5 个滑块 -->
+            </div>
+          </div>
+
+          <!-- 腰部 -->
+          <div class="arm-group-card">
+            <div class="arm-group-header">
+              <span class="arm-group-icon" data-icon="rotate-cw"></span>
+              <span class="arm-group-name">腰部</span>
+            </div>
+            <div class="arm-slider-list" id="arm-group-waist">
+              <!-- JS 动态生成 3 个滑块 -->
+            </div>
+          </div>
+
+        </div><!-- /arm-debug-grid -->
+
+        <!-- 状态指示 -->
+        <div class="arm-debug-status" id="arm-status-bar">
+          <span class="arm-status-dot" id="arm-status-dot"></span>
+          <span class="arm-status-text" id="arm-status-text">未启动</span>
+        </div>
+
+      </div><!-- /arm-debug-layout -->
     </section>
 
     <!-- ======================================================= -->
