@@ -1155,6 +1155,9 @@ const ARM_GROUPS = [
 ];
 
 let _armDebugRunning = false;
+let _armDebounceTimer = null;
+let _armLastSendTime = 0;
+const _ARM_DEBOUNCE_MS = 80;  // 最多 ~12 次/秒
 
 // ---------- 初始化滑块 ----------
 function buildArmSliders() {
@@ -1220,12 +1223,18 @@ function readArmAngles() {
 
 function sendArmAngles() {
   if (!_armDebugRunning) return;
-  const angles = readArmAngles();
-  fetch('/api/arm_debug/send', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ angles }),
-  }).catch(() => {});
+  // 防抖：80ms 内多次调用只发送最后一次
+  clearTimeout(_armDebounceTimer);
+  _armDebounceTimer = setTimeout(() => {
+    const angles = readArmAngles();
+    fetch('/api/arm_debug/send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ angles }),
+    }).then(r => r.json()).then(data => {
+      if (!data.ok) showToast('发送失败: ' + (data.error || 'unknown'), 'error');
+    }).catch(() => showToast('发送失败: 网络错误', 'error'));
+  }, _ARM_DEBOUNCE_MS);
 }
 
 // ---------- 预设 ----------
