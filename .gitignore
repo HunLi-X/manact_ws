@@ -1,2 +1,6 @@
 .codebuddy/
 CODEBUDDY.md
+.agents/
+.claude/
+skills-lock.json
+.claude/settings.local.json
