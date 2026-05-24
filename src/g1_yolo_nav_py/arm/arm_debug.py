@@ -64,6 +64,7 @@ class ArmDebugController:
         # 控制线程
         self._thread = None
         self._running = False
+        self._should_release = False
 
     # ---- DDS 初始化 ----
     def init_dds(self):
@@ -94,18 +95,20 @@ class ArmDebugController:
         print("[arm_debug] DDS 已启动，当前角度已读取", file=sys.stderr)
 
     def stop_and_zero(self):
-        """平滑归零并释放 arm_sdk。"""
+        """平滑归零并释放 arm_sdk（通过标志安全释放，避免竞态）。"""
         self._target_angles = list(DEFUALT_POSE)
         self._target_event.set()
         # 等待归零完成（最多 5 秒）
         _t0 = time.time()
         while self._running and time.time() - _t0 < 5.0:
             time.sleep(0.05)
+        # 设置释放标志——控制线程会在下个 tick 检测并释放 arm_sdk
+        self._should_release = True
+        _t0 = time.time()
+        while self._should_release and time.time() - _t0 < 1.0:
+            time.sleep(0.02)
         self._running = False
-        if self._thread:
-            # RecurrentThread 没有 stop，直接标记退出
-            pass
-        print("[arm_debug] 已归零并停止", file=sys.stderr)
+        print("[arm_debug] 已归零并释放 arm_sdk", file=sys.stderr)
 
     # ---- 内部方法 ----
     def _state_handler(self, msg: LowState_) -> None:
@@ -118,6 +121,18 @@ class ArmDebugController:
         if not self._running:
             return
         try:
+            # 释放请求：平滑归零后释放 arm_sdk 控制权
+            if self._should_release:
+                with self._state_lock:
+                    if self.low_state is not None:
+                        for j in ARM_JOINTS:
+                            self.low_cmd.motor_cmd[j].kp = 0.0
+                            self.low_cmd.motor_cmd[j].kd = 0.0
+                        self.low_cmd.motor_cmd[G1JointIndex.kNotUsedJoint].q = 0
+                        self.low_cmd.crc = self.crc.Crc(self.low_cmd)
+                        self.pub.Write(self.low_cmd)
+                self._should_release = False
+                return
             with self._state_lock:
                 if self.low_state is None:
                     return
@@ -243,7 +258,8 @@ def main():
     except (EOFError, KeyboardInterrupt):
         pass
     finally:
-        ctrl.stop_and_zero()
+        if ctrl._running:
+            ctrl.stop_and_zero()
         print("[arm_debug] 进程退出", file=sys.stderr)
 
 

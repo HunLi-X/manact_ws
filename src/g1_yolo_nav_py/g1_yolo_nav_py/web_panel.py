@@ -62,6 +62,9 @@ from g1_yolo_nav_py._grasp_state import GraspStateMachineMixin, GraspState
 from g1_yolo_nav_py._dds_compat import get_venv_python, build_isolated_env
 from g1_yolo_nav_py._vis_utils import draw_detections_on_frame
 
+# 上肢调试：关节数常量（与 arm/arm_common.py 的 ARM_JOINTS 长度一致）
+_ARM_JOINT_COUNT = 13  # 左臂5 + 右臂5 + 腰3
+
 
 # ======================================================================
 # 前端目录解析
@@ -708,7 +711,8 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         """启动 arm_debug.py 子进程（按需启动，不占用内存）。"""
         if self._arm_debug_proc is not None and self._arm_debug_proc.poll() is None:
             return {"ok": True, "msg": "调试进程已在运行", "running": True}
-        script = str(Path(self._gs_arm_dir) / "arm_debug.py")
+        arm_dir = str(Path(self._gs_arm_dir))
+        script = str(Path(arm_dir) / "arm_debug.py")
         if not Path(script).exists():
             return {"ok": False, "error": f"arm_debug.py 不存在: {script}"}
         python = get_venv_python()
@@ -720,7 +724,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             cyclonedds_home=self._gs_cyclonedds_home or "",
             sdk_python_path=self._gs_sdk_python_path or "",
         )
-        self._log_info(f"[调试] 启动: {' '.join(args)}")
+        # 把 arm 脚本目录也加入 PYTHONPATH，确保 from arm_common import 能找到
+        env["PYTHONPATH"] = arm_dir + ":" + env.get("PYTHONPATH", "")
+        self._log_info(f"[调试] 启动: {' '.join(args)} (cwd={arm_dir})")
         try:
             self._arm_debug_proc = subprocess.Popen(
                 args,
@@ -729,6 +735,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
                 stderr=subprocess.STDOUT,
                 bufsize=1,
                 universal_newlines=True,
+                cwd=arm_dir,
                 env=env,
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
@@ -775,8 +782,8 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         """发送目标角度到 arm_debug.py 子进程。"""
         if self._arm_debug_proc is None or self._arm_debug_proc.poll() is not None:
             return {"ok": False, "error": "调试进程未运行，请先启动"}
-        if len(angles) != len(ARM_JOINTS):
-            return {"ok": False, "error": f"角度数量错误: 期望 {len(ARM_JOINTS)}，收到 {len(angles)}"}
+        if len(angles) != _ARM_JOINT_COUNT:
+            return {"ok": False, "error": f"角度数量错误: 期望 {_ARM_JOINT_COUNT}，收到 {len(angles)}"}
         try:
             msg = json.dumps({"angles": [float(a) for a in angles]})
             self._arm_debug_proc.stdin.write(msg + "\n")
