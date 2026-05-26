@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat -ano)",
+      "Bash(netsh interface *)",
+      "Bash(\"C:/Program Files/Python313/python.exe\" -c \"import py_compile; py_compile.compile\\(r'd:/Main/云控制/人形机器人/g1act_ws/src/web_frontend/dev_server.py', doraise=True\\)\")",
+      "Bash('C:/Program Files/Python313/python.exe' -c ' *)",
+      "Bash(\"C:/Program Files/Python313/python.exe\" d:/Main/云控制/人形机器人/g1act_ws/src/web_frontend/dev_server.py)",
+      "Bash(curl -s http://localhost:9090/api/arm_poses)",
+      "Bash(curl -s -X POST http://localhost:9090/api/arm_poses -H \"Content-Type: application/json\" -d '{\"version\":1,\"poses\":{\"test_pose\":{\"name\":\"test\",\"angles\":[0,0,0,0,0,0,0,0,0,0,0,0,0]}},\"sequences\":{\"armup\":[],\"armdown\":[]}}')",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}
