@@ -7,3 +7,13 @@ main: #分支
           settings: #知识库设置
             embedding_model: hunyuan #知识库使用的基础模型
             include: "**/**.md" #知识库包含的文件类型
+    - imports: https://cnb.cool/1255027942/key/-/blob/main/github.yml
+      stages:
+       #同步到 GitHub 仓库
+        - name: sync to github
+          image: tencentcom/git-sync
+          settings:
+            target_url: https://github.com/HunLi-X/manact_ws.git
+            auth_type: https
+            username: ${GIT_USERNAME}
+            password: ${GIT_ACCESS_TOKEN}
