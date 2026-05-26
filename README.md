@@ -19,7 +19,14 @@
     <img src="https://img.shields.io/badge/Blog-昏黎站-008080?logo=googlechrome&logoColor=white" alt="Blog" />
   </a>
 </p>
-
+<p align="center">
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Python/python1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Flask/flask1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/JSON/json1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Linux/linux1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Ubuntu/ubuntu1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/VisualStudioCode/visualstudiocode1.svg" />
+</p>
 <p>让 G1 看见世界，走向目标，伸出双手。</p>
 </div><br>
 

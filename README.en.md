@@ -20,6 +20,14 @@ English | [简体中文](README.md)
     <img src="https://img.shields.io/badge/Blog-昏黎站-008080?logo=googlechrome&logoColor=white" alt="Blog" />
   </a>
 </p>
+<p align="center">
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Python/python1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Flask/flask1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/JSON/json1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Linux/linux1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Ubuntu/ubuntu1.svg" />&nbsp;
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/VisualStudioCode/visualstudiocode1.svg" />
+</p>
 <p>Let G1 see the world, walk to the target, and reach out.</p>
 </div><br>
 
