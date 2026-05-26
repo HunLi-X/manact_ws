@@ -1674,6 +1674,34 @@ function initArmSeqAddSelects() {
   });
 }
 
+// ---------- 批量角度编辑 ----------
+function formatAngles3Row(angles) {
+  const left  = angles.slice(0,5).map(a => a.toFixed(2).padStart(6));
+  const right = angles.slice(5,10).map(a => a.toFixed(2).padStart(6));
+  const waist = angles.slice(10,13).map(a => a.toFixed(2).padStart(6));
+  return [left.join(',')+',', right.join(',')+',', waist.join(',')+','].join('\n');
+}
+function loadBatchFromSliders() {
+  const angles = readArmAngles();
+  const txt = document.getElementById('arm-batch-input');
+  if (txt) txt.value = formatAngles3Row(angles);
+}
+function applyBatchToSliders() {
+  const txt = document.getElementById('arm-batch-input');
+  if (!txt) return;
+  const vals = txt.value.trim().split(/[,\s]+/).map(v=>parseFloat(v)).filter(v=>!isNaN(v));
+  const expected = ARM_JOINT_NAMES.length;
+  if (vals.length !== expected) { showToast('需要 '+expected+' 个值，当前 '+vals.length+' 个','error'); return; }
+  vals.forEach((a,i)=>{
+    const lo=ARM_LIMITS[i][0],hi=ARM_LIMITS[i][1],clipped=Math.max(lo,Math.min(hi,a));
+    const r=document.querySelector('.arm-slider-input[data-idx="'+i+'"]');
+    const n=document.querySelector('.arm-slider-val[data-idx="'+i+'"]');
+    if(r)r.value=clipped; if(n)n.value=clipped.toFixed(2);
+  });
+  showToast('已应用 '+vals.length+' 个角度','info');
+  txt.value = formatAngles3Row(vals);
+}
+
 // ---------- 初始化 ----------
 (function initArmSeqManager() {
   loadArmPoses();
@@ -1681,6 +1709,11 @@ function initArmSeqAddSelects() {
 
   const captureBtn = document.getElementById('arm-pose-capture-btn');
   if (captureBtn) captureBtn.addEventListener('click', captureCurrentPose);
+
+  const batchLoad = document.getElementById('arm-batch-load-btn');
+  const batchApply = document.getElementById('arm-batch-apply-btn');
+  if (batchLoad) batchLoad.addEventListener('click', loadBatchFromSliders);
+  if (batchApply) batchApply.addEventListener('click', applyBatchToSliders);
 
   document.querySelectorAll('.arm-seq-run-btn').forEach(btn => {
     btn.addEventListener('click', () => runArmSequence(btn.dataset.seq));

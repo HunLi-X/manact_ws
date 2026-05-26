@@ -2708,3 +2708,40 @@ body.settings-active .topbar-toc { display: flex; }
   background: rgba(239, 68, 68, 0.08);
 }
 .arm-pose-lib-btn svg { width: 14px; height: 14px; }
+
+/* 批量角度编辑器 */
+.arm-batch-editor {
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 4px 16px rgba(15,23,42,0.04);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.arm-batch-header {
+  display: flex; align-items: baseline; gap: 10px;
+}
+.arm-batch-title { font-size: 13px; font-weight: 700; color: #0F172A; }
+.arm-batch-hint {
+  font-size: 11px; color: rgba(15,23,42,0.4);
+  font-family: 'JetBrains Mono',Consolas,monospace;
+}
+.arm-batch-input {
+  width: 100%; box-sizing: border-box;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid rgba(15,23,42,0.1);
+  border-radius: 10px; padding: 10px 12px;
+  font-size: 12px; color: #0F172A;
+  font-family: 'JetBrains Mono',Consolas,monospace;
+  resize: vertical; outline: none; line-height: 1.7;
+  transition: border-color 0.15s;
+}
+.arm-batch-input:focus {
+  border-color: #8B5CF6;
+  background: rgba(255,255,255,0.92);
+}
+.arm-batch-actions { display: flex; gap: 8px; }
+.arm-batch-actions .btn-sm { padding: 5px 14px; font-size: 12px; border-radius: 8px; }
+
