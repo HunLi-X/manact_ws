@@ -47,6 +47,9 @@ const ICONS = {
   'sliders':      '<svg viewBox="0 0 24 24"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>',
   'image':        '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
   'server':       '<svg viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>',
+  'plus':         '<svg viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>',
+  'grip-vertical':'<svg viewBox="0 0 24 24"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>',
+  'edit':         '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
 };
 
 function renderIcons(root = document) {
@@ -1350,5 +1353,339 @@ function pollArmStatus() {
   // 每 3 秒轮询状态
   setInterval(pollArmStatus, 3000);
   updateArmStatusUI();
+})();
+
+
+// =====================================================================
+// 姿态序列管理模块（armup / armdown 序列编辑 + 姿态库）
+// =====================================================================
+const ARM_SEQ_DEFAULTS = {
+  version: 1,
+  poses: {
+    reach_forward: { name: '伸手接近', angles: [-0.8,0.5,-0.4,0.15,-1.8,-0.8,-0.5,0.4,0.15,1.8,0,0,0] },
+    arms_up:       { name: '抬起目标', angles: [-1.0,0.7,0.0,0.6,-0.8,-1.0,-0.7,0.0,0.6,0.8,0,0,0] },
+    pray:          { name: '夹紧保持', angles: [-1.15,0.5,-0.3,0.3,-1.8,-1.15,-0.5,0.3,0.3,1.8,0,0,0] },
+    wave:          { name: '伸展下放', angles: [-1.1,0.55,-0.45,0.2,-1.8,-1.1,-0.55,0.45,0.2,1.8,0,0,0] },
+    wave_body:     { name: '自然下垂', angles: [-0.7,0.7,0.0,0.6,-0.8,-0.7,-0.7,0.0,0.6,0.8,0,0,0] },
+  },
+  sequences: {
+    armup:   [{ key: 'reach_forward', hold: 3.0 }, { key: 'arms_up', hold: 3.0 }, { key: 'pray', hold: 3.0 }],
+    armdown: [{ key: 'wave', hold: 3.0 }, { key: 'wave_body', hold: 3.0 }],
+  },
+};
+
+let _armPosesData = null;
+let _armSeqRunning = false;
+let _armSeqSaveTimer = null;
+
+// ---------- 加载 / 保存 ----------
+function loadArmPoses() {
+  fetch('/api/arm_poses')
+    .then(r => r.json())
+    .then(data => {
+      _armPosesData = data;
+      renderArmSequences();
+      renderArmPoseLib();
+    })
+    .catch(() => {
+      _armPosesData = JSON.parse(JSON.stringify(ARM_SEQ_DEFAULTS));
+      renderArmSequences();
+      renderArmPoseLib();
+    });
+}
+
+function saveArmPoses() {
+  if (!_armPosesData) return;
+  clearTimeout(_armSeqSaveTimer);
+  _armSeqSaveTimer = setTimeout(() => {
+    fetch('/api/arm_poses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_armPosesData),
+    }).then(r => r.json()).then(data => {
+      if (data.ok) showToast('序列已保存', 'info');
+      else showToast('保存失败: ' + (data.error || ''), 'error');
+    }).catch(() => showToast('保存失败: 网络错误', 'error'));
+  }, 300);
+}
+
+// ---------- 渲染序列列表 ----------
+function renderArmSequences() {
+  if (!_armPosesData) return;
+  ['armup', 'armdown'].forEach(seqName => {
+    const list = document.getElementById('arm-seq-list-' + seqName);
+    const select = document.getElementById('arm-seq-add-' + seqName);
+    if (!list || !select) return;
+
+    const seq = _armPosesData.sequences[seqName] || [];
+    list.innerHTML = '';
+    seq.forEach((entry, idx) => {
+      const pose = _armPosesData.poses[entry.key];
+      if (!pose) return;
+      const div = document.createElement('div');
+      div.className = 'arm-seq-entry';
+      div.draggable = true;
+      div.dataset.idx = idx;
+      div.dataset.seq = seqName;
+      div.innerHTML = `
+        <span class="seq-idx">${idx + 1}</span>
+        <span class="arm-seq-drag-handle" data-icon="grip-vertical"></span>
+        <span class="arm-seq-entry-name" title="${entry.key}">${pose.name}</span>
+        <label class="arm-seq-hold-label">
+          保持<input type="number" class="arm-seq-hold-input" value="${entry.hold}" min="0.5" max="30" step="0.5" />s
+        </label>
+        <button type="button" class="arm-seq-entry-delete" title="移除"><span data-icon="trash-2"></span></button>
+      `;
+      list.appendChild(div);
+      renderIcons(div);
+    });
+
+    // 绑定拖拽事件
+    bindSeqDragEvents(list, seqName);
+
+    // 绑定 hold 输入变化
+    list.querySelectorAll('.arm-seq-hold-input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const entry = inp.closest('.arm-seq-entry');
+        const idx = parseInt(entry.dataset.idx);
+        const val = Math.max(0.5, Math.min(30, parseFloat(inp.value) || 3.0));
+        inp.value = val.toFixed(1);
+        _armPosesData.sequences[seqName][idx].hold = val;
+        saveArmPoses();
+      });
+    });
+
+    // 绑定删除按钮
+    list.querySelectorAll('.arm-seq-entry-delete').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const entry = btn.closest('.arm-seq-entry');
+        const idx = parseInt(entry.dataset.idx);
+        _armPosesData.sequences[seqName].splice(idx, 1);
+        renderArmSequences();
+        saveArmPoses();
+      });
+    });
+
+    // 填充添加下拉框
+    const usedKeys = new Set(seq.map(e => e.key));
+    select.innerHTML = '<option value="">-- 添加姿态 --</option>';
+    Object.entries(_armPosesData.poses).forEach(([key, p]) => {
+      if (usedKeys.has(key)) return;
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+  });
+}
+
+// ---------- 拖拽排序 ----------
+let _dragSrcIdx = null;
+let _dragSrcSeq = null;
+
+function bindSeqDragEvents(listEl, seqName) {
+  listEl.querySelectorAll('.arm-seq-entry').forEach(entry => {
+    entry.addEventListener('dragstart', e => {
+      _dragSrcIdx = parseInt(entry.dataset.idx);
+      _dragSrcSeq = seqName;
+      entry.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', '');
+    });
+    entry.addEventListener('dragend', () => {
+      entry.classList.remove('dragging');
+      listEl.classList.remove('drag-over');
+      _dragSrcIdx = null;
+      _dragSrcSeq = null;
+    });
+  });
+
+  listEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    listEl.classList.add('drag-over');
+  });
+
+  listEl.addEventListener('dragleave', e => {
+    if (!listEl.contains(e.relatedTarget)) {
+      listEl.classList.remove('drag-over');
+    }
+  });
+
+  listEl.addEventListener('drop', e => {
+    e.preventDefault();
+    listEl.classList.remove('drag-over');
+    if (_dragSrcSeq !== seqName || _dragSrcIdx === null) return;
+
+    const entries = [...listEl.querySelectorAll('.arm-seq-entry')];
+    const overEntry = e.target.closest('.arm-seq-entry');
+    if (!overEntry) return;
+    const dropIdx = parseInt(overEntry.dataset.idx);
+    if (_dragSrcIdx === dropIdx) return;
+
+    const seq = _armPosesData.sequences[seqName];
+    const [moved] = seq.splice(_dragSrcIdx, 1);
+    seq.splice(dropIdx, 0, moved);
+    renderArmSequences();
+    saveArmPoses();
+  });
+}
+
+// ---------- 渲染姿态库 ----------
+function renderArmPoseLib() {
+  if (!_armPosesData) return;
+  const list = document.getElementById('arm-pose-lib-list');
+  const count = document.getElementById('arm-pose-count');
+  if (!list) return;
+
+  const usedKeys = new Set();
+  Object.values(_armPosesData.sequences).forEach(seq => {
+    seq.forEach(e => usedKeys.add(e.key));
+  });
+
+  const entries = Object.entries(_armPosesData.poses);
+  count.textContent = entries.length + ' 个姿态';
+  list.innerHTML = '';
+
+  entries.forEach(([key, pose]) => {
+    const div = document.createElement('div');
+    div.className = 'arm-pose-lib-entry';
+    const isUsed = usedKeys.has(key);
+    div.innerHTML = `
+      <span class="arm-pose-lib-entry-name">${pose.name}</span>
+      <span class="arm-pose-lib-entry-key">${key}</span>
+      <div class="arm-pose-lib-entry-actions">
+        <button type="button" class="arm-pose-lib-btn" data-action="load" data-key="${key}" title="加载到滑块">
+          <span data-icon="edit"></span>
+        </button>
+        <button type="button" class="arm-pose-lib-btn btn-danger" data-action="delete" data-key="${key}" title="${isUsed ? '已被序列引用，无法删除' : '删除'}" ${isUsed ? 'disabled' : ''}>
+          <span data-icon="trash-2"></span>
+        </button>
+      </div>
+    `;
+    list.appendChild(div);
+    renderIcons(div);
+  });
+
+  // 绑定事件
+  list.querySelectorAll('[data-action="load"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const pose = _armPosesData.poses[key];
+      if (!pose) return;
+      pose.angles.forEach((a, i) => {
+        const rng = document.querySelector(`.arm-slider-input[data-idx="${i}"]`);
+        const num = document.querySelector(`.arm-slider-val[data-idx="${i}"]`);
+        if (rng) rng.value = a;
+        if (num) num.value = parseFloat(a).toFixed(2);
+      });
+      showToast('已加载姿态: ' + pose.name, 'info');
+    });
+  });
+
+  list.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      if (btn.disabled) return;
+      delete _armPosesData.poses[key];
+      renderArmPoseLib();
+      saveArmPoses();
+    });
+  });
+}
+
+// ---------- 从滑块捕获新姿态 ----------
+function captureCurrentPose() {
+  const name = prompt('输入姿态名称:');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+
+  // 生成 key：取中文拼音或用时间戳
+  let key = trimmed.replace(/[^a-zA-Z0-9_一-鿿]/g, '_').toLowerCase();
+  if (!key || /^_+$/.test(key)) key = 'pose_' + Date.now();
+  // 如果 key 已存在，加数字后缀
+  let finalKey = key;
+  let n = 2;
+  while (_armPosesData.poses[finalKey]) {
+    finalKey = key + '_' + n;
+    n++;
+  }
+
+  const angles = readArmAngles();
+  _armPosesData.poses[finalKey] = { name: trimmed, angles: angles };
+  renderArmSequences();
+  renderArmPoseLib();
+  saveArmPoses();
+  showToast('已保存姿态: ' + trimmed, 'info');
+}
+
+// ---------- 运行序列 ----------
+function runArmSequence(seqName) {
+  if (_armSeqRunning) {
+    showToast('有序列正在执行中', 'warn');
+    return;
+  }
+  fetch('/api/arm_poses/run/' + seqName, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || '执行失败', 'error'); return; }
+      _armSeqRunning = true;
+      updateArmSeqBtns();
+      showToast(seqName + ' 序列已启动', 'info');
+    })
+    .catch(() => showToast('执行失败: 网络错误', 'error'));
+}
+
+function pollArmSeqStatus() {
+  fetch('/api/arm_poses/run/status')
+    .then(r => r.json())
+    .then(data => {
+      const was = _armSeqRunning;
+      _armSeqRunning = !!data.running;
+      if (was && !_armSeqRunning) {
+        showToast('序列执行完成', 'info');
+      }
+      updateArmSeqBtns();
+    })
+    .catch(() => {});
+}
+
+function updateArmSeqBtns() {
+  document.querySelectorAll('.arm-seq-run-btn').forEach(btn => {
+    btn.disabled = _armSeqRunning;
+    btn.textContent = _armSeqRunning ? '执行中...' : '运行';
+  });
+}
+
+// ---------- 添加姿态到序列 ----------
+function initArmSeqAddSelects() {
+  ['armup', 'armdown'].forEach(seqName => {
+    const sel = document.getElementById('arm-seq-add-' + seqName);
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+      const key = sel.value;
+      if (!key) return;
+      if (!_armPosesData.sequences[seqName]) _armPosesData.sequences[seqName] = [];
+      _armPosesData.sequences[seqName].push({ key, hold: 3.0 });
+      sel.value = '';
+      renderArmSequences();
+      saveArmPoses();
+    });
+  });
+}
+
+// ---------- 初始化 ----------
+(function initArmSeqManager() {
+  loadArmPoses();
+  initArmSeqAddSelects();
+
+  const captureBtn = document.getElementById('arm-pose-capture-btn');
+  if (captureBtn) captureBtn.addEventListener('click', captureCurrentPose);
+
+  document.querySelectorAll('.arm-seq-run-btn').forEach(btn => {
+    btn.addEventListener('click', () => runArmSequence(btn.dataset.seq));
+  });
+
+  setInterval(pollArmSeqStatus, 2000);
 })();
 

@@ -584,6 +584,12 @@ body.settings-active .topbar-toc { display: flex; }
 }
 .btn-primary:active { transform: translateY(0) scale(0.97); }
 
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
 /* ====================================================================== */
 /*                         通用信息列表                                     */
 /* ====================================================================== */
@@ -2425,3 +2431,280 @@ body.settings-active .topbar-toc { display: flex; }
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.4);
 }
 .arm-status-text { color: rgba(15, 23, 42, 0.7); }
+
+/* ===================================================================== */
+/*                         姿态序列管理                                    */
+/* ===================================================================== */
+.arm-seq-section {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.arm-seq-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.arm-seq-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+}
+
+.arm-seq-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+@media (max-width: 768px) {
+  .arm-seq-cards { grid-template-columns: 1fr; }
+}
+
+.arm-seq-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.7),
+    0 6px 20px rgba(15, 23, 42, 0.06);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arm-seq-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+.arm-seq-card-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: #8B5CF6;
+  background: rgba(237, 233, 254, 0.55);
+}
+.arm-seq-card-icon svg { width: 16px; height: 16px; stroke-width: 2.2; }
+.arm-seq-card-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.arm-seq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 4px 0;
+}
+.arm-seq-list:empty::after {
+  content: '拖拽或添加姿态到此序列';
+  display: block;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.35);
+  padding: 10px;
+  border: 1px dashed rgba(15, 23, 42, 0.15);
+  border-radius: 8px;
+}
+.arm-seq-list.drag-over {
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px dashed rgba(139, 92, 246, 0.3);
+  border-radius: 10px;
+}
+
+.arm-seq-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 23, 42, 0.05);
+  transition: background 0.15s, opacity 0.15s;
+}
+.arm-seq-entry:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+.arm-seq-entry.dragging {
+  opacity: 0.4;
+  border: 1px dashed rgba(139, 92, 246, 0.4);
+}
+.arm-seq-entry .seq-idx {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.35);
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.arm-seq-drag-handle {
+  cursor: grab;
+  color: rgba(15, 23, 42, 0.25);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.arm-seq-drag-handle:active { cursor: grabbing; }
+.arm-seq-drag-handle svg { width: 14px; height: 14px; }
+
+.arm-seq-entry-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arm-seq-hold-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.5);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.arm-seq-hold-input {
+  width: 44px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0F172A;
+  text-align: right;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 6px;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.6);
+  outline: none;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s;
+}
+.arm-seq-hold-input:focus {
+  border-color: #8B5CF6;
+}
+
+.arm-seq-entry-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.arm-seq-entry-delete:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+.arm-seq-entry-delete svg { width: 14px; height: 14px; }
+
+.arm-seq-add-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(15, 23, 42, 0.04);
+}
+.arm-seq-add-row .arm-select {
+  width: 100%;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+/* 姿态库 */
+.arm-pose-lib {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 14px 16px;
+}
+.arm-pose-lib-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.arm-pose-lib-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+.arm-pose-lib-count {
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.45);
+  font-weight: 500;
+}
+.arm-pose-lib-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.arm-pose-lib-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: background 0.15s;
+}
+.arm-pose-lib-entry:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+.arm-pose-lib-entry-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+}
+.arm-pose-lib-entry-key {
+  font-size: 10px;
+  color: rgba(15, 23, 42, 0.35);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.arm-pose-lib-entry-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.arm-pose-lib-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.35);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.arm-pose-lib-btn:hover {
+  color: #8B5CF6;
+  background: rgba(139, 92, 246, 0.08);
+}
+.arm-pose-lib-btn.btn-danger:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+.arm-pose-lib-btn svg { width: 14px; height: 14px; }

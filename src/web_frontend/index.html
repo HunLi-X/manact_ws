@@ -1172,6 +1172,60 @@
 
         </div><!-- /arm-debug-grid -->
 
+        <!-- ======================================================= -->
+        <!-- 姿态序列管理                                              -->
+        <!-- ======================================================= -->
+        <div class="arm-seq-section">
+          <div class="arm-seq-header">
+            <h3 class="arm-seq-title">姿态序列管理</h3>
+            <button type="button" class="btn btn-outline-brand" id="arm-pose-capture-btn"
+                    title="将当前滑块角度保存为新姿态">
+              <span data-icon="plus"></span> 新建姿态
+            </button>
+          </div>
+
+          <div class="arm-seq-cards">
+            <!-- armup 序列卡片 -->
+            <div class="arm-seq-card" data-sequence="armup">
+              <div class="arm-seq-card-header">
+                <span class="arm-seq-card-icon" data-icon="package"></span>
+                <span class="arm-seq-card-name">armup 抓取序列</span>
+                <button type="button" class="btn btn-sm btn-primary arm-seq-run-btn" data-seq="armup">运行</button>
+              </div>
+              <div class="arm-seq-list" id="arm-seq-list-armup"></div>
+              <div class="arm-seq-add-row">
+                <select class="arm-select arm-seq-pose-select" id="arm-seq-add-armup">
+                  <option value="">-- 添加姿态 --</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- armdown 序列卡片 -->
+            <div class="arm-seq-card" data-sequence="armdown">
+              <div class="arm-seq-card-header">
+                <span class="arm-seq-card-icon" data-icon="package"></span>
+                <span class="arm-seq-card-name">armdown 放下序列</span>
+                <button type="button" class="btn btn-sm btn-primary arm-seq-run-btn" data-seq="armdown">运行</button>
+              </div>
+              <div class="arm-seq-list" id="arm-seq-list-armdown"></div>
+              <div class="arm-seq-add-row">
+                <select class="arm-select arm-seq-pose-select" id="arm-seq-add-armdown">
+                  <option value="">-- 添加姿态 --</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 姿态库 -->
+          <div class="arm-pose-lib">
+            <div class="arm-pose-lib-header">
+              <span class="arm-pose-lib-title">姿态库</span>
+              <span class="arm-pose-lib-count" id="arm-pose-count">0 个姿态</span>
+            </div>
+            <div class="arm-pose-lib-list" id="arm-pose-lib-list"></div>
+          </div>
+        </div>
+
         <!-- 状态指示 -->
         <div class="arm-debug-status" id="arm-status-bar">
           <span class="arm-status-dot" id="arm-status-dot"></span>

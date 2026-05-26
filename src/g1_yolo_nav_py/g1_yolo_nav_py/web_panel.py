@@ -369,6 +369,10 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         # 上肢调试进程（按需启动，不占用内存）
         self._arm_debug_proc: Optional[subprocess.Popen] = None
 
+        # 姿态序列执行进程
+        self._arm_seq_proc: Optional[subprocess.Popen] = None
+        self._arm_seq_name: Optional[str] = None  # "armup" / "armdown"
+
         # 日志环形缓冲（前端轮询拉取）
         self._log_lock = threading.Lock()
         self._logs = deque(maxlen=500)
@@ -814,6 +818,143 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             return {"running": False, "pid": None}
         return {"running": True, "pid": self._arm_debug_proc.pid}
 
+    # ---- 姿态序列管理 ----
+    def _resolve_arm_poses_path(self) -> Path:
+        """返回 arm_poses.json 的路径。"""
+        return Path(self._gs_arm_dir).parent / "config" / "arm_poses.json"
+
+    def get_arm_poses(self) -> dict:
+        """读取 arm_poses.json，不存在则返回内置默认值。"""
+        config_path = self._resolve_arm_poses_path()
+        try:
+            return json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        # 内置默认值
+        return {
+            "version": 1,
+            "poses": {
+                "reach_forward": {"name": "伸手接近", "angles": [-0.8, 0.5, -0.4, 0.15, -1.8, -0.8, -0.5, 0.4, 0.15, 1.8, 0.0, 0.0, 0.0]},
+                "arms_up":       {"name": "抬起目标", "angles": [-1.0, 0.7, 0.0, 0.6, -0.8, -1.0, -0.7, 0.0, 0.6, 0.8, 0.0, 0.0, 0.0]},
+                "pray":          {"name": "夹紧保持", "angles": [-1.15, 0.5, -0.3, 0.3, -1.8, -1.15, -0.5, 0.3, 0.3, 1.8, 0.0, 0.0, 0.0]},
+                "wave":          {"name": "伸展下放", "angles": [-1.1, 0.55, -0.45, 0.2, -1.8, -1.1, -0.55, 0.45, 0.2, 1.8, 0.0, 0.0, 0.0]},
+                "wave_body":     {"name": "自然下垂", "angles": [-0.7, 0.7, 0.0, 0.6, -0.8, -0.7, -0.7, 0.0, 0.6, 0.8, 0.0, 0.0, 0.0]},
+            },
+            "sequences": {
+                "armup":   [{"key": "reach_forward", "hold": 3.0}, {"key": "arms_up", "hold": 3.0}, {"key": "pray", "hold": 3.0}],
+                "armdown": [{"key": "wave", "hold": 3.0}, {"key": "wave_body", "hold": 3.0}],
+            },
+        }
+
+    def set_arm_poses(self, data: dict) -> dict:
+        """验证并保存 arm_poses.json。"""
+        if not isinstance(data, dict):
+            return {"ok": False, "error": "请求体必须是 JSON 对象"}
+        poses = data.get("poses")
+        sequences = data.get("sequences")
+        if not isinstance(poses, dict) or not isinstance(sequences, dict):
+            return {"ok": False, "error": "缺少 poses 或 sequences 字段"}
+        # 验证姿态
+        for key, p in poses.items():
+            if not isinstance(key, str) or not key:
+                return {"ok": False, "error": f"姿态 key 无效: {key}"}
+            if not isinstance(p, dict) or "angles" not in p:
+                return {"ok": False, "error": f"姿态 {key} 缺少 angles"}
+            if len(p["angles"]) != 13:
+                return {"ok": False, "error": f"姿态 {key} 角度数量应为 13，实际 {len(p['angles'])}"}
+        # 验证序列
+        for seq_name in ("armup", "armdown"):
+            seq = sequences.get(seq_name)
+            if not isinstance(seq, list):
+                return {"ok": False, "error": f"序列 {seq_name} 必须是数组"}
+            for i, entry in enumerate(seq):
+                if not isinstance(entry, dict) or "key" not in entry:
+                    return {"ok": False, "error": f"序列 {seq_name}[{i}] 缺少 key"}
+                if entry["key"] not in poses:
+                    return {"ok": False, "error": f"序列 {seq_name}[{i}] 引用了不存在的姿态: {entry['key']}"}
+                hold = entry.get("hold", 3.0)
+                entry["hold"] = max(0.5, min(60.0, float(hold)))
+        # 写入文件
+        config_path = self._resolve_arm_poses_path()
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def cmd_arm_seq_run(self, sequence_name: str) -> dict:
+        """执行 armup 或 armdown 序列。"""
+        if sequence_name not in ("armup", "armdown"):
+            return {"ok": False, "error": f"未知序列: {sequence_name}"}
+        if self._arm_seq_proc is not None and self._arm_seq_proc.poll() is None:
+            return {"ok": False, "error": f"序列 {self._arm_seq_name} 正在执行中"}
+        arm_dir = Path(self._gs_arm_dir)
+        script = str(arm_dir / f"{sequence_name}.py")
+        if not Path(script).exists():
+            return {"ok": False, "error": f"{sequence_name}.py 不存在: {script}"}
+        python = get_venv_python()
+        args = [python, script]
+        if self._gs_net_iface:
+            args.append(self._gs_net_iface)
+        env = build_isolated_env(
+            network_interface=self._gs_net_iface or "",
+            cyclonedds_home=self._gs_cyclonedds_home or "",
+            sdk_python_path=self._gs_sdk_python_path or "",
+        )
+        env["PYTHONPATH"] = str(arm_dir) + ":" + env.get("PYTHONPATH", "")
+        self._log_info(f"[序列] 启动 {sequence_name}.py ...")
+        self._arm_seq_name = sequence_name
+        try:
+            self._arm_seq_proc = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                universal_newlines=True,
+                cwd=str(arm_dir),
+                env=env,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+            threading.Thread(
+                target=self._read_arm_seq_output,
+                args=(self._arm_seq_proc, sequence_name),
+                daemon=True,
+            ).start()
+            return {"ok": True, "msg": f"{sequence_name} 已启动 (pid={self._arm_seq_proc.pid})"}
+        except Exception as e:
+            self._log_error(f"[序列] 启动失败: {e}")
+            self._arm_seq_proc = None
+            self._arm_seq_name = None
+            return {"ok": False, "error": str(e)}
+
+    def _read_arm_seq_output(self, proc: subprocess.Popen, name: str) -> None:
+        """读取姿态序列子进程输出到日志。"""
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                line = line.strip()
+                if line:
+                    self._append_log(f"[{name}] {line}", "info")
+        except Exception:
+            pass
+        self._log_info(f"[{name}] 执行完成")
+        self._arm_seq_proc = None
+        self._arm_seq_name = None
+
+    def get_arm_seq_status(self) -> dict:
+        """获取姿态序列执行状态。"""
+        if self._arm_seq_proc is None:
+            return {"running": False, "script": None}
+        poll = self._arm_seq_proc.poll()
+        if poll is not None:
+            self._arm_seq_proc = None
+            self._arm_seq_name = None
+            return {"running": False, "script": None}
+        return {"running": True, "script": self._arm_seq_name, "pid": self._arm_seq_proc.pid}
+
     # ---- 相机驱动控制 ----
     def cmd_camera_start(self) -> dict:
         return self._camera.start()
@@ -1015,6 +1156,31 @@ def create_app(node: WebPanelNode) -> Flask:
             {"key": "wave_body",     "name": "自然下垂", "angles": [-0.7, 0.7, 0.0, 0.6, -0.8, -0.7, -0.7, 0.0, 0.6, 0.8, 0.0, 0.0, 0.0]},
         ]
         return jsonify({"ok": True, "presets": presets})
+
+    # ---- 姿态序列管理 ----
+    @app.route("/api/arm_poses", methods=["GET"])
+    def api_arm_poses_get():
+        return jsonify(node.get_arm_poses())
+
+    @app.route("/api/arm_poses", methods=["POST"])
+    def api_arm_poses_set():
+        data = request.get_json(force=True, silent=True) or {}
+        res = node.set_arm_poses(data)
+        code = 200 if res.get("ok") else 400
+        return jsonify(res), code
+
+    @app.route("/api/arm_poses/run/<sequence_name>", methods=["POST"])
+    def api_arm_poses_run(sequence_name):
+        try:
+            res = node.cmd_arm_seq_run(sequence_name)
+            code = 200 if res.get("ok") else 400
+            return jsonify(res), code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/arm_poses/run/status", methods=["GET"])
+    def api_arm_poses_run_status():
+        return jsonify(node.get_arm_seq_status())
 
     # ---- 相机驱动 ----
     @app.route("/api/camera/start", methods=["POST"])

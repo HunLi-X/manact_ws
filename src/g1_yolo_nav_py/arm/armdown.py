@@ -18,11 +18,30 @@ G1 手臂放下控制 (armdown)
     pip install unitree_sdk2py numpy
 """
 
+import json
 import time
 import sys
+from pathlib import Path
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
+
+
+def _load_pose_sequence():
+    """从 config/arm_poses.json 加载 armdown 序列，失败时返回内置默认值。"""
+    config_path = Path(__file__).resolve().parent.parent / "config" / "arm_poses.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        poses = data["poses"]
+        seq = data["sequences"]["armdown"]
+        result = []
+        for entry in seq:
+            p = poses[entry["key"]]
+            result.append((p["name"], list(p["angles"]), float(entry["hold"])))
+        return result
+    except Exception:
+        return None
+
 
 def _pose_wave():
     """伸展下放姿态。"""
@@ -41,10 +60,12 @@ def _pose_wave_body():
     ]
 
 # 放下序列：伸展下放 → 自然下垂（之后归零释放）
-POSE_SEQUENCE = [
+_DEFAULT_SEQUENCE = [
     ("wave",       _pose_wave(),       3.0),
     ("wave_body",  _pose_wave_body(),  3.0),
 ]
+
+POSE_SEQUENCE = _load_pose_sequence() or _DEFAULT_SEQUENCE
 
 class ReleaseController(BaseArmController):
     """G1 放下控制器 — 从夹紧姿态 → 下放 → 归零 → 释放 arm_sdk。

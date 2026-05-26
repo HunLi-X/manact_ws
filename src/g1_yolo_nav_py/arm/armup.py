@@ -18,11 +18,30 @@ G1 手臂抓取控制 (armup)
     pip install unitree_sdk2py numpy
 """
 
+import json
 import time
 import sys
+from pathlib import Path
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from arm_common import BaseArmController, build_timeline
+
+
+def _load_pose_sequence():
+    """从 config/arm_poses.json 加载 armup 序列，失败时返回内置默认值。"""
+    config_path = Path(__file__).resolve().parent.parent / "config" / "arm_poses.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        poses = data["poses"]
+        seq = data["sequences"]["armup"]
+        result = []
+        for entry in seq:
+            p = poses[entry["key"]]
+            result.append((p["name"], list(p["angles"]), float(entry["hold"])))
+        return result
+    except Exception:
+        return None
+
 
 def _pose_arms_up():
     """抬起姿态"""
@@ -48,11 +67,13 @@ def _pose_reach_forward():
          0.0,   0.0,  0.0,
     ]
 
-POSE_SEQUENCE = [
+_DEFAULT_SEQUENCE = [
     ("reach_forward",  _pose_reach_forward(),  3.0),
     ("arms_up",        _pose_arms_up(),        3.0),
     ("pray",           _pose_pray(),           3.0),
 ]
+
+POSE_SEQUENCE = _load_pose_sequence() or _DEFAULT_SEQUENCE
 
 class GrabController(BaseArmController):
     """G1 抓取控制器 — 伸手 → 抬起 → 夹紧保持。
