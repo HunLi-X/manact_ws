@@ -1,4 +1,5 @@
 .codebuddy/
 CODEBUDDY.md
-.agent/
+.agents/
 .claude/
+skills-lock.json
