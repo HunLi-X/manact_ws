@@ -2,4 +2,5 @@
 CODEBUDDY.md
 .agents/
 .claude/
+*.pt
 skills-lock.json
