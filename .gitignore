@@ -3,4 +3,7 @@ CODEBUDDY.md
 .agents/
 .claude/
 *.pt
+*.pth
+*.onnx
+*.weights
 skills-lock.json
