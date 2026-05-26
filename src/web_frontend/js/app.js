@@ -50,6 +50,7 @@ const ICONS = {
   'plus':         '<svg viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>',
   'grip-vertical':'<svg viewBox="0 0 24 24"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>',
   'edit':         '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  'save':         '<svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
 };
 
 function renderIcons(root = document) {
@@ -1377,6 +1378,7 @@ const ARM_SEQ_DEFAULTS = {
 let _armPosesData = null;
 let _armSeqRunning = false;
 let _armSeqSaveTimer = null;
+let _armEditingPose = null;  // 正在编辑的姿态 key
 
 // ---------- 加载 / 保存 ----------
 function loadArmPoses() {
@@ -1549,7 +1551,7 @@ function renderArmPoseLib() {
 
   entries.forEach(([key, pose]) => {
     const div = document.createElement('div');
-    div.className = 'arm-pose-lib-entry';
+    div.className = 'arm-pose-lib-entry' + (key === _armEditingPose ? ' editing' : '');
     const isUsed = usedKeys.has(key);
     div.innerHTML = `
       <span class="arm-pose-lib-entry-name">${pose.name}</span>
@@ -1579,7 +1581,11 @@ function renderArmPoseLib() {
         if (rng) rng.value = a;
         if (num) num.value = parseFloat(a).toFixed(2);
       });
-      showToast('已加载姿态: ' + pose.name, 'info');
+      loadBatchFromSliders();  // 同步批量编辑器
+      _armEditingPose = key;
+      updateArmEditUI();
+      renderArmPoseLib();  // 刷新高亮
+      showToast('编辑中: ' + pose.name + ' — 修改滑块后点击"更新"', 'info');
     });
   });
 
@@ -1588,35 +1594,53 @@ function renderArmPoseLib() {
       const key = btn.dataset.key;
       if (btn.disabled) return;
       delete _armPosesData.poses[key];
-      renderArmPoseLib();
-      saveArmPoses();
+      if (_armEditingPose === key) { _armEditingPose = null; updateArmEditUI(); }
+      renderArmSequences(); renderArmPoseLib(); saveArmPoses();
     });
   });
 }
 
-// ---------- 从滑块捕获新姿态 ----------
-function captureCurrentPose() {
-  const name = prompt('输入姿态名称:');
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim();
-
-  // 生成 key：取中文拼音或用时间戳
-  let key = trimmed.replace(/[^a-zA-Z0-9_一-鿿]/g, '_').toLowerCase();
-  if (!key || /^_+$/.test(key)) key = 'pose_' + Date.now();
-  // 如果 key 已存在，加数字后缀
-  let finalKey = key;
-  let n = 2;
-  while (_armPosesData.poses[finalKey]) {
-    finalKey = key + '_' + n;
-    n++;
+function updateArmEditUI() {
+  const btn = document.getElementById('arm-pose-capture-btn');
+  if (!btn) return;
+  if (_armEditingPose) {
+    const pose = _armPosesData.poses[_armEditingPose];
+    btn.innerHTML = '<span data-icon="save"></span> 更新';
+    btn.title = '点击更新当前姿态角度和名称';
+    btn.classList.add('btn-primary'); btn.classList.remove('btn-outline-brand');
+  } else {
+    btn.innerHTML = '<span data-icon="plus"></span> 新建';
+    btn.title = '将当前滑块角度保存为新姿态';
+    btn.classList.add('btn-outline-brand'); btn.classList.remove('btn-primary');
   }
+  renderIcons(btn);
+}
 
-  const angles = readArmAngles();
-  _armPosesData.poses[finalKey] = { name: trimmed, angles: angles };
-  renderArmSequences();
-  renderArmPoseLib();
-  saveArmPoses();
-  showToast('已保存姿态: ' + trimmed, 'info');
+// ---------- 从滑块捕获/更新姿态 ----------
+function captureCurrentPose() {
+  if (_armEditingPose) {
+    // 更新模式：直接用滑块当前角度覆盖
+    const pose = _armPosesData.poses[_armEditingPose];
+    if (!pose) return;
+    pose.angles = readArmAngles();
+    saveArmPoses();
+    renderArmPoseLib();
+    _armEditingPose = null;
+    updateArmEditUI();
+    showToast('已更新姿态', 'info');
+  } else {
+    // 新建模式
+    const name = prompt('输入姿态名称:');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    let key = trimmed.replace(/[^a-zA-Z0-9_一-鿿]/g,'_').toLowerCase();
+    if (!key||/^_+$/.test(key)) key='pose_'+Date.now();
+    let finalKey=key,n=2;
+    while(_armPosesData.poses[finalKey]){finalKey=key+'_'+n;n++;}
+    _armPosesData.poses[finalKey]={name:trimmed,angles:readArmAngles()};
+    renderArmSequences(); renderArmPoseLib(); saveArmPoses();
+    showToast('已保存姿态: '+trimmed,'info');
+  }
 }
 
 // ---------- 运行序列 ----------
@@ -1675,40 +1699,73 @@ function initArmSeqAddSelects() {
 }
 
 // ---------- 批量角度编辑 ----------
-function formatAngles3Row(angles) {
-  const left  = angles.slice(0,5).map(a => a.toFixed(2).padStart(6));
-  const right = angles.slice(5,10).map(a => a.toFixed(2).padStart(6));
-  const waist = angles.slice(10,13).map(a => a.toFixed(2).padStart(6));
-  return [left.join(',')+',', right.join(',')+',', waist.join(',')+','].join('\n');
+function buildBatchGrid() {
+  const grid = document.getElementById('arm-batch-grid');
+  if (!grid) return;
+  const ROW_NAMES = [
+    ['LeftShoulderPitch','LeftShoulderRoll','LeftShoulderYaw','LeftElbow','LeftWristRoll'],
+    ['RightShoulderPitch','RightShoulderRoll','RightShoulderYaw','RightElbow','RightWristRoll'],
+    ['WaistYaw','WaistRoll','WaistPitch'],
+  ];
+  const ROW_START = [0, 5, 10];
+  grid.innerHTML = '';
+  ROW_NAMES.forEach((labels, rowIdx) => {
+    const row = document.createElement('div');
+    row.className = 'arm-batch-row';
+    labels.forEach((label, colIdx) => {
+      const i = ROW_START[rowIdx] + colIdx;
+      const span = document.createElement('span');
+      span.className = 'arm-batch-row-label';
+      span.textContent = label.slice(0,7);
+      row.appendChild(span);
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.className = 'arm-batch-input';
+      inp.dataset.idx = i; inp.step = '0.01'; inp.value = '0';
+      inp.min = ARM_LIMITS[i][0]; inp.max = ARM_LIMITS[i][1];
+      row.appendChild(inp);
+    });
+    grid.appendChild(row);
+  });
 }
+
 function loadBatchFromSliders() {
   const angles = readArmAngles();
-  const txt = document.getElementById('arm-batch-input');
-  if (txt) txt.value = formatAngles3Row(angles);
+  for (let i = 0; i < ARM_JOINT_NAMES.length; i++) {
+    const el = document.querySelector('#arm-batch-grid .arm-batch-input[data-idx="'+i+'"]');
+    if (el) el.value = angles[i].toFixed(2);
+  }
 }
 function applyBatchToSliders() {
-  const txt = document.getElementById('arm-batch-input');
-  if (!txt) return;
-  const vals = txt.value.trim().split(/[,\s]+/).map(v=>parseFloat(v)).filter(v=>!isNaN(v));
-  const expected = ARM_JOINT_NAMES.length;
-  if (vals.length !== expected) { showToast('需要 '+expected+' 个值，当前 '+vals.length+' 个','error'); return; }
-  vals.forEach((a,i)=>{
+  let angles = [];
+  for (let i = 0; i < ARM_JOINT_NAMES.length; i++) {
+    const el = document.querySelector('#arm-batch-grid .arm-batch-input[data-idx="'+i+'"]');
+    angles.push(el ? parseFloat(el.value) || 0 : 0);
+  }
+  angles.forEach((a,i)=>{
     const lo=ARM_LIMITS[i][0],hi=ARM_LIMITS[i][1],clipped=Math.max(lo,Math.min(hi,a));
     const r=document.querySelector('.arm-slider-input[data-idx="'+i+'"]');
     const n=document.querySelector('.arm-slider-val[data-idx="'+i+'"]');
     if(r)r.value=clipped; if(n)n.value=clipped.toFixed(2);
   });
-  showToast('已应用 '+vals.length+' 个角度','info');
-  txt.value = formatAngles3Row(vals);
+  showToast('已应用 '+angles.length+' 个角度','info');
 }
 
 // ---------- 初始化 ----------
 (function initArmSeqManager() {
+  buildBatchGrid();
   loadArmPoses();
   initArmSeqAddSelects();
 
   const captureBtn = document.getElementById('arm-pose-capture-btn');
   if (captureBtn) captureBtn.addEventListener('click', captureCurrentPose);
+
+  // ESC 取消编辑
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _armEditingPose) {
+      _armEditingPose = null; updateArmEditUI(); renderArmPoseLib();
+      showToast('已取消编辑', 'info');
+    }
+  });
 
   const batchLoad = document.getElementById('arm-batch-load-btn');
   const batchApply = document.getElementById('arm-batch-apply-btn');

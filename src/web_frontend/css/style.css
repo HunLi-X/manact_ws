@@ -2671,6 +2671,10 @@ body.settings-active .topbar-toc { display: flex; }
 .arm-pose-lib-entry:hover {
   background: rgba(255, 255, 255, 0.8);
 }
+.arm-pose-lib-entry.editing {
+  background: rgba(254, 243, 199, 0.6);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
 .arm-pose-lib-entry-name {
   flex: 1;
   font-size: 12px;
@@ -2728,20 +2732,28 @@ body.settings-active .topbar-toc { display: flex; }
   font-size: 11px; color: rgba(15,23,42,0.4);
   font-family: 'JetBrains Mono',Consolas,monospace;
 }
+.arm-batch-grid {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.arm-batch-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.arm-batch-row-label {
+  font-size: 10px; color: rgba(15,23,42,0.45); font-weight: 500;
+  width: 48px; flex-shrink: 0; text-align: right;
+  font-family: 'JetBrains Mono',Consolas,monospace;
+}
 .arm-batch-input {
-  width: 100%; box-sizing: border-box;
+  width: 64px;
   background: rgba(255,255,255,0.6);
   border: 1px solid rgba(15,23,42,0.1);
-  border-radius: 10px; padding: 10px 12px;
-  font-size: 12px; color: #0F172A;
+  border-radius: 8px; padding: 4px 8px;
+  font-size: 12px; color: #0F172A; text-align: right;
   font-family: 'JetBrains Mono',Consolas,monospace;
-  resize: vertical; outline: none; line-height: 1.7;
-  transition: border-color 0.15s;
+  font-variant-numeric: tabular-nums;
+  outline: none; transition: border-color 0.15s;
 }
 .arm-batch-input:focus {
-  border-color: #8B5CF6;
-  background: rgba(255,255,255,0.92);
+  border-color: #6366F1; background: rgba(255,255,255,0.92);
 }
-.arm-batch-actions { display: flex; gap: 8px; }
-.arm-batch-actions .btn-sm { padding: 5px 14px; font-size: 12px; border-radius: 8px; }
 

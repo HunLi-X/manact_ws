@@ -1172,20 +1172,15 @@
 
         </div><!-- /arm-debug-grid -->
 
-        <!-- 批量角度编辑器 -->
+        <!-- 批量角度编辑器 — 13输入框三行 -->
         <div class="arm-batch-editor" id="arm-batch-editor">
           <div class="arm-batch-header">
             <span class="arm-batch-title">批量编辑角度</span>
-            <span class="arm-batch-hint">13 个值（弧度），逗号或空格分隔</span>
+            <button type="button" class="btn btn-sm btn-outline-brand" id="arm-batch-load-btn">读取滑块</button>
+            <button type="button" class="btn btn-sm btn-primary" id="arm-batch-apply-btn">应用</button>
           </div>
-          <textarea id="arm-batch-input" class="arm-batch-input" rows="3"
-            placeholder="  0.00,  0.00,  0.00,  0.00,  0.00,
-  0.00,  0.00,  0.00,  0.00,  0.00,
-  0.00,  0.00,  0.00,"
-            spellcheck="false"></textarea>
-          <div class="arm-batch-actions">
-            <button type="button" class="btn btn-sm btn-outline-brand" id="arm-batch-load-btn">从滑块读取</button>
-            <button type="button" class="btn btn-sm btn-primary" id="arm-batch-apply-btn">应用到滑块</button>
+          <div class="arm-batch-grid" id="arm-batch-grid">
+            <!-- JS 动态生成 13 个数值输入框 -->
           </div>
         </div>
 
