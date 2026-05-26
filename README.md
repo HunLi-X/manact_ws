@@ -21,8 +21,6 @@
 </p>
 
 <p>让 G1 看见世界，走向目标，伸出双手。</p>
-
-<img src="https://cnb.cool/66666/resource/-/git/raw/main/img/hengtiao.gif" width="100%" height="3">
 </div><br>
 
 ## 项目介绍
@@ -97,67 +95,54 @@ python dev_server.py   # 浏览器 http://localhost:8080
 
 ```
 g1act_ws/
-├── README.md                     # 项目说明文档（中文）
-├── README.en.md                 # 项目说明文档（英文）
-├── CODEBUDDY.md                # AI 编程助手指引文档
-├── requirements.txt             # Python 依赖列表
+├── README.md                  # 项目说明（中文）
+├── README.en.md              # 项目说明（英文）
+├── requirements.txt           # Python 依赖
 ├── src/
-│   ├── D455.md                 # D455 相机说明文档
-│   ├── web_frontend/          # Web 控制面板前端（HTML/CSS/JS + 本地 dev server）
-│   │   ├── index.html              # 主页面（6 个视图模块）
-│   │   ├── css/
-│   │   │   ├── style.css           # 液态玻璃风样式
-│   │   │   └── lggc.css            # LGGC 玻璃 utility class
-│   │   ├── js/app.js              # 路由 / 状态轮询 / 进程管理 / 背景
-│   │   └── dev_server.py          # 本地 mock 后端（无 ROS2 依赖）
-│   ├── g1_yolo_nav_py/        # 主 ROS2 Python 包
-│   │   ├── setup.py                # 包设置（entry_points 定义）
-│   │   ├── package.xml            # ROS2 包描述
-│   │   ├── yolo_v11x_best.pt     # YOLOv11x 自定义训练模型
-│   │   ├── config/                # 参数配置文件
-│   │   │   └── yolo_nav.yaml
-│   │   ├── launch/                # ROS2 启动文件
+│   ├── web_frontend/         # Web 前端（HTML/CSS/JS + dev server）
+│   │   ├── index.html            # 主页面（7 个视图）
+│   │   ├── css/style.css         # 样式表
+│   │   ├── js/app.js             # 前端逻辑
+│   │   └── dev_server.py         # Mock 后端（无 ROS2 依赖）
+│   ├── g1_yolo_nav_py/       # 主 ROS2 包
+│   │   ├── setup.py              # 包设置
+│   │   ├── config/
+│   │   │   └── arm_poses.json    # 手臂姿态配置文件
+│   │   ├── launch/               # ROS2 启动文件
 │   │   │   ├── grasp_task.launch.py
 │   │   │   └── yolo_nav.launch.py
-│   │   ├── arm/                   # 手臂控制脚本（unitree_sdk2py，独立进程）
-│   │   │   ├── arm_common.py        # 手臂公共模块
-│   │   │   ├── arm.py              # 手臂控制演示
-│   │   │   ├── armup.py            # 抓取动作：伸手→抬起→夹紧保持
-│   │   │   └── armdown.py          # 放下动作：伸展→下垂→归零释放
-│   │   └── g1_yolo_nav_py/       # Python 模块代码
-│   │       ├── web_panel.py         # Web 控制面板节点（Flask + ROS2）★ 推荐入口
-│   │       ├── control_panel.py     # tkinter GUI 控制面板（旧版）
-│   │       ├── yolo_detector.py     # YOLO 检测节点
-│   │       ├── yaw_align.py         # 步进式偏航对齐
-│   │       ├── loco_forward.py      # 前进控制 + 深度距离停止
-│   │       ├── grasp_task.py        # 终端版抓取任务
-│   │       ├── rgbd_capture.py      # RGBD 数据采集
-│   │       ├── spatial_target.py    # 2D→3D 空间投影
-│   │       ├── detection_visualizer.py  # 检测可视化
-│   │       ├── _grasp_state.py      # 抓取状态机 Mixin
-│   │       ├── _detection_utils.py  # 检测工具函数
-│   │       └── _dds_compat.py       # DDS 兼容层
-│   └── base/                   # 参考包（不直接调用）
-│       ├── ctrl_keyboard/        # Loco API 参考实现
-│       └── g1_description/      # URDF 模型（12/23/29 dof）
+│   │   ├── arm/                  # 手臂控制（独立子进程，DDS 隔离）
+│   │   │   ├── arm_common.py       # 关节常量 + 基类
+│   │   │   ├── arm_debug.py        # 上肢调试子进程（stdin JSON 协议）
+│   │   │   ├── armup.py            # 抓取动作
+│   │   │   └── armdown.py          # 放下动作
+│   │   └── g1_yolo_nav_py/      # Python 节点模块
+│   │       ├── web_panel.py        # Web 面板节点 ★ 推荐入口
+│   │       ├── control_panel.py    # tkinter 控制面板（旧版）
+│   │       ├── yolo_detector.py    # YOLO 检测
+│   │       ├── yaw_align.py        # 步进式偏航对齐
+│   │       ├── loco_forward.py     # 前进 + 深度停止
+│   │       ├── grasp_task.py       # 终端抓取任务
+│   │       ├── rgbd_capture.py     # RGBD 数据采集
+│   │       ├── spatial_target.py   # 2D→3D 空间投影
+│   │       ├── _grasp_state.py     # 抓取状态机 Mixin
+│   │       └── _dds_compat.py      # DDS 兼容层
+│   └── base/                  # 参考包
+│       ├── ctrl_keyboard/       # Loco API 参考
+│       └── g1_description/     # URDF 模型
 ```
-#### 更新代码命令
-```更新代码命令
+#### 更新代码
+```bash
 cd ~/g1act_ws/manact_ws
 git pull
 colcon build
 ```
-#### 每次启动激活虚拟环境命令
-```每次启动激活虚拟环境命令
+#### 每次启动
+```bash
 cd ~/g1act_ws/manact_ws
 source ~/g1act_venv/bin/activate
 . install/setup.bash
 ```
-### 模型说明
-
-| 文件                  | 说明                                              |
-| --------------------- | ------------------------------------------------- |
-| `yolo_v11x_best.pt` | YOLOv11x 自定义训练模型权重文件，用于目标检测推理 |
 
 ## 快速开始
 
@@ -370,39 +355,47 @@ ros2 run g1_yolo_nav_py web_panel
 - **内联参数表单** — 直接改 `camera_namespace` / `image_topic` / `interval_sec` 等参数，点保存写入后端
 - **子进程日志** — 折叠展开看最近 80 行 ros2 stdout
 
-### 完整 API（13 个端点）
+### 完整 API
 
 ```
-GET  /                          → 主页（HTML）
+GET  /                          → 主页
 GET  /stream/raw                → MJPEG 原始视频流
 GET  /stream/detection          → MJPEG 检测标注流
-GET  /api/state                 → 全局状态轮询（含 3 个进程状态）
-GET  /api/config                → 读取热更新配置（19 个字段）
-POST /api/config                → 批量热更新配置
-POST /api/cmd/manual            → 手动遥控（vx, vy, vyaw 钳位）
-POST /api/cmd/stop              → 急停（清状态机 + sport.stop）
-POST /api/cmd/search            → 进入搜索状态
-POST /api/cmd/grab              → 立即抓取（armup.py）
-POST /api/cmd/putdown           → 放下（armdown.py）
-POST /api/cmd/turn_putdown      → 右转 90° 后放下
-POST /api/cmd/left_putdown      → 左移侧步后放下
-POST /api/process/<n>/start     → 启动子进程（n = camera/yolo/rgbd）
+GET  /api/state                 → 全局状态轮询
+GET  /api/config                → 读取热更新配置
+POST /api/config                → 批量热更新
+POST /api/cmd/manual            → 手动遥控
+POST /api/cmd/stop              → 急停
+POST /api/cmd/search            → 搜索
+POST /api/cmd/grab              → 抓取
+POST /api/cmd/putdown           → 放下
+POST /api/cmd/turn_putdown      → 右转 90° 放下
+POST /api/cmd/left_putdown      → 左移放下
+POST /api/arm_debug/start       → 启动上肢调试子进程
+POST /api/arm_debug/stop        → 停止上肢调试
+POST /api/arm_debug/send        → 发送目标角度
+GET  /api/arm_debug/status      → 调试进程状态
+GET  /api/arm_debug/presets     → 获取预设姿态
+GET  /api/arm_poses             → 读取姿态配置
+POST /api/arm_poses             → 保存姿态配置
+POST /api/arm_poses/run/<name>  → 执行 armup/armdown 序列
+GET  /api/arm_poses/run/status  → 序列执行状态
+POST /api/process/<n>/start     → 启动子进程
 POST /api/process/<n>/stop      → 停止子进程
-GET  /api/process/<n>/status    → 完整状态 + 80 行日志
-POST /api/process/<n>/params    → 更新参数（下次启动生效）
+GET  /api/process/<n>/status    → 进程状态 + 日志
+POST /api/process/<n>/params    → 更新进程参数
 ```
 
-### 系统设置（界面热更新 19 个参数）
+### 系统设置（4 个分组）
 
-不用改 yaml 不用 source bash，浏览器里直接调：
+浏览器里直接调，不用改 yaml：
 
 | 分组 | 参数 |
 |---|---|
-| 🔍 检测识别 | target_class_id / use_depth_distance / stop_distance / depth_sample_radius / lost_timeout |
-| 🎯 对齐控制 | step_yaw_speed / step_duration / camera_settle_time / max_consecutive_steps / center_tolerance |
-| 🕹 运动控制 | forward_speed / arrive_bbox_ratio / align_stable_time / search_yaw_speed / turn_yaw_speed / turn_duration / side_step_speed / side_step_duration |
-| 🎨 界面偏好 | stream_quality / default_view / log_toast / poll_interval（3 个本地存 localStorage） |
-| 🖼 动态背景 | 背景类型（默认渐变 / Bing 每日 / Picsum / 自定义 URL）+ 蒙版 + 模糊 |
+| 检测与对齐 | target_class_id / use_depth_distance / stop_distance / depth_sample_radius / lost_timeout / step_yaw_speed / step_duration / camera_settle_time / max_consecutive_steps / center_tolerance |
+| 运动与相机 | forward_speed / arrive_bbox_ratio / align_stable_time / search_yaw_speed / turn_yaw_speed / turn_duration / side_step_speed / side_step_duration / camera_namespace / camera_name |
+| 系统环境 | network_interface / cyclonedds_home / sdk_python_path / arm_script_dir |
+| 偏好与背景 | stream_quality / default_view / log_toast / poll_interval + 背景类型/蒙版/模糊 |
 
 ### 自定义参数（启动时固定）
 

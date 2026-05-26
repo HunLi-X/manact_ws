@@ -1,18 +1,26 @@
 English | [简体中文](README.md)
 
+
 <div align="center">
 <h1>G1 NavGrasp</h1>
 
 [![ROS2 Foxy](https://img.shields.io/badge/ROS2-Foxy-blue)](https://docs.ros.org/en/foxy/)
-[![YOLOv11](https://img.shields.io/badge/YOLOv11-Object%20Detection-green)](https://docs.ultralytics.com/)
-[![Vision-Only](https://img.shields.io/badge/Vision-Only-Path%20Planning-orange)](https://navigation.ros.org/)
+[![YOLOv11](https://img.shields.io/badge/YOLOv11-目标检测-green)](https://docs.ultralytics.com/)
+[![纯视觉](https://img.shields.io/badge/纯视觉-路径规划-orange)](https://navigation.ros.org/)
 [![Python 3.8](https://img.shields.io/badge/Python-3.8+-yellow)](https://www.python.org/)
 
-[![Auth](https://img.shields.io/badge/Auther--HunLi-ff69b4.svg?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAADZElEQVR4nO2ZX2iPURjHP/7/aZN/E21DaZvtwoVYyQUuGXLB/LtkLRcUhSJMSVwg3KCUJPJvLmRZtMQFLvwZhUJk/saGLWaYV6eet06n9/3tfd+9531/sW89td9z3vOc8z3nPOc8zzPoQQ+yAnlAA/AbcCzKR2ClTSL7LRNwNPkB5Noi0pggEQeYbovIh4SJLLBBojfwK2EiVTaIjEyYhANsskGkNAUi+2wQmZECkRM2iCxMgUi9DSKrxPhS7GOZjHXPhvGtYlwdMduYKWO9tmH8oBgvxj6KZawOoFfcxk+L8RzsI0fzkyFhO28EvqXg0FHlK1DtReRzFkzOCSmfvIhczIKJOSHlmheRgcAK4E4WTNDpQp4Ba4P4zxRgO3ArgSQqqDQDx4AKCWBDYwSwRDP4JWECG4CpQB9iwCTNsBsJl8srvxk4CtQBN4Enkre0GKQ7RaekCXgAXAcuAHuB1bLaZcAgrd+2uK78ai0PsfLSBshG70u9IDJmyUq2AYvlbD5N4Dg9l/EnArdFV9sdIlfEiLrNzFAlqPwE2kP2OaKNlyfH8Q9QFJVIixgepukqIuTdRRI3Be1TaczjnOgXRSXyTgwUarrBIVb4htbvcMA+nR7+UCdtc6MSOS8G9hj6+gjlnHEBd+WuMVaZ9FMyJiqRydrgB4B80VcFmFBtxALfFm3nlwPv48rfK7WoWDkc8jgpYq0eE/kOnAGG+4RBh3z6qTGOyzfIJeG2nQL6EQMmaEaTgtNdv+jKcFJwbI33XxEpAM76+IArrXIbFqVFpE0MuzeXF4nmEI9ecwZbhVo6GzsaxLhnniw74YQUVdDwwjppv2yzaPbIJ7HJdJz8RIX5JgYAL6V9vg0ifYEXMsAaj3Z3cpfkmPmhQAs5vHxgh+gbbdS0XMyTQdrkbdHhTiwTCdMHTCLl8hCqeGsalnFSO2JDNb3XxOZINqhkttFmfq8W4I1PbGcFuVr21qCloe7EarRvmzT9K01fYxAZJVmgA1yNKxwh4NF4q0Wr+UZs5JIxndskoVLoEskI1e/HRu6TCEpklR1ZebPcqk/YT9cu1UL190NgNCmhQGpfTjelLo2dMNEf2BkylXVF7eL6qAU3WyiVvCHIv7A7pBY2nizGWGC3FOr0XeoQZ96VIcbqAf8K/gLNGaTJ3vwbFgAAAABJRU5ErkJggg==)](https://github.com/HunLi-X)
-[![cnb](https://img.shields.io/badge/CNB-xhunli-F76945?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAppJREFUOE9tk01rE1EUhs+5H5lJ0iQT3FRX2Yi4avoLkv4CWxBcNt11oZiuFKGmXQhFN6kuRESSgitXKf6A5g+I6cqFLiKCiptOkraZ5H4cuZOkH9oLw+UO8z7nvGfei3DFohoEQLAKCGWyGJCSbQZsD3ei7r+f45WATV6xmjdISyAlYLaDliveux+ti5ozwLAaFPhIlk6G6f18sxuO7l9bBiWbVoncDGCMWMl++PI/gJ7IohkmD0zkBxT5oRn5LTpN7ULqBByEtFywWvRyHz8Fx3dvN0UwuMPyR0uJFycddH7tKPHZRn7BjnwwkQcUud0HO/K7oOENcTYPRCEAFERmsCpyfZDZfpdnBosOUKGx13BC60QTIdjpmSzrEWDR+UagjsgMciLXAwfhc4MNpKfQtOPE6mVh0gEOaeTXtWXXEdADpJAR/GaZ/rrM9Us82wORPd5zHbRp7JVcyxR5PRP5LTPy6uo0HXIlG9awMgLuEUABkBYI7VLyxs+yyPW3+Nyg4zqoG+UV7TDRlMBbWA/D43u3qlbLGmgRWM2BjFxjQjWQGQBuu4bYYvrm14JMnQSXcjBcny9A5DXIiDJp9/8FWCXAAOaFUEfILTgIcttOvf+2NJnLdI0fBFUyskZKBGTEJEAmBuzr9LCSUDwGQAwwgMzu+m9/VWOAeZSsk+YP48C4li/sRok1nlBd5PogBjgxNw70PfHyqBADyEVXicasZXCVpxYiLfO+HxVZDHCVYwvu2ebPT7fOLNAm65AWLnEAzvsEcOi9/lPU1aACXDfOLdhD9kxNszGdweQGYstqXgItJwDFNxKvwrp57G8h0zVwldHuA0IFt8El83yIs2FSDcpgxDJpUUTwK7gTduN3AK5iG7ehc/E2/gUPD3q3eY4awwAAAABJRU5ErkJggq==)](https://cnb.cool/u/xhunli)
+<p align="center">
+  <a href="https://github.com/HunLi-X">
+    <img src="https://img.shields.io/badge/Auther--HunLi-ff69b4?logo=github&logoColor=white" alt="Auth" />
+  </a>
+  <a href="https://cnb.cool/u/xhunli">
+    <img src="https://img.shields.io/badge/CNB-xhunli-F76945?logo=data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMzIwIDMyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4NCjxwYXRoIGQ9Ik0yMjguOTA2IDQwLjI0MTJDMjI5Ljg4MiAzNy41MTA4IDIyOC45MDYgMzQuMzkwMyAyMjYuNzU5IDMyLjQ0QzIxOS4zNDIgMjYuMDA0IDIwMC43OTkgMTIuMzUxOSAxNzMuMDgyIDEwLjQwMTZDMTQxLjg1MiA4LjA2MTIxIDEyMi41MjggMTYuNDQ3NSAxMTIuNzY5IDIyLjY4ODVDMTA4LjQ3NCAyNS40MTg5IDEwOC4yNzkgMzEuNDY0OSAxMTIuMTgzIDM0LjM5MDNMMTkxLjYyNSA5Ni4yMTQ5QzE5OC42NTIgMTAxLjY3NiAyMDguOTk3IDk4LjU1NTMgMjExLjcyOSA5MC4xNjlMMjI4LjcxMSA0MC4yNDEySDIyOC45MDZaIiBmaWxsPSIjRkY2MjAwIi8+DQo8cGF0aCBkPSJNMzIuOTM4MSAyMjMuNTY0QzI5LjYxOTkgMjI1LjcxIDI4LjI1MzYgMjI5LjgwNSAyOS4yMjk1IDIzMy41MTFDMzIuMTU3MyAyNDQuNDMyIDQxLjMzMTIgMjY2Ljg2MSA2Ni45MDA5IDI4Ny41MzRDOTIuNDcwNiAzMDguMDEyIDEyMi43MjUgMzEwLjM1MyAxMzUuNjA3IDMwOS45NjNDMTM5LjUxMSAzMDkuOTYzIDE0Mi44MjkgMzA3LjQyNyAxNDQgMzAzLjcyMkwxOTQuOTQ1IDE0Mi42MjdDMTk4LjY1MyAxMzAuOTI1IDE4NS41NzYgMTIxLjE3MyAxNzUuNDI2IDEyNy45OTlMMzIuOTM4MSAyMjMuNTY0WiIgZmlsbD0iI0ZGNjIwMCIvPg0KPHBhdGggZD0iTTcwLjIxNjkgNTMuNDk1NUM2Ny42Nzk0IDUyLjUyMDMgNjQuOTQ2OCA1Mi43MTUzIDYyLjYwNDUgNTMuODg1NUM1My4yMzU1IDU4Ljk1NjMgMjkuMDMyIDc0Ljc1MzggMTYuNTQgMTA3LjMyNEM2Ljc4MDU0IDEzMi4yODggMTAuMDk4NyAxNTkuOTgyIDEyLjgzMTQgMTczLjQzOUMxMy42MTIxIDE3Ny45MjUgMTguMjk2NyAxODAuNDYgMjIuNTkwOCAxNzguNzA1TDE3NS40MjQgMTE5LjAyNkMxODYuMzU0IDExNC43MzUgMTg2LjM1NCA5OS4zMjc2IDE3NS40MjQgOTUuMDM2OUw3MC4yMTY5IDUzLjQ5NTVaIiBmaWxsPSIjRkY2MjAwIi8+DQo8cGF0aCBkPSJNMjk3LjAzIDE2OC45NjhDMzAxLjUxOSAxNzEuODkzIDMwNy41NyAxNjkuMzU4IDMwOC4zNTEgMTY0LjA5MkMzMTAuMzAxIDE1MC4wNSAzMTIuMDYgMTI1Ljg2NiAzMDQuMDU3IDEwNy4zMzZDMjkzLjMyMSA4Mi45NTkxIDI3NC45NzQgNjcuNzQ2OCAyNjYuMTkgNjEuNzAwOEMyNjMuNDU4IDU5Ljc1MDUgMjU5Ljc0OSA1OS45NDU2IDI1Ny4yMTIgNjIuMjg1OUwyMTguNTY0IDk2LjQxNjJDMjEyLjMxOCAxMDIuMDcyIDIxMi45MDQgMTEyLjAxOSAyMTkuOTMxIDExNi42OTlMMjk3LjAzIDE2OC45NjhaIiBmaWxsPSIjRkY2MjAwIi8+DQo8cGF0aCBkPSJNMTg5LjA4OSAyOTkuNDI4QzE4OC42OTkgMzAzLjkxNCAxOTIuNjAzIDMwNy44MTQgMTk3LjA5MiAzMDcuMjI5QzIxMS43MzEgMzA1LjY2OSAyNDEuNzkgMjk5LjgxOCAyNjQuMjM3IDI3OC4zNjVDMjg2LjA5OCAyNTcuNDk2IDI5My4zMiAyMzIuNzI4IDI5NS4yNzIgMjIyLjc4MUMyOTUuODU4IDIyMC4wNTEgMjk1LjI3MiAyMTcuMzIgMjkzLjUxNSAyMTUuMTc1TDIyNS45OCAxMzEuODk3QzIxOC43NTggMTIyLjkyNSAyMDQuMTE5IDEyNy40MTEgMjAzLjE0MyAxMzguOTE4TDE4OS4wODkgMjk5LjIzM1YyOTkuNDI4WiIgZmlsbD0iI0ZGNjIwMCIvPg0KPC9zdmc+DQo=&logoColor=white" alt="CNB" />
+  </a>
+  <a href="https://hunli.100w.top/">
+    <img src="https://img.shields.io/badge/Blog-昏黎站-008080?logo=googlechrome&logoColor=white" alt="Blog" />
+  </a>
+</p>
 <p>Let G1 see the world, walk to the target, and reach out.</p>
-
-<img src="https://cnb.cool/66666/resource/-/git/raw/main/img/hengtiao.gif" width="100%" height="3">
 </div><br>
 
 ## Introduction
@@ -56,12 +64,13 @@ Open `http://<robot_ip>:8080` from any phone/tablet/laptop on the same network.
 
 | Page | Functionality |
 |---|---|
-| 🎯 **Grasp Task** | Full pipeline: search → align → approach → grab → release (incl. turn-release / left-step-release) |
-| 🔍 **Detection View** | Immersive YOLO detection video stream with realtime stats |
-| 🕹️ **Manual Control** | D-Pad joystick (forward/back/left/right/stop) + speed slider |
-| 📊 **System Status** | Dashboard (FPS / detections / distance / u position / health ring) + log stream |
-| 📦 **Node Manager** | Start/stop RealSense camera / YOLO detector / RGBD capture with inline param editor |
-| ⚙️ **Settings** | 19 hot-reloadable runtime params + dynamic background + UI prefs |
+| 🎯 **Grasp Task** | Full pipeline: search → align → approach → grab → release |
+| 🔍 **Detection View** | YOLO video stream with realtime stats |
+| 🕹️ **Manual Control** | D-Pad (forward/back/strafe/turn) + speed slider |
+| 🦾 **Arm Debug** | 13-joint sliders + batch editor + pose library + sequences |
+| 📊 **System Status** | Dashboard (FPS / detections / distance) + logs |
+| 📦 **Node Manager** | Start/stop camera / YOLO / RGBD capture |
+| ⚙️ **Settings** | 4 groups: Detection & Align / Motion & Camera / Environment / UI & Background |
 
 **Advantages:**
 - 🌐 Cross-device — works on phones/tablets/laptops, multi-user observation
@@ -87,70 +96,51 @@ python dev_server.py   # browse http://localhost:8080
 
 ```
 g1act_ws/
-├── README.md                     # Project documentation (Chinese)
-├── README.en.md                 # Project documentation (English)
-├── CODEBUDDY.md                # AI coding assistant guide
-├── requirements.txt             # Python dependencies
+├── README.md               # Documentation (Chinese)
+├── README.en.md           # Documentation (English)
+├── requirements.txt        # Python dependencies
 ├── src/
-│   ├── D455.md                 # D455 camera documentation
-│   ├── web_frontend/          # Web control panel frontend (HTML/CSS/JS + local dev server)
-│   │   ├── index.html              # Main page (6 view modules)
-│   │   ├── css/
-│   │   │   ├── style.css           # Liquid glass styles
-│   │   │   └── lggc.css            # LGGC glass utility class
-│   │   ├── js/app.js              # Routing / state polling / process mgmt / background
-│   │   └── dev_server.py          # Local mock backend (no ROS2 required)
-│   ├── g1_yolo_nav_py/        # Main ROS2 Python package
-│   │   ├── setup.py                # Package setup (entry_points)
-│   │   ├── package.xml            # ROS2 package description
-│   │   ├── yolo_v11x_best.pt     # YOLOv11x custom trained model
-│   │   ├── config/                # Parameter configuration files
-│   │   │   └── yolo_nav.yaml
-│   │   ├── launch/                # ROS2 launch files
-│   │   │   ├── grasp_task.launch.py
-│   │   │   └── yolo_nav.launch.py
-│   │   ├── arm/                   # Arm control scripts (unitree_sdk2py, separate process)
-│   │   │   ├── arm_common.py        # Shared module: joint constants, base class
-│   │   │   ├── arm.py              # Arm control demo
-│   │   │   ├── armup.py            # Grab action
-│   │   │   └── armdown.py          # Release action
-│   │   └── g1_yolo_nav_py/       # Python module code
-│   │       ├── web_panel.py         # Web control panel node (Flask + ROS2) ★ recommended
-│   │       ├── control_panel.py     # tkinter GUI control panel (legacy)
-│   │       ├── yolo_detector.py     # YOLO detection node
-│   │       ├── yaw_align.py         # Step-wise yaw alignment
-│   │       ├── loco_forward.py      # Forward motion + depth-based stop
-│   │       ├── grasp_task.py        # Terminal grasp task
-│   │       ├── rgbd_capture.py      # RGBD data capture
-│   │       ├── spatial_target.py    # 2D→3D spatial projection
-│   │       ├── detection_visualizer.py  # Detection visualization
-│   │       ├── _grasp_state.py      # Grasp state machine mixin
-│   │       ├── _detection_utils.py  # Detection utilities
-│   │       └── _dds_compat.py       # DDS compatibility layer
-│   └── base/                   # Reference packages (not directly called)
-│       ├── ctrl_keyboard/        # Loco API reference implementation
-│       └── g1_description/      # URDF models (12/23/29 dof)
+│   ├── web_frontend/      # Web frontend (HTML/CSS/JS + dev server)
+│   │   ├── index.html         # Main page (7 views)
+│   │   ├── css/style.css      # Stylesheet
+│   │   ├── js/app.js          # Frontend logic
+│   │   └── dev_server.py      # Mock backend (no ROS2)
+│   ├── g1_yolo_nav_py/    # Main ROS2 package
+│   │   ├── setup.py           # Package setup
+│   │   ├── config/
+│   │   │   └── arm_poses.json # Arm pose configuration
+│   │   ├── launch/            # ROS2 launch files
+│   │   ├── arm/               # Arm control (subprocess, DDS isolated)
+│   │   │   ├── arm_common.py     # Joint constants + base class
+│   │   │   ├── arm_debug.py      # Arm debug subprocess (stdin JSON)
+│   │   │   ├── armup.py          # Grab action
+│   │   │   └── armdown.py        # Release action
+│   │   └── g1_yolo_nav_py/   # Python nodes
+│   │       ├── web_panel.py      # Web panel node ★ recommended
+│   │       ├── control_panel.py  # tkinter panel (legacy)
+│   │       ├── yolo_detector.py  # YOLO detection
+│   │       ├── yaw_align.py      # Step-wise yaw alignment
+│   │       ├── loco_forward.py   # Forward + depth stop
+│   │       ├── grasp_task.py     # Terminal grasp task
+│   │       ├── rgbd_capture.py   # RGBD data capture
+│   │       ├── _grasp_state.py   # Grasp state machine
+│   │       └── _dds_compat.py    # DDS compatibility
+│   └── base/               # Reference packages
+│       ├── ctrl_keyboard/     # Loco API reference
+│       └── g1_description/   # URDF models
 ```
 
-```
-# Update commands
-cd ~/g1act_ws/manact_ws
+```bash
+# Update
+cd ~/g1act_ws
 git pull
-colcon build --packages-skip h1_description
-```
+colcon build
 
-```
-# Activate virtual environment (every session)
-cd ~/g1act_ws/manact_ws
+# Activate (every session)
+cd ~/g1act_ws
 source ~/g1act_venv/bin/activate
 . install/setup.bash
 ```
-
-### Model Description
-
-| File | Description |
-| --- | --- |
-| `yolo_v11x_best.pt` | YOLOv11x custom trained model weights for object detection inference |
 
 ## Quick Start
 
@@ -353,39 +343,32 @@ Each card features:
 - **Inline parameter form** — edit `camera_namespace` / `image_topic` / `interval_sec` etc., click save to write to backend
 - **Subprocess logs** — collapsible, last 80 lines of ros2 stdout
 
-### Full API (13 endpoints)
+### Full API
 
 ```
-GET  /                          → Main page (HTML)
-GET  /stream/raw                → MJPEG raw video stream
-GET  /stream/detection          → MJPEG annotated detection stream
-GET  /api/state                 → Global state polling (incl. 3 process statuses)
-GET  /api/config                → Read hot-reloadable config (19 fields)
-POST /api/config                → Bulk hot-reload
-POST /api/cmd/manual            → Manual teleop (vx, vy, vyaw clamped)
-POST /api/cmd/stop              → E-stop (clear FSM + sport.stop)
-POST /api/cmd/search            → Enter search state
-POST /api/cmd/grab              → Grab now (armup.py)
-POST /api/cmd/putdown           → Release (armdown.py)
-POST /api/cmd/turn_putdown      → Turn 90° then release
-POST /api/cmd/left_putdown      → Side-step left then release
-POST /api/process/<n>/start     → Start subprocess (n = camera/yolo/rgbd)
+GET  /                          → Main page
+GET  /stream/raw                → MJPEG raw video
+GET  /stream/detection          → MJPEG annotated stream
+GET  /api/state                 → Global state
+GET  /api/config                → Read config
+POST /api/config                → Bulk update
+POST /api/cmd/*                 → Motion / grasp / release commands
+POST /api/arm_debug/*           → Arm debug subprocess control
+GET  /api/arm_poses             → Read pose config
+POST /api/arm_poses             → Save pose config
+POST /api/arm_poses/run/<name>  → Execute armup/armdown sequence
+POST /api/process/<n>/start     → Start subprocess
 POST /api/process/<n>/stop      → Stop subprocess
-GET  /api/process/<n>/status    → Full status + 80 log lines
-POST /api/process/<n>/params    → Update params (effective on next start)
 ```
 
-### Settings (19 hot-reloadable params)
-
-No yaml editing or bash sourcing — tune directly in the browser:
+### Settings (4 groups)
 
 | Group | Parameters |
 |---|---|
-| 🔍 Detection | target_class_id / use_depth_distance / stop_distance / depth_sample_radius / lost_timeout |
-| 🎯 Alignment | step_yaw_speed / step_duration / camera_settle_time / max_consecutive_steps / center_tolerance |
-| 🕹 Motion | forward_speed / arrive_bbox_ratio / align_stable_time / search_yaw_speed / turn_yaw_speed / turn_duration / side_step_speed / side_step_duration |
-| 🎨 UI Prefs | stream_quality / default_view / log_toast / poll_interval (3 stored in localStorage) |
-| 🖼 Background | Background type (default gradient / Bing daily / Picsum / custom URL) + mask + blur |
+| Detection & Align | target_class_id / stop_distance / depth_sample_radius / step_yaw_speed / camera_settle_time / center_tolerance ... |
+| Motion & Camera | forward_speed / arrive_bbox_ratio / turn_yaw_speed / side_step_speed / camera_namespace ... |
+| Environment | network_interface / cyclonedds_home / sdk_python_path / arm_script_dir |
+| UI & Background | stream_quality / default_view / log_toast / poll_interval + background type/mask/blur |
 
 ### Custom Launch Parameters
 
