@@ -203,6 +203,12 @@
           </div>
         </div>
       </div>
+      <!-- 一键执行流水线状态（嵌入工作流条下方） -->
+      <div id="pipeline-bar" class="pipeline-bar hidden">
+        <span class="pipeline-bar-dot"></span>
+        <span class="pipeline-bar-text" id="pipeline-bar-text">—</span>
+        <button class="btn btn-outline-danger btn-xs" data-cmd="auto_stop">停止流水线</button>
+      </div>
 
       <div class="grasp-grid">
         <!-- 左：双视频叠加 -->
@@ -269,7 +275,15 @@
                 <span class="task-icon" data-icon="search"></span>
                 <div class="task-body">
                   <div class="task-name">开始搜索</div>
-                  <div class="task-desc">旋转寻找目标物</div>
+                  <div class="task-desc">仅启动 YOLO 目标检测</div>
+                </div>
+                <span class="task-arrow" data-icon="chevron-right"></span>
+              </button>
+              <button class="task-btn task-auto" data-cmd="auto_execute">
+                <span class="task-icon" data-icon="sparkles"></span>
+                <div class="task-body">
+                  <div class="task-name">一键执行</div>
+                  <div class="task-desc">检测→对齐→靠近→抓取 全自动</div>
                 </div>
                 <span class="task-arrow" data-icon="chevron-right"></span>
               </button>
@@ -1172,7 +1186,7 @@
 
         </div><!-- /arm-debug-grid -->
 
-        <!-- 批量角度编辑器 — 13输入框三行 -->
+        <!-- 批量角度编辑器 -->
         <div class="arm-batch-editor" id="arm-batch-editor">
           <div class="arm-batch-header">
             <span class="arm-batch-title">批量编辑角度</span>

@@ -72,7 +72,7 @@ Open `http://<robot_ip>:8080` from any phone/tablet/laptop on the same network.
 
 | Page | Functionality |
 |---|---|
-| 🎯 **Grasp Task** | Full pipeline: search → align → approach → grab → release |
+| 🎯 **Grasp Task** | Full pipeline: search → align → approach → grab → release. Supports "One-Click Execute" auto pipeline (YOLO detect → Yaw align → Forward approach → armup grab → Wait for release) |
 | 🔍 **Detection View** | YOLO video stream with realtime stats |
 | 🕹️ **Manual Control** | D-Pad (forward/back/strafe/turn) + speed slider |
 | 🦾 **Arm Debug** | 13-joint sliders + batch editor + pose library + sequences |

@@ -444,12 +444,37 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         if out_dir:
             self._rgbd.set_param("output_dir", out_dir)
 
+        # Yaw 对齐器（ros2 run g1_yolo_nav_py yaw_align）
+        self._yaw_align = ProcessLauncher(
+            name="Yaw对齐",
+            mode="run",
+            pkg="g1_yolo_nav_py",
+            target="yaw_align",
+            log_callback=self._append_log,
+        )
+
+        # 前进靠近（ros2 run g1_yolo_nav_py loco_forward）
+        self._loco_forward = ProcessLauncher(
+            name="前进靠近",
+            mode="run",
+            pkg="g1_yolo_nav_py",
+            target="loco_forward",
+            log_callback=self._append_log,
+        )
+
         # 进程注册表（按 name 路由）
         self._processes = {
-            "camera": self._camera,
-            "yolo":   self._yolo,
-            "rgbd":   self._rgbd,
+            "camera":       self._camera,
+            "yolo":         self._yolo,
+            "rgbd":         self._rgbd,
+            "yaw_align":    self._yaw_align,
+            "loco_forward": self._loco_forward,
         }
+
+        # 一键执行流水线状态
+        self._auto_pipeline_active = False
+        self._auto_pipeline_step = ""  # 当前步骤描述
+        self._auto_pipeline_thread: Optional[threading.Thread] = None
 
         self._log_info(f"Web 面板启动: http://{self._http_host}:{self._http_port}")
         self._log_info(f"目标类别: {self._gs_target_class}")
@@ -652,6 +677,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             "camera": self._camera.status(),
             "yolo":   self._yolo.status(),
             "rgbd":   self._rgbd.status(),
+            "yaw_align":    self._yaw_align.status(),
+            "loco_forward": self._loco_forward.status(),
+            "auto_pipeline": self.get_auto_pipeline_status(),
             "logs": new_logs,
             "log_idx": cur_idx,
         }
@@ -669,6 +697,7 @@ class WebPanelNode(Node, GraspStateMachineMixin):
     def cmd_stop(self) -> None:
         self._manual_active = False
         self._manual_vx = self._manual_vy = self._manual_vyaw = 0.0
+        self._auto_pipeline_active = False
         prev = self._gs_state
         self.gs_state = GraspState.IDLE
         self._sport.stop()
@@ -678,15 +707,14 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._log_info(f"[停止] {prev.name} → IDLE")
 
     def cmd_search(self) -> None:
+        """开始搜索 — 仅启动 YOLO 目标检测器。"""
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             raise RuntimeError("请先停止当前任务")
-        self.gs_state = GraspState.WORKING
-        self._gs_reset_detection()
-        self._gs_aligned = False
-        self._gs_search_started = True
-        self._gs_aligner.reset()
-        self._gs_approach.reset()
-        self._log_info(f"[搜索] 开始搜索 '{self._gs_target_class}'")
+        res = self._yolo.start()
+        if res.get("ok"):
+            self._log_info(f"[搜索] YOLO 目标检测器已启动")
+        else:
+            raise RuntimeError(res.get("error", "YOLO 启动失败"))
 
     def cmd_grab(self) -> None:
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
@@ -698,17 +726,144 @@ class WebPanelNode(Node, GraspStateMachineMixin):
     def cmd_put_down(self) -> None:
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             raise RuntimeError("请先停止当前任务")
+        self._auto_pipeline_active = False
         threading.Thread(target=self._gs_run_armdown, daemon=True).start()
 
     def cmd_turn_put_down(self) -> None:
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             raise RuntimeError("请先停止当前任务")
+        self._auto_pipeline_active = False
         threading.Thread(target=self._gs_do_turn_and_put_down, daemon=True).start()
 
     def cmd_left_put_down(self) -> None:
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
             raise RuntimeError("请先停止当前任务")
+        self._auto_pipeline_active = False
         threading.Thread(target=self._gs_do_left_put_down, daemon=True).start()
+
+    # ---- 一键执行流水线 ----
+    def cmd_auto_execute(self) -> dict:
+        """启动一键执行流水线：YOLO检测 → 等5s → Yaw对齐 → 等5s → 前进靠近 → 等5s → armup抓取 → 等待放下。"""
+        if self._auto_pipeline_active:
+            return {"ok": False, "error": "流水线正在执行中"}
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
+            return {"ok": False, "error": "请先停止当前任务"}
+
+        self._auto_pipeline_active = True
+        self._auto_pipeline_step = "启动中"
+        self._auto_pipeline_thread = threading.Thread(
+            target=self._auto_pipeline_worker, daemon=True,
+        )
+        self._auto_pipeline_thread.start()
+        return {"ok": True, "msg": "一键执行流水线已启动"}
+
+    def cmd_auto_stop(self) -> dict:
+        """停止一键执行流水线。"""
+        if not self._auto_pipeline_active:
+            return {"ok": True, "msg": "流水线未在运行"}
+        self._auto_pipeline_active = False
+        self._auto_pipeline_step = "已停止"
+        # 停止所有子进程
+        for name in ("yolo", "yaw_align", "loco_forward"):
+            proc = self._processes.get(name)
+            if proc and proc.is_running():
+                proc.stop(timeout=3.0)
+        self._sport.stop()
+        self.gs_state = GraspState.IDLE
+        self._log_info("[流水线] 已停止")
+        return {"ok": True, "msg": "流水线已停止"}
+
+    def get_auto_pipeline_status(self) -> dict:
+        return {
+            "active": self._auto_pipeline_active,
+            "step": self._auto_pipeline_step,
+        }
+
+    def _auto_pipeline_worker(self) -> None:
+        """一键执行流水线后台线程。"""
+        try:
+            # Step 1: 启动 YOLO 检测
+            self._auto_pipeline_step = "YOLO目标检测"
+            self._log_info("[流水线] Step 1/4: 启动 YOLO 目标检测...")
+            res = self._yolo.start()
+            if not res.get("ok"):
+                self._log_error(f"[流水线] YOLO 启动失败: {res.get('error', '')}")
+                self._auto_pipeline_step = "失败: YOLO启动失败"
+                return
+            self._log_info("[流水线] YOLO 已启动，等待 5 秒稳定...")
+
+            # 等待 5 秒（分段检查是否被取消）
+            for _ in range(50):
+                if not self._auto_pipeline_active:
+                    return
+                time.sleep(0.1)
+
+            if not self._auto_pipeline_active:
+                return
+
+            # Step 2: 启动 Yaw 对齐
+            self._auto_pipeline_step = "Yaw对齐"
+            self._log_info("[流水线] Step 2/4: 启动 Yaw 对齐...")
+            res = self._yaw_align.start()
+            if not res.get("ok"):
+                self._log_error(f"[流水线] Yaw对齐 启动失败: {res.get('error', '')}")
+                self._auto_pipeline_step = "失败: Yaw对齐启动失败"
+                return
+            self._log_info("[流水线] Yaw对齐 已启动，等待 5 秒...")
+
+            for _ in range(50):
+                if not self._auto_pipeline_active:
+                    return
+                time.sleep(0.1)
+
+            if not self._auto_pipeline_active:
+                return
+
+            # Step 3: 启动前进靠近
+            self._auto_pipeline_step = "前进靠近"
+            self._log_info("[流水线] Step 3/4: 启动前进靠近...")
+            res = self._loco_forward.start()
+            if not res.get("ok"):
+                self._log_error(f"[流水线] 前进靠近 启动失败: {res.get('error', '')}")
+                self._auto_pipeline_step = "失败: 前进靠近启动失败"
+                return
+            self._log_info("[流水线] 前进靠近 已启动，等待 5 秒...")
+
+            for _ in range(50):
+                if not self._auto_pipeline_active:
+                    return
+                time.sleep(0.1)
+
+            if not self._auto_pipeline_active:
+                return
+
+            # Step 4: 执行 armup 抓取
+            self._auto_pipeline_step = "armup抓取"
+            self._log_info("[流水线] Step 4/4: 执行 armup.py 抓取...")
+            # 停止前进靠近和yaw对齐
+            self._loco_forward.stop(timeout=3.0)
+            self._yaw_align.stop(timeout=3.0)
+            self._sport.stop()
+
+            # 设置状态并执行抓取
+            self.gs_state = GraspState.GRABBING
+            self._gs_run_grab()
+
+            # 等待抓取完成（armup 在子线程中执行，需要等待状态变为 MENU）
+            while self._gs_state == GraspState.GRABBING:
+                if not self._auto_pipeline_active:
+                    return
+                time.sleep(0.5)
+
+            # 抓取完成，保持流水线 active，等待用户触发放下
+            self._auto_pipeline_step = "等待放下指令"
+            self._log_info("[流水线] 抓取完成，等待放下指令...")
+            # 不设置 _auto_pipeline_active = False，等待用户操作
+
+        except Exception as e:
+            self._log_error(f"[流水线] 异常: {e}")
+            self._auto_pipeline_step = f"异常: {e}"
+            self._auto_pipeline_active = False
 
     # ---- 上肢调试控制 ----
     def cmd_arm_debug_start(self) -> dict:
@@ -1115,6 +1270,27 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_route(node.cmd_left_put_down)
+
+    @app.route("/api/cmd/auto_execute", methods=["POST"])
+    def cmd_auto_execute():
+        try:
+            res = node.cmd_auto_execute()
+            code = 200 if res.get("ok") else 400
+            return jsonify(res), code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/cmd/auto_stop", methods=["POST"])
+    def cmd_auto_stop():
+        try:
+            res = node.cmd_auto_stop()
+            return jsonify(res), 200
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/cmd/auto_status", methods=["GET"])
+    def cmd_auto_status():
+        return jsonify(node.get_auto_pipeline_status())
 
     # ---- 上肢调试 ----
     @app.route("/api/arm_debug/start", methods=["POST"])

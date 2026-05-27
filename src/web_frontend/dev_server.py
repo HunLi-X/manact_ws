@@ -134,7 +134,7 @@ class MockState:
         }
         self._camera_logs = deque(maxlen=200)
 
-        # 通用进程注册表（camera / yolo / rgbd）
+        # 通用进程注册表（camera / yolo / rgbd / yaw_align / loco_forward）
         self._processes = {
             "camera": {
                 "name": "相机", "mode": "launch",
@@ -165,7 +165,25 @@ class MockState:
                 },
                 "logs": deque(maxlen=200),
             },
+            "yaw_align": {
+                "name": "Yaw对齐", "mode": "run",
+                "pkg": "g1_yolo_nav_py", "target": "yaw_align",
+                "running": False, "pid": None, "start_time": 0.0,
+                "params": {},
+                "logs": deque(maxlen=200),
+            },
+            "loco_forward": {
+                "name": "前进靠近", "mode": "run",
+                "pkg": "g1_yolo_nav_py", "target": "loco_forward",
+                "running": False, "pid": None, "start_time": 0.0,
+                "params": {},
+                "logs": deque(maxlen=200),
+            },
         }
+
+        # 一键执行流水线 mock 状态
+        self._auto_pipeline_active = False
+        self._auto_pipeline_step = ""
 
         self.append_log("[Mock] 本地预览服务器启动", "info")
         self.append_log(f"[Mock] 目标类别: {self.target_class}", "info")
@@ -190,6 +208,12 @@ class MockState:
             "camera": self.process_status("camera"),
             "yolo":   self.process_status("yolo"),
             "rgbd":   self.process_status("rgbd"),
+            "yaw_align":    self.process_status("yaw_align"),
+            "loco_forward": self.process_status("loco_forward"),
+            "auto_pipeline": {
+                "active": self._auto_pipeline_active,
+                "step": self._auto_pipeline_step,
+            },
             "logs": new_logs,
             "log_idx": cur_idx,
             "mock": True,
@@ -314,8 +338,8 @@ class MockState:
         self.append_log(f"[Mock] {prev} → IDLE 停止", "info")
 
     def cmd_search(self):
-        self.state = "WORKING"
-        self.append_log("[Mock] 开始搜索目标", "info")
+        self.process_start("yolo")
+        self.append_log("[Mock] YOLO 目标检测器已启动", "info")
 
     def cmd_grab(self):
         self.state = "GRABBING"
@@ -344,6 +368,54 @@ class MockState:
         t = self.config.get("side_step_duration", 2.0)
         self.append_log(f"[Mock] 向左侧移 {t:.1f}s @ {v:.2f}m/s + 放下 (模拟)", "info")
         threading.Timer(t + 1.5, self._finish_putdown).start()
+
+    # ---- 一键执行流水线 mock ----
+    def cmd_auto_execute(self) -> dict:
+        if self._auto_pipeline_active:
+            return {"ok": False, "error": "流水线正在执行中"}
+        self._auto_pipeline_active = True
+        self._auto_pipeline_step = "YOLO目标检测"
+        self.append_log("[Mock][流水线] Step 1/4: YOLO 目标检测", "info")
+        threading.Thread(target=self._auto_pipeline_sim, daemon=True).start()
+        return {"ok": True, "msg": "一键执行流水线已启动 (mock)"}
+
+    def cmd_auto_stop(self) -> dict:
+        if not self._auto_pipeline_active:
+            return {"ok": True, "msg": "流水线未在运行"}
+        self._auto_pipeline_active = False
+        self._auto_pipeline_step = "已停止"
+        self.state = "IDLE"
+        self.append_log("[Mock][流水线] 已停止", "info")
+        return {"ok": True, "msg": "流水线已停止"}
+
+    def _auto_pipeline_sim(self):
+        """模拟流水线各阶段。"""
+        try:
+            steps = [
+                ("YOLO目标检测", 3.0),
+                ("Yaw对齐", 3.0),
+                ("前进靠近", 3.0),
+                ("armup抓取", 2.0),
+                ("等待放下指令", 0.0),
+            ]
+            for step_name, wait_sec in steps:
+                if not self._auto_pipeline_active:
+                    return
+                self._auto_pipeline_step = step_name
+                self.append_log(f"[Mock][流水线] {step_name}...", "info")
+                if wait_sec > 0:
+                    for _ in range(int(wait_sec / 0.2)):
+                        if not self._auto_pipeline_active:
+                            return
+                        time.sleep(0.2)
+            # 完成后进入 MENU 状态
+            if self._auto_pipeline_active:
+                self.state = "MENU"
+                self._auto_pipeline_active = False
+                self.append_log("[Mock][流水线] 全部完成，等待放下指令", "info")
+        except Exception as e:
+            self._auto_pipeline_active = False
+            self._auto_pipeline_step = f"异常: {e}"
 
 
 # ======================================================================
@@ -584,6 +656,23 @@ def create_app() -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_wrap(mock.cmd_left_put_down)
+
+    @app.route("/api/cmd/auto_execute", methods=["POST"])
+    def cmd_auto_execute():
+        res = mock.cmd_auto_execute()
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/cmd/auto_stop", methods=["POST"])
+    def cmd_auto_stop():
+        res = mock.cmd_auto_stop()
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/cmd/auto_status", methods=["GET"])
+    def cmd_auto_status():
+        return jsonify({
+            "active": mock._auto_pipeline_active,
+            "step": mock._auto_pipeline_step,
+        })
 
     # ---- 上肢调试 mock 路由 ----
     @app.route("/api/arm_debug/start", methods=["POST"])

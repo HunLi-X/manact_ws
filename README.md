@@ -71,7 +71,7 @@ ros2 run g1_yolo_nav_py web_panel
 
 | 页面 | 功能 |
 |---|---|
-| 🎯 **目标抓取** | 完整抓取流水线：搜索 → 对齐 → 接近 → 抓取 → 放下（含右转放下/左移放下）|
+| 🎯 **目标抓取** | 完整抓取流水线：搜索 → 对齐 → 接近 → 抓取 → 放下。支持「一键执行」全自动流水线（YOLO检测 → Yaw对齐 → 前进靠近 → armup抓取 → 等待放下）|
 | 🔍 **目标识别** | 大屏沉浸式 YOLO 检测视频流 + 实时检测信息 |
 | 🕹️ **运动控制** | 手动遥控 D-Pad（前进/后退/左转/右转/急停）+ 速度滑块 |
 | 📊 **系统状态** | 仪表盘（FPS/检测数/距离/u 位置/健康度环）+ 实时日志 |
@@ -378,6 +378,9 @@ POST /api/cmd/grab              → 抓取
 POST /api/cmd/putdown           → 放下
 POST /api/cmd/turn_putdown      → 右转 90° 放下
 POST /api/cmd/left_putdown      → 左移放下
+POST /api/cmd/auto_execute      → 一键执行全自动流水线
+POST /api/cmd/auto_stop         → 停止一键执行流水线
+GET  /api/cmd/auto_status       → 流水线状态
 POST /api/arm_debug/start       → 启动上肢调试子进程
 POST /api/arm_debug/stop        → 停止上肢调试
 POST /api/arm_debug/send        → 发送目标角度

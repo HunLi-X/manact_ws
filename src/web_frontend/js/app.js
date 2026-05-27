@@ -207,6 +207,8 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
       case 'turn_putdown': postCmd('/api/cmd/turn_putdown'); break;
       case 'left_putdown': postCmd('/api/cmd/left_putdown'); break;
       case 'stop':         postCmd('/api/cmd/stop'); break;
+      case 'auto_execute': postCmd('/api/cmd/auto_execute'); break;
+      case 'auto_stop':    postCmd('/api/cmd/auto_stop'); break;
     }
   });
 });
@@ -300,6 +302,36 @@ function updateWorkflow(currentStep) {
   });
 }
 
+// 一键执行流水线进度 UI（合并到工作流步骤条）
+const PIPE_TO_WF = [
+  { keyword: 'YOLO',  step: 'SEARCH' },
+  { keyword: 'Yaw',   step: 'ALIGN' },
+  { keyword: '前进',   step: 'APPROACH' },
+  { keyword: 'armup', step: 'GRAB' },
+  { keyword: '等待放下', step: 'DONE' },
+];
+
+function updatePipelineUI(pipeline) {
+  const bar = document.getElementById('pipeline-bar');
+  if (!bar) return;
+
+  if (!pipeline || !pipeline.active) {
+    bar.classList.add('hidden');
+    return;
+  }
+
+  bar.classList.remove('hidden');
+  const stepText = pipeline.step || '—';
+  setTxt('pipeline-bar-text', stepText);
+
+  // 同步更新工作流步骤条
+  let wfStep = 'SEARCH';
+  for (const m of PIPE_TO_WF) {
+    if (stepText.includes(m.keyword)) { wfStep = m.step; break; }
+  }
+  updateWorkflow(wfStep);
+}
+
 
 // ======================================================================
 // 健康度环形可视化
@@ -378,7 +410,13 @@ async function pollState() {
     setTxt('det-label', '检测 ' + (s.det_count || 0));
 
     // ----- 视图 1：目标抓取 -----
-    updateWorkflow(inferWorkflowStep(s));
+    // 流水线激活时由 updatePipelineUI 驱动工作流条，否则用推断逻辑
+    if (s.auto_pipeline && s.auto_pipeline.active) {
+      updatePipelineUI(s.auto_pipeline);
+    } else {
+      updatePipelineUI(null);
+      updateWorkflow(inferWorkflowStep(s));
+    }
     setTxt('g-state-pill', s.state);
     setTxt('g-info-target', s.target_class || '—');
     setTxt('g-info-u',      fmtOrDash(s.target_u, 3));

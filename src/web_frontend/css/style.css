@@ -937,6 +937,46 @@ body.settings-active .topbar-toc { display: flex; }
   transition: all 0.22s;
 }
 
+/* 一键执行按钮样式 */
+.task-auto .task-icon { background: rgba(254, 243, 199, 0.85); color: #D97706; }
+
+/* 一键执行流水线状态条（嵌入工作流条下方） */
+.pipeline-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(254, 243, 199, 0.65);
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  font-size: 12px;
+}
+.pipeline-bar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #D97706;
+  flex-shrink: 0;
+  animation: pipe-pulse 1.2s ease-in-out infinite;
+}
+.pipeline-bar-text {
+  flex: 1;
+  font-weight: 500;
+  color: #92400E;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+}
+@keyframes pipe-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.btn-xs {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
 /* ====================================================================== */
 /* 视图 2：目标识别 — 沉浸全屏                                              */
 /* ====================================================================== */
@@ -2714,28 +2754,36 @@ body.settings-active .topbar-toc { display: flex; }
   background: rgba(255,255,255,0.55);
   backdrop-filter: blur(14px) saturate(150%);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.55);
   box-shadow: 0 4px 16px rgba(15,23,42,0.04);
-  padding: 16px 18px;
-  display: flex; flex-direction: column; gap: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
 }
 .arm-batch-header {
-  display: flex; align-items: baseline; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
 }
-.arm-batch-title { font-size: 13px; font-weight: 700; color: #0F172A; }
-.arm-batch-hint {
-  font-size: 11px; color: rgba(15,23,42,0.4);
+.arm-batch-title { font-size: 12px; font-weight: 600; color: #0F172A; }
+.arm-batch-grid {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.arm-batch-row {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: wrap;
+}
+.arm-batch-row-label {
+  font-size: 9px; font-weight: 500; color: #64748B;
+  min-width: 48px; text-align: right; flex-shrink: 0;
   font-family: 'JetBrains Mono',Consolas,monospace;
 }
 .arm-batch-input {
-  width: 100%; box-sizing: border-box;
+  width: 52px; box-sizing: border-box;
   background: rgba(255,255,255,0.6);
   border: 1px solid rgba(15,23,42,0.1);
-  border-radius: 10px; padding: 10px 12px;
-  font-size: 12px; color: #0F172A;
+  border-radius: 6px; padding: 3px 5px;
+  font-size: 11px; color: #0F172A;
   font-family: 'JetBrains Mono',Consolas,monospace;
-  resize: vertical; outline: none; line-height: 1.7;
+  outline: none; text-align: center;
   transition: border-color 0.15s;
 }
 .arm-batch-input:focus {
