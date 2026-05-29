@@ -763,12 +763,15 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             return {"ok": True, "msg": "流水线未在运行"}
         self._auto_pipeline_active = False
         self._auto_pipeline_step = "已停止"
-        # 停止所有子进程
-        for name in ("yolo", "yaw_align", "loco_forward"):
-            proc = self._processes.get(name)
-            if proc and proc.is_running():
-                proc.stop(timeout=3.0)
+        # 停止 YOLO 子进程（状态机运动由 _auto_pipeline_worker 中检测到 active=False 后自行停止）
+        yolo = self._processes.get("yolo")
+        if yolo and yolo.is_running():
+            yolo.stop(timeout=3.0)
+        # 停止所有运动
         self._sport.stop()
+        self._gs_reset_detection()
+        self._gs_aligner.reset()
+        self._gs_approach.reset()
         self.gs_state = GraspState.IDLE
         self._log_info("[流水线] 已停止")
         return {"ok": True, "msg": "流水线已停止"}
@@ -780,90 +783,107 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         }
 
     def _auto_pipeline_worker(self) -> None:
-        """一键执行流水线后台线程。"""
+        """一键执行流水线后台线程。
+
+        使用 web_panel 内置的状态机（_gs_tick_working）驱动整个流程：
+        YOLO检测 → 搜索旋转 → StepAligner对齐 → ForwardApproach接近 → armup抓取 → 等待放下。
+
+        与旧版的关键区别：
+        - 旧版启动独立的 ros2 run yaw_align / loco_forward 进程，与内置状态机冲突
+        - 新版将 gs_state 设为 WORKING，由 10Hz _tick → _gs_tick → _gs_tick_working 统一驱动
+        - 只需启动 YOLO 子进程提供检测数据，其余步骤全由状态机自动完成
+        """
+        # ── 辅助：分段 sleep，每 0.1s 检查一次取消标志 ──
+        def _sleep_checked(total_sec: float) -> bool:
+            """返回 True=正常结束，False=被取消"""
+            for _ in range(int(total_sec * 10)):
+                if not self._auto_pipeline_active:
+                    return False
+                time.sleep(0.1)
+            return self._auto_pipeline_active
+
         try:
-            # Step 1: 启动 YOLO 检测
+            # ── Step 1: 启动 YOLO 检测器 ──
             self._auto_pipeline_step = "YOLO目标检测"
-            self._log_info("[流水线] Step 1/4: 启动 YOLO 目标检测...")
+            self._log_info("[流水线] Step 1/5: 启动 YOLO 目标检测器...")
             res = self._yolo.start()
             if not res.get("ok"):
                 self._log_error(f"[流水线] YOLO 启动失败: {res.get('error', '')}")
                 self._auto_pipeline_step = "失败: YOLO启动失败"
+                self._auto_pipeline_active = False
                 return
-            self._log_info("[流水线] YOLO 已启动，等待 5 秒稳定...")
+            self._log_info("[流水线] YOLO 已启动，等待 3 秒稳定...")
+            if not _sleep_checked(3.0):
+                return
 
-            # 等待 5 秒（分段检查是否被取消）
-            for _ in range(50):
+            # ── Step 2: 进入 WORKING 状态，由 _gs_tick_working 驱动搜索+对齐+接近 ──
+            self._auto_pipeline_step = "搜索目标"
+            self._log_info("[流水线] Step 2/5: 启动搜索 → 对齐 → 靠近（状态机驱动）...")
+            self._gs_reset_detection()
+            self._gs_aligner.reset()
+            self._gs_approach.reset()
+            self.gs_state = GraspState.WORKING
+
+            # 等待状态机完成 WORKING → GRABBING 转换（由 _gs_tick_working 触发）
+            # 最长等待 120 秒
+            wait_start = time.time()
+            while self._gs_state == GraspState.WORKING:
                 if not self._auto_pipeline_active:
+                    self.gs_state = GraspState.IDLE
+                    self._sport.stop()
                     return
-                time.sleep(0.1)
-
-            if not self._auto_pipeline_active:
-                return
-
-            # Step 2: 启动 Yaw 对齐
-            self._auto_pipeline_step = "Yaw对齐"
-            self._log_info("[流水线] Step 2/4: 启动 Yaw 对齐...")
-            res = self._yaw_align.start()
-            if not res.get("ok"):
-                self._log_error(f"[流水线] Yaw对齐 启动失败: {res.get('error', '')}")
-                self._auto_pipeline_step = "失败: Yaw对齐启动失败"
-                return
-            self._log_info("[流水线] Yaw对齐 已启动，等待 5 秒...")
-
-            for _ in range(50):
-                if not self._auto_pipeline_active:
+                if time.time() - wait_start > 120.0:
+                    self._log_error("[流水线] 搜索/对齐/靠近超时（120秒）")
+                    self._auto_pipeline_step = "超时: 未找到目标"
+                    self._gs_reset_detection()
+                    self.gs_state = GraspState.IDLE
+                    self._sport.stop()
+                    self._auto_pipeline_active = False
                     return
-                time.sleep(0.1)
 
-            if not self._auto_pipeline_active:
-                return
+                # 更新进度描述
+                now = time.time()
+                has_target = self._gs_target_u is not None and (
+                    now - self._gs_last_detect_time < self._gs_lost_timeout
+                )
+                if not has_target:
+                    self._auto_pipeline_step = "搜索目标（旋转中）"
+                elif self._gs_target_distance is not None:
+                    if self._gs_target_distance <= self._gs_stop_distance:
+                        self._auto_pipeline_step = f"已到达（距离 {self._gs_target_distance:.2f}m）"
+                    else:
+                        self._auto_pipeline_step = (
+                            f"靠近中（距离 {self._gs_target_distance:.2f}m, "
+                            f"u={self._gs_target_u:.2f})"
+                        )
+                else:
+                    self._auto_pipeline_step = "对齐中（等待深度数据）"
+                time.sleep(0.3)
 
-            # Step 3: 启动前进靠近
-            self._auto_pipeline_step = "前进靠近"
-            self._log_info("[流水线] Step 3/4: 启动前进靠近...")
-            res = self._loco_forward.start()
-            if not res.get("ok"):
-                self._log_error(f"[流水线] 前进靠近 启动失败: {res.get('error', '')}")
-                self._auto_pipeline_step = "失败: 前进靠近启动失败"
-                return
-            self._log_info("[流水线] 前进靠近 已启动，等待 5 秒...")
-
-            for _ in range(50):
-                if not self._auto_pipeline_active:
-                    return
-                time.sleep(0.1)
-
-            if not self._auto_pipeline_active:
-                return
-
-            # Step 4: 执行 armup 抓取
+            # ── Step 3: 抓取阶段（_gs_tick_working 已将状态设为 GRABBING 并调用了 _gs_run_grab）──
             self._auto_pipeline_step = "armup抓取"
-            self._log_info("[流水线] Step 4/4: 执行 armup.py 抓取...")
-            # 停止前进靠近和yaw对齐
-            self._loco_forward.stop(timeout=3.0)
-            self._yaw_align.stop(timeout=3.0)
-            self._sport.stop()
+            self._log_info("[流水线] Step 3/5: armup.py 抓取中...")
 
-            # 设置状态并执行抓取
-            self.gs_state = GraspState.GRABBING
-            self._gs_run_grab()
-
-            # 等待抓取完成（armup 在子线程中执行，需要等待状态变为 MENU）
+            # 等待 GRABBING → MENU（armup 子线程完成后设置）
             while self._gs_state == GraspState.GRABBING:
                 if not self._auto_pipeline_active:
                     return
                 time.sleep(0.5)
 
-            # 抓取完成，保持流水线 active，等待用户触发放下
+            # ── Step 4: 抓取完成 ──
             self._auto_pipeline_step = "等待放下指令"
             self._log_info("[流水线] 抓取完成，等待放下指令...")
-            # 不设置 _auto_pipeline_active = False，等待用户操作
+            # 保持 _auto_pipeline_active = True，等待用户选择放下方式
 
         except Exception as e:
             self._log_error(f"[流水线] 异常: {e}")
             self._auto_pipeline_step = f"异常: {e}"
             self._auto_pipeline_active = False
+            try:
+                self.gs_state = GraspState.IDLE
+                self._sport.stop()
+            except Exception:
+                pass
 
     # ---- 上肢调试控制 ----
     def cmd_arm_debug_start(self) -> dict:

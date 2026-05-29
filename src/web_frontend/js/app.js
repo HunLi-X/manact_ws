@@ -304,11 +304,13 @@ function updateWorkflow(currentStep) {
 
 // 一键执行流水线进度 UI（合并到工作流步骤条）
 const PIPE_TO_WF = [
-  { keyword: 'YOLO',  step: 'SEARCH' },
-  { keyword: 'Yaw',   step: 'ALIGN' },
-  { keyword: '前进',   step: 'APPROACH' },
-  { keyword: 'armup', step: 'GRAB' },
-  { keyword: '等待放下', step: 'DONE' },
+  { keyword: 'YOLO',       step: 'SEARCH' },
+  { keyword: '搜索目标',    step: 'SEARCH' },
+  { keyword: '对齐中',      step: 'ALIGN' },
+  { keyword: '靠近中',      step: 'APPROACH' },
+  { keyword: '已到达',      step: 'APPROACH' },
+  { keyword: 'armup',      step: 'GRAB' },
+  { keyword: '等待放下',    step: 'DONE' },
 ];
 
 function updatePipelineUI(pipeline) {
