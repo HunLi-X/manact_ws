@@ -379,6 +379,44 @@ class MockState:
         threading.Thread(target=self._auto_pipeline_sim, daemon=True).start()
         return {"ok": True, "msg": "一键执行流水线已启动 (mock)"}
 
+    def cmd_auto_full(self) -> dict:
+        if self._auto_pipeline_active:
+            return {"ok": False, "error": "流水线正在执行中"}
+        self._auto_pipeline_active = True
+        self._auto_pipeline_step = "YOLO目标检测"
+        self.append_log("[Mock][流水线] 一键抓取放下全流程启动", "info")
+        threading.Thread(target=self._auto_full_sim, daemon=True).start()
+        return {"ok": True, "msg": "一键全流程已启动 (mock)"}
+
+    def _auto_full_sim(self):
+        """模拟全流程各阶段。"""
+        try:
+            steps = [
+                ("YOLO目标检测", 3.0),
+                ("Yaw对齐", 3.0),
+                ("前进靠近", 3.0),
+                ("armup抓取", 2.0),
+                ("后退", 3.0),
+                ("蹲下", 2.0),
+                ("armdown放下", 3.0),
+                ("站起", 3.0),
+            ]
+            for step_name, wait_sec in steps:
+                if not self._auto_pipeline_active: return
+                self._auto_pipeline_step = step_name
+                self.append_log(f"[Mock][流水线] {step_name}...", "info")
+                if wait_sec > 0:
+                    for _ in range(int(wait_sec / 0.2)):
+                        if not self._auto_pipeline_active: return
+                        time.sleep(0.2)
+            if self._auto_pipeline_active:
+                self.state = "IDLE"
+                self._auto_pipeline_active = False
+                self.append_log("[Mock][流水线] 全流程完成！", "info")
+        except Exception as e:
+            self.append_log(f"[Mock][流水线] 异常: {e}", "error")
+            self._auto_pipeline_active = False
+
     def cmd_auto_stop(self) -> dict:
         if not self._auto_pipeline_active:
             return {"ok": True, "msg": "流水线未在运行"}
@@ -660,6 +698,11 @@ def create_app() -> Flask:
     @app.route("/api/cmd/auto_execute", methods=["POST"])
     def cmd_auto_execute():
         res = mock.cmd_auto_execute()
+        return jsonify(res), 200 if res.get("ok") else 400
+
+    @app.route("/api/cmd/auto_full", methods=["POST"])
+    def cmd_auto_full():
+        res = mock.cmd_auto_full()
         return jsonify(res), 200 if res.get("ok") else 400
 
     @app.route("/api/cmd/auto_stop", methods=["POST"])

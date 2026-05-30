@@ -152,6 +152,8 @@ class GraspStateMachineMixin:
         node.declare_parameter("turn_duration", 2.6)
         node.declare_parameter("side_step_speed", 0.2)         # 左移放下：侧移速度 (m/s)
         node.declare_parameter("side_step_duration", 2.0)      # 左移放下：侧移持续时间 (s)
+        node.declare_parameter("backup_speed", 0.2)             # 全流程后退速度 (m/s)
+        node.declare_parameter("backup_duration", 3.0)          # 全流程后退持续时间 (s)
         node.declare_parameter("arm_script_dir", arm_script_dir or _DEFAULT_ARM_DIR)
 
         p = lambda n: node.get_parameter(n).value

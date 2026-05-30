@@ -939,6 +939,7 @@ body.settings-active .topbar-toc { display: flex; }
 
 /* 一键执行按钮样式 */
 .task-auto .task-icon { background: rgba(254, 243, 199, 0.85); color: #D97706; }
+.task-auto-full .task-icon { background: rgba(219, 234, 254, 0.85); color: #2563EB; }
 
 /* 一键执行流水线状态条（嵌入工作流条下方） */
 .pipeline-bar {

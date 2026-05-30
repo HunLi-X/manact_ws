@@ -82,7 +82,7 @@ class BaseArmController:
         _on_complete()    — 完成后的行为（默认：标记 done）
     """
 
-    def __init__(self, poses: list, transition_time: float = 2.0, kp: float = 60.0, kd: float = 1.5) -> None:
+    def __init__(self, poses: list, transition_time: float = 3.0, kp: float = 60.0, kd: float = 1.5) -> None:
         self.poses = poses
         self.transition_time = transition_time
         self.kp = kp

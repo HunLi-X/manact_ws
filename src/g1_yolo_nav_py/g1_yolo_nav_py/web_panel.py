@@ -475,6 +475,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._auto_pipeline_active = False
         self._auto_pipeline_step = ""  # 当前步骤描述
         self._auto_pipeline_thread: Optional[threading.Thread] = None
+        # 全流程参数（热更新支持）
+        self.backup_speed = float(self.get_parameter("backup_speed").value) if self.has_parameter("backup_speed") else 0.2
+        self.backup_duration = float(self.get_parameter("backup_duration").value) if self.has_parameter("backup_duration") else 3.0
 
         self._log_info(f"Web 面板启动: http://{self._http_host}:{self._http_port}")
         self._log_info(f"目标类别: {self._gs_target_class}")
@@ -542,6 +545,8 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         "turn_duration": ("_gs_turn_duration", float, "转身时长 (s)"),
         "side_step_speed": ("_gs_side_step_speed", float, "左移放下速度 (m/s)"),
         "side_step_duration": ("_gs_side_step_duration", float, "左移放下时长 (s)"),
+        "backup_speed": ("backup_speed", float, "全流程后退速度 (m/s)"),
+        "backup_duration": ("backup_duration", float, "全流程后退时长 (s)"),
         # StepAligner 属性
         "step_yaw_speed":       ("aligner.step_yaw_speed",      float, "每步旋转速度 (rad/s)"),
         "step_duration":        ("aligner.step_duration",       float, "每步持续时间 (s)"),
@@ -743,7 +748,18 @@ class WebPanelNode(Node, GraspStateMachineMixin):
 
     # ---- 一键执行流水线 ----
     def cmd_auto_execute(self) -> dict:
-        """启动一键执行流水线：YOLO检测 → 等5s → Yaw对齐 → 等5s → 前进靠近 → 等5s → armup抓取 → 等待放下。"""
+        """启动一键执行流水线：YOLO检测 → 对齐 → 靠近 → armup抓取 → 等待放下。"""
+        return self._start_auto_pipeline(full_release=False)
+
+    def _gs_run_armdown_direct(self) -> None:
+        """同步执行 armdown.py（不启动新线程，调用者需自行处理线程）。"""
+        self._gs_run_armdown()
+
+    def cmd_auto_full(self) -> dict:
+        """启动一键抓取放下全流程：搜→对齐→靠近→抓→后退→蹲→放→站。"""
+        return self._start_auto_pipeline(full_release=True)
+
+    def _start_auto_pipeline(self, full_release: bool = False) -> dict:
         if self._auto_pipeline_active:
             return {"ok": False, "error": "流水线正在执行中"}
         if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
@@ -752,7 +768,9 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._auto_pipeline_active = True
         self._auto_pipeline_step = "启动中"
         self._auto_pipeline_thread = threading.Thread(
-            target=self._auto_pipeline_worker, daemon=True,
+            target=self._auto_pipeline_worker,
+            args=(full_release,),
+            daemon=True,
         )
         self._auto_pipeline_thread.start()
         return {"ok": True, "msg": "一键执行流水线已启动"}
@@ -782,16 +800,12 @@ class WebPanelNode(Node, GraspStateMachineMixin):
             "step": self._auto_pipeline_step,
         }
 
-    def _auto_pipeline_worker(self) -> None:
+    def _auto_pipeline_worker(self, full_release: bool = False) -> None:
         """一键执行流水线后台线程。
 
         使用 web_panel 内置的状态机（_gs_tick_working）驱动整个流程：
-        YOLO检测 → 搜索旋转 → StepAligner对齐 → ForwardApproach接近 → armup抓取 → 等待放下。
-
-        与旧版的关键区别：
-        - 旧版启动独立的 ros2 run yaw_align / loco_forward 进程，与内置状态机冲突
-        - 新版将 gs_state 设为 WORKING，由 10Hz _tick → _gs_tick → _gs_tick_working 统一驱动
-        - 只需启动 YOLO 子进程提供检测数据，其余步骤全由状态机自动完成
+        YOLO检测 → 搜索旋转 → StepAligner对齐 → ForwardApproach接近 → armup抓取。
+        若 full_release=True：自动执行 → 后退 → 蹲下 → armdown放下 → 站起全流程。
         """
         # ── 辅助：分段 sleep，每 0.1s 检查一次取消标志 ──
         def _sleep_checked(total_sec: float) -> bool:
@@ -878,10 +892,56 @@ class WebPanelNode(Node, GraspStateMachineMixin):
                     return
                 time.sleep(0.5)
 
-            # ── Step 4: 抓取完成 ──
+            # ── Step 4: 抓取完成，执行放下（全流程模式）──
+            if full_release:
+                self._auto_pipeline_step = "后退"
+                self._log_info("[流水线] 抓取完成，后退中...")
+                bv = abs(self.backup_speed)
+                bt = max(0.5, self.backup_duration)
+                self._sport.move(vx=-bv, duration=bt)
+                if not _sleep_checked(bt + 0.5):
+                    return
+
+                self._auto_pipeline_step = "蹲下"
+                self._log_info("[流水线] 蹲下 (SQUAT=2)...")
+                self._sport.stand_down()
+                if not _sleep_checked(4.0):
+                    return
+
+                self._auto_pipeline_step = "armdown放下"
+                self._log_info("[流水线] 执行 armdown.py ...")
+                self.gs_state = GraspState.IDLE
+                self._gs_run_armdown_direct()
+                if not self._auto_pipeline_active:
+                    return
+
+                self._auto_pipeline_step = "站起"
+                self._log_info("[流水线] 站起 (STAND_UP=4)...")
+                self._sport.stand_up()
+                if not _sleep_checked(6.0):
+                    return
+                # 完整 FSM 恢复：START(500) → WALK_RUN(801) → CONTINUOUS_GAIT(1)
+                self._sport.start_mode()
+                if not _sleep_checked(2.0):
+                    return
+                self._sport.walk_run()
+                if not _sleep_checked(1.0):
+                    return
+                self._sport.continuous_gait()
+                time.sleep(1.0)
+
+                self._auto_pipeline_step = "完成"
+                self._log_info("[流水线] 全流程完成！")
+                # 停止 YOLO 子进程
+                yolo = self._processes.get("yolo")
+                if yolo and yolo.is_running():
+                    yolo.stop(timeout=3.0)
+                self._auto_pipeline_active = False
+                return
+
+            # ── 交互模式：等待用户放下指令 ──
             self._auto_pipeline_step = "等待放下指令"
             self._log_info("[流水线] 抓取完成，等待放下指令...")
-            # 保持 _auto_pipeline_active = True，等待用户选择放下方式
 
         except Exception as e:
             self._log_error(f"[流水线] 异常: {e}")
@@ -1303,6 +1363,15 @@ def create_app(node: WebPanelNode) -> Flask:
     def cmd_auto_execute():
         try:
             res = node.cmd_auto_execute()
+            code = 200 if res.get("ok") else 400
+            return jsonify(res), code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/cmd/auto_full", methods=["POST"])
+    def cmd_auto_full():
+        try:
+            res = node.cmd_auto_full()
             code = 200 if res.get("ok") else 400
             return jsonify(res), code
         except Exception as e:

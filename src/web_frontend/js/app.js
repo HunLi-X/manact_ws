@@ -208,6 +208,7 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
       case 'left_putdown': postCmd('/api/cmd/left_putdown'); break;
       case 'stop':         postCmd('/api/cmd/stop'); break;
       case 'auto_execute': postCmd('/api/cmd/auto_execute'); break;
+      case 'auto_full':   postCmd('/api/cmd/auto_full'); break;
       case 'auto_stop':    postCmd('/api/cmd/auto_stop'); break;
     }
   });
