@@ -232,6 +232,8 @@ document.querySelectorAll('[data-dcmd]').forEach(btn => {
       case 'turn_left':  vyawOut =  vyaw; break;
       case 'turn_right': vyawOut = -vyaw; break;
       case 'stop':       postCmd('/api/cmd/stop'); return;
+      case 'squat':      postCmd('/api/cmd/squat'); return;
+      case 'stand_up':   postCmd('/api/cmd/stand_up'); return;
     }
     postCmd('/api/cmd/manual', { vx, vy, vyaw: vyawOut });
     // 立即更新速度映射显示（乐观更新）

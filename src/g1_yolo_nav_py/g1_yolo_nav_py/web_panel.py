@@ -746,6 +746,18 @@ class WebPanelNode(Node, GraspStateMachineMixin):
         self._auto_pipeline_active = False
         threading.Thread(target=self._gs_do_left_put_down, daemon=True).start()
 
+    def cmd_squat(self) -> None:
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
+            raise RuntimeError("请先停止当前任务")
+        self._sport.stand_down()
+        self._log_info("[手动] 蹲下 (SQUAT=2)")
+
+    def cmd_stand_up(self) -> None:
+        if self._gs_state not in (GraspState.IDLE, GraspState.MENU):
+            raise RuntimeError("请先停止当前任务")
+        self._sport.stand_up()
+        self._log_info("[手动] 站起 (STAND_UP=4)")
+
     # ---- 一键执行流水线 ----
     def cmd_auto_execute(self) -> dict:
         """启动一键执行流水线：YOLO检测 → 对齐 → 靠近 → armup抓取 → 等待放下。"""
@@ -1358,6 +1370,14 @@ def create_app(node: WebPanelNode) -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_route(node.cmd_left_put_down)
+
+    @app.route("/api/cmd/squat", methods=["POST"])
+    def cmd_squat():
+        return _cmd_route(node.cmd_squat)
+
+    @app.route("/api/cmd/stand_up", methods=["POST"])
+    def cmd_stand_up():
+        return _cmd_route(node.cmd_stand_up)
 
     @app.route("/api/cmd/auto_execute", methods=["POST"])
     def cmd_auto_execute():

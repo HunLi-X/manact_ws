@@ -369,6 +369,12 @@ class MockState:
         self.append_log(f"[Mock] 向左侧移 {t:.1f}s @ {v:.2f}m/s + 放下 (模拟)", "info")
         threading.Timer(t + 1.5, self._finish_putdown).start()
 
+    def cmd_squat(self):
+        self.append_log("[Mock] 蹲下 (SQUAT=2)", "info")
+
+    def cmd_stand_up(self):
+        self.append_log("[Mock] 站起 (STAND_UP=4)", "info")
+
     # ---- 一键执行流水线 mock ----
     def cmd_auto_execute(self) -> dict:
         if self._auto_pipeline_active:
@@ -694,6 +700,14 @@ def create_app() -> Flask:
     @app.route("/api/cmd/left_putdown", methods=["POST"])
     def cmd_left_putdown():
         return _cmd_wrap(mock.cmd_left_put_down)
+
+    @app.route("/api/cmd/squat", methods=["POST"])
+    def cmd_squat():
+        return _cmd_wrap(mock.cmd_squat)
+
+    @app.route("/api/cmd/stand_up", methods=["POST"])
+    def cmd_stand_up():
+        return _cmd_wrap(mock.cmd_stand_up)
 
     @app.route("/api/cmd/auto_execute", methods=["POST"])
     def cmd_auto_execute():
