@@ -140,7 +140,7 @@ class GraspStateMachineMixin:
         node.declare_parameter("depth_sample_radius", 5)
         node.declare_parameter("center_tolerance", 0.08)
         node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
-        node.declare_parameter("step_duration", 0.3)           # 步进式对齐：每步持续时间
+        node.declare_parameter("step_duration", 0.8)           # 步进式对齐：每步持续时间
         node.declare_parameter("camera_settle_time", 2.0)      # 步进式对齐：等待相机更新
         node.declare_parameter("max_consecutive_steps", 10)   # 步进式对齐：单次最大连续步数
         node.declare_parameter("forward_speed", 0.2)
@@ -213,7 +213,7 @@ class GraspStateMachineMixin:
         self._gs_last_detect_time: float = 0.0
         self._gs_state: GraspState = start_state
         self._gs_aligned: bool = False        # 目标已居中（用于对齐完成日志）
-        self._gs_search_started: bool = False  # 搜索刚启动，首次 tick 需先停止对齐
+        self._gs_searching: bool = True       # 初始处于搜索状态，首次 tick 开始旋转搜索
 
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -322,17 +322,18 @@ class GraspStateMachineMixin:
             self._gs_aligned = False
             self._gs_aligner.reset()
             self._gs_approach.reset()
-            if self._gs_search_started:
-                self._gs_search_started = False
+            if not self._gs_searching:
+                self._gs_searching = True
                 self._sport.stop()
-                self._log_info("[工作] 已对齐，开始旋转搜索")
+                self._log_info("[工作] 目标丢失，开始旋转搜索")
             else:
                 self._sport.move(vyaw=self._gs_search_speed)
             return
 
-        if self._gs_search_started:
-            self._gs_search_started = False
-            self._log_info("[工作] 搜索启动，开始对齐目标")
+        if self._gs_searching:
+            self._gs_searching = False
+            self._sport.stop()
+            self._log_info("[工作] 检测到目标，开始步进对齐")
 
         action, extra = self._gs_aligner.tick(self._gs_target_u)
 

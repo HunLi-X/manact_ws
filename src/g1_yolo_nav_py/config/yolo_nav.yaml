@@ -38,7 +38,7 @@ g1_yaw_align_node:
     camera_fov_deg: 87.0                      # D455 水平视场角
     center_tolerance: 0.08                    # 居中容差（归一化）
     step_yaw_speed: 0.3                       # 每步旋转速度 rad/s
-    step_duration: 0.3                        # 每步旋转持续时间 s
+    step_duration: 0.8                        # 每步旋转持续时间 s
     camera_settle_time: 5.0                   # 旋转后等待相机更新 s
     max_consecutive_steps: 10                 # 单次最大连续步数
     lost_timeout: 10.0                        # 目标丢失超时 s
@@ -75,7 +75,7 @@ g1_grasp_task_node:
     camera_fov_deg: 87.0                      # D455 水平视场角
     center_tolerance: 0.08                    # 居中容差（归一化）
     step_yaw_speed: 0.3                       # 步进式对齐：每步旋转速度 rad/s
-    step_duration: 0.3                        # 步进式对齐：每步持续时间 s
+    step_duration: 0.8                        # 步进式对齐：每步持续时间 s
     camera_settle_time: 5.0                   # 步进式对齐：等待相机更新 s
     forward_speed: 0.2                        # 前进速度 m/s
     arrive_bbox_ratio: 0.45                   # 到达条件：检测框占比
