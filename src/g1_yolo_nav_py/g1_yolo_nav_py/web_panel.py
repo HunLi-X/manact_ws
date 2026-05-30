@@ -860,6 +860,14 @@ class WebPanelNode(Node, GraspStateMachineMixin):
                     self._auto_pipeline_step = "对齐中（等待深度数据）"
                 time.sleep(0.3)
 
+            # ── 检查是否真正到达了抓取阶段 ──
+            if self._gs_state != GraspState.GRABBING:
+                self._log_info("[流水线] 未到达抓取阶段（状态=" + self._gs_state.name + "），已停止")
+                self.gs_state = GraspState.IDLE
+                self._sport.stop()
+                self._auto_pipeline_active = False
+                return
+
             # ── Step 3: 抓取阶段（_gs_tick_working 已将状态设为 GRABBING 并调用了 _gs_run_grab）──
             self._auto_pipeline_step = "armup抓取"
             self._log_info("[流水线] Step 3/5: armup.py 抓取中...")
