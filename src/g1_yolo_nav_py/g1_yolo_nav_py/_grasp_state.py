@@ -139,8 +139,8 @@ class GraspStateMachineMixin:
         node.declare_parameter("stop_distance", 0.5)
         node.declare_parameter("depth_sample_radius", 5)
         node.declare_parameter("center_tolerance", 0.08)
-        node.declare_parameter("step_yaw_speed", 0.15)         # 步进式对齐：每步旋转速度（降低过冲）
-        node.declare_parameter("step_duration", 0.4)            # 步进式对齐：每步持续时间
+        node.declare_parameter("step_yaw_speed", 0.2)          # 步进式对齐：每步旋转速度
+        node.declare_parameter("step_duration", 0.5)            # 步进式对齐：每步持续时间
         node.declare_parameter("camera_settle_time", 4.0)      # 步进式对齐：等待相机更新
         node.declare_parameter("max_consecutive_steps", 10)   # 步进式对齐：单次最大连续步数
         node.declare_parameter("forward_speed", 0.2)
