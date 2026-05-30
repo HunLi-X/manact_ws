@@ -139,8 +139,8 @@ class GraspStateMachineMixin:
         node.declare_parameter("stop_distance", 0.5)
         node.declare_parameter("depth_sample_radius", 5)
         node.declare_parameter("center_tolerance", 0.08)
-        node.declare_parameter("step_yaw_speed", 0.3)         # 步进式对齐：每步旋转速度
-        node.declare_parameter("step_duration", 0.8)           # 步进式对齐：每步持续时间
+        node.declare_parameter("step_yaw_speed", 0.15)         # 步进式对齐：每步旋转速度（降低过冲）
+        node.declare_parameter("step_duration", 0.4)            # 步进式对齐：每步持续时间
         node.declare_parameter("camera_settle_time", 4.0)      # 步进式对齐：等待相机更新
         node.declare_parameter("max_consecutive_steps", 10)   # 步进式对齐：单次最大连续步数
         node.declare_parameter("forward_speed", 0.2)
@@ -316,16 +316,15 @@ class GraspStateMachineMixin:
         now = time.time()
 
         # 目标丢失或超时：停止对齐，重置状态，fallback 到旋转搜索
-        if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
+        # 注意：如果对齐器正在 settling，不要因为单帧目标丢失就中断对齐
+        lost_timed_out = (now - self._gs_last_detect_time > self._gs_lost_timeout)
+        if lost_timed_out or (self._gs_target_u is None and not self._gs_aligner.settling):
             # 先让 StepAligner 处理 settling 中的停止（与 yaw_align.py 一致）
             align_action, align_extra = self._gs_aligner.tick(None)
             if align_action == AlignAction.LOST and align_extra:
                 self._log_info(f"[工作] {align_extra}")
 
             self._gs_aligned = False
-            # 关键修复：无条件重置 StepAligner 状态（步数、settling 标记等）
-            # tick(None) 仅在 settling=True 时重置，若对齐器刚完成对齐（settling=False）
-            # 则 _step_count 会累积，导致后续对齐过早触发 max_steps 限制而反复回退到搜索
             self._gs_aligner.reset()
             self._gs_approach.reset()
 
@@ -336,6 +335,11 @@ class GraspStateMachineMixin:
                 self._log_info("[工作] 目标丢失，开始旋转搜索")
             else:
                 self._sport.move(vyaw=self._gs_search_speed)
+            return
+
+        # settle 期间目标暂时不可见 → 等下一帧，不中断对齐
+        if self._gs_target_u is None:
+            self._gs_aligner.tick(0.5)  # 用中心值驱动 settle 计时
             return
 
         if self._gs_searching:
