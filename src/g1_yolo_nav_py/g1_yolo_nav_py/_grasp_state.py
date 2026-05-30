@@ -315,16 +315,18 @@ class GraspStateMachineMixin:
         """
         now = time.time()
 
-        # 目标丢失或超时：先让 StepAligner 自己处理（与 yaw_align.py 一致），
-        # 然后 fallback 到旋转搜索
+        # 目标丢失或超时：停止对齐，重置状态，fallback 到旋转搜索
         if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
-            # 委托给 StepAligner 处理（与 yaw_align.py._tick() 一致）
-            # StepAligner 在 settling 中会自己停止旋转，否则返回 WAIT
+            # 先让 StepAligner 处理 settling 中的停止（与 yaw_align.py 一致）
             align_action, align_extra = self._gs_aligner.tick(None)
             if align_action == AlignAction.LOST and align_extra:
                 self._log_info(f"[工作] {align_extra}")
 
             self._gs_aligned = False
+            # 关键修复：无条件重置 StepAligner 状态（步数、settling 标记等）
+            # tick(None) 仅在 settling=True 时重置，若对齐器刚完成对齐（settling=False）
+            # 则 _step_count 会累积，导致后续对齐过早触发 max_steps 限制而反复回退到搜索
+            self._gs_aligner.reset()
             self._gs_approach.reset()
 
             # 对齐器返回 WAIT/LOST 后，开始旋转搜索
@@ -338,7 +340,8 @@ class GraspStateMachineMixin:
 
         if self._gs_searching:
             self._gs_searching = False
-            self._sport.stop()
+            # 不在此处调用 sport.stop()，让 tick() 的旋转指令直接覆盖搜索旋转，
+            # 避免 stop 指令与对齐旋转指令之间的 Loco API 竞态导致方向指令丢失
             self._log_info("[工作] 检测到目标，开始步进对齐")
 
         action, extra = self._gs_aligner.tick(self._gs_target_u)
