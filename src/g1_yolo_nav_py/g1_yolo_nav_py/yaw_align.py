@@ -67,7 +67,7 @@ class YawAlignNode(Node):
         self._sport.skip_init()
 
         self._aligner = StepAligner(
-            move_fn=self._sport.move,
+            move_fn=lambda vyaw, dur: self._sport.move(vyaw=vyaw, duration=(dur if dur is not None else 0.8)),
             logger=self.get_logger(),
             center_tolerance=float(p("center_tolerance")),
             step_yaw_speed=float(p("step_yaw_speed")),
