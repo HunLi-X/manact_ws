@@ -66,7 +66,7 @@ class MockState:
         "side_step_duration": 2.0,
         "step_yaw_speed": 0.3,
         "step_duration": 0.3,
-        "camera_settle_time": 2.0,
+        "camera_settle_time": 4.0,
         "max_consecutive_steps": 10,
         "align_center_tolerance": 0.08,
         "forward_speed": 0.2,

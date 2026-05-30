@@ -44,7 +44,7 @@ class YawAlignNode(Node):
         self.declare_parameter("center_tolerance", 0.08)
         self.declare_parameter("step_yaw_speed", 0.3)
         self.declare_parameter("step_duration", 0.8)
-        self.declare_parameter("camera_settle_time", 2.0)
+        self.declare_parameter("camera_settle_time", 4.0)
         self.declare_parameter("max_consecutive_steps", 10)
         self.declare_parameter("lost_timeout", 10.0)
         self.declare_parameter("check_rate", 2.0)

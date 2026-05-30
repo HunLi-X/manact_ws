@@ -44,7 +44,7 @@ class StepAligner:
         center_tolerance: float = 0.08,
         step_yaw_speed: float = 0.3,
         step_duration: float = 0.8,
-        camera_settle_time: float = 2.0,
+        camera_settle_time: float = 4.0,
         max_consecutive_steps: int = 10,
     ) -> None:
         self._move_fn = move_fn
