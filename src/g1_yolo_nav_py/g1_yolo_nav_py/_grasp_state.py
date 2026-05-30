@@ -315,13 +315,19 @@ class GraspStateMachineMixin:
         """
         now = time.time()
 
+        # 目标丢失或超时：先让 StepAligner 自己处理（与 yaw_align.py 一致），
+        # 然后 fallback 到旋转搜索
         if self._gs_target_u is None or (now - self._gs_last_detect_time > self._gs_lost_timeout):
-            if self._gs_aligner.settling:
-                self._gs_aligner.stop()
-                self._log_info("[工作] 等待中目标丢失，停止旋转")
+            # 委托给 StepAligner 处理（与 yaw_align.py._tick() 一致）
+            # StepAligner 在 settling 中会自己停止旋转，否则返回 WAIT
+            align_action, align_extra = self._gs_aligner.tick(None)
+            if align_action == AlignAction.LOST and align_extra:
+                self._log_info(f"[工作] {align_extra}")
+
             self._gs_aligned = False
-            self._gs_aligner.reset()
             self._gs_approach.reset()
+
+            # 对齐器返回 WAIT/LOST 后，开始旋转搜索
             if not self._gs_searching:
                 self._gs_searching = True
                 self._sport.stop()
