@@ -43,12 +43,12 @@ def _load_pose_sequence():
         return None
 
 
-def _pose_wave():
+def _pose_reach_forward():
     """伸展下放姿态。"""
     return [
-        -1.1,   0.55,  -0.45,   0.2,  -1.8,
-        -1.1,  -0.55,   0.45,   0.2,   1.8,
-         0.0,   0.0,    0.0,
+       -0.6, -0.58,  0.2,  0.05,   1.2,
+       -0.6,  0.58, -0.2,  0.05,  -1.2,
+        0.0,  0.0,   0.0,
     ]
 
 def _pose_wave_body():
@@ -61,8 +61,8 @@ def _pose_wave_body():
 
 # 放下序列：伸展下放 → 自然下垂（之后归零释放）
 _DEFAULT_SEQUENCE = [
-    ("wave",       _pose_wave(),       3.0),
-    ("wave_body",  _pose_wave_body(),  3.0),
+    ("reach_forward",  _pose_reach_forward(),  3.0),
+    ("wave_body",      _pose_wave_body(),      3.0),
 ]
 
 POSE_SEQUENCE = _load_pose_sequence() or _DEFAULT_SEQUENCE

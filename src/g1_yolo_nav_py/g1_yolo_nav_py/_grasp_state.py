@@ -318,7 +318,10 @@ class GraspStateMachineMixin:
         # 目标丢失或超时：停止对齐，重置状态，fallback 到旋转搜索
         # 注意：如果对齐器正在 settling，不要因为单帧目标丢失就中断对齐
         lost_timed_out = (now - self._gs_last_detect_time > self._gs_lost_timeout)
-        if lost_timed_out or (self._gs_target_u is None and not self._gs_aligner.settling):
+        # settle 期间、靠近期间：单帧丢失不中断，等 timeout 再说
+        settling = self._gs_aligner.settling
+        approaching = self._gs_approach.approaching
+        if lost_timed_out or (self._gs_target_u is None and not settling and not approaching):
             # 先让 StepAligner 处理 settling 中的停止（与 yaw_align.py 一致）
             align_action, align_extra = self._gs_aligner.tick(None)
             if align_action == AlignAction.LOST and align_extra:
@@ -337,9 +340,10 @@ class GraspStateMachineMixin:
                 self._sport.move(vyaw=self._gs_search_speed)
             return
 
-        # settle 期间目标暂时不可见 → 等下一帧，不中断对齐
+        # settle / 靠近期间目标短暂不可见 → 等下一帧
         if self._gs_target_u is None:
-            self._gs_aligner.tick(0.5)  # 用中心值驱动 settle 计时
+            if settling:
+                self._gs_aligner.tick(0.5)  # 驱动 settle 计时
             return
 
         if self._gs_searching:
